@@ -5,7 +5,7 @@ const app = new Hono()
 app.use('/static/*', serveStatic({ root: './public' }))
 
 // ══════════════════════════════════════════════════════════════════════════
-// 데이터 타입
+// 데이터 구조
 // ══════════════════════════════════════════════════════════════════════════
 interface Shop {
   id: number
@@ -17,250 +17,248 @@ interface Shop {
   district: string
   lat: number
   lng: number
-  smartPlaceUrl: string
-  youtubeId: string
+  smartPlaceUrl: string   // 예약하기 URL (업체마다 다름)
+  youtubeId: string       // 유튜브 영상 ID (업체마다 다름)
   featured: boolean
   thumbnail: string
+  phone: string
+  desc: string
+  active: boolean
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-// 카테고리 목록
-// ══════════════════════════════════════════════════════════════════════════
-const CATEGORIES = ['피부관리','네일아트','헤어','왁싱','마사지','반영구','병원']
-
-// ══════════════════════════════════════════════════════════════════════════
-// 샵 데이터 (런타임 가변 배열)
-// ══════════════════════════════════════════════════════════════════════════
-const shops: Shop[] = [
-  { id:1, name:'글로우 스킨 강남', category:'피부관리',
-    tags:['리프팅','보습','트러블케어'], price:'5만원~',
-    address:'서울 강남구 논현로 123', district:'강남구',
-    lat:37.5172, lng:127.0473, smartPlaceUrl:'https://naver.me/example1',
-    youtubeId:'mldig2ZiRwA', featured:true,
-    thumbnail:'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=600&q=80' },
-  { id:2, name:'뷰티랩 홍대', category:'네일아트',
-    tags:['젤네일','네일아트','케어'], price:'3만원~',
-    address:'서울 마포구 와우산로 45', district:'마포구',
-    lat:37.5563, lng:126.9236, smartPlaceUrl:'https://naver.me/example2',
-    youtubeId:'mldig2ZiRwA', featured:true,
-    thumbnail:'https://images.unsplash.com/photo-1604654894610-df63bc536371?w=600&q=80' },
-  { id:3, name:'헤어스튜디오 한남', category:'헤어',
-    tags:['염색','펌','커트'], price:'6만원~',
-    address:'서울 용산구 한남대로 77', district:'용산구',
-    lat:37.5340, lng:127.0026, smartPlaceUrl:'https://naver.me/example3',
-    youtubeId:'mldig2ZiRwA', featured:false,
-    thumbnail:'https://images.unsplash.com/photo-1560066984-138dadb4c035?w=600&q=80' },
-  { id:4, name:'라온 왁싱샵', category:'왁싱',
-    tags:['전신왁싱','브라질리언','눈썹'], price:'2만원~',
-    address:'서울 서초구 방배로 55', district:'서초구',
-    lat:37.4836, lng:126.9822, smartPlaceUrl:'https://naver.me/example4',
-    youtubeId:'mldig2ZiRwA', featured:false,
-    thumbnail:'https://images.unsplash.com/photo-1616394584738-fc6e612e71b9?w=600&q=80' },
-  { id:5, name:'릴렉스 마사지 강남', category:'마사지',
-    tags:['전신마사지','아로마','스웨디시'], price:'7만원~',
-    address:'서울 강남구 역삼로 201', district:'강남구',
-    lat:37.5010, lng:127.0370, smartPlaceUrl:'https://naver.me/example5',
-    youtubeId:'mldig2ZiRwA', featured:false,
-    thumbnail:'https://images.unsplash.com/photo-1544161515-4ab6ce6db874?w=600&q=80' },
-  { id:6, name:'퍼펙트 눈썹 신촌', category:'반영구',
-    tags:['눈썹문신','아이라인','입술'], price:'15만원~',
-    address:'서울 서대문구 신촌로 88', district:'서대문구',
-    lat:37.5596, lng:126.9368, smartPlaceUrl:'https://naver.me/example6',
-    youtubeId:'mldig2ZiRwA', featured:false,
-    thumbnail:'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=600&q=80' },
-  { id:7, name:'리프트업 에스테틱', category:'피부관리',
-    tags:['리프팅','주름개선','탄력'], price:'8만원~',
-    address:'서울 강남구 청담로 12', district:'강남구',
-    lat:37.5247, lng:127.0392, smartPlaceUrl:'https://naver.me/example7',
-    youtubeId:'mldig2ZiRwA', featured:false,
-    thumbnail:'https://images.unsplash.com/photo-1487412947147-5cebf100ffc2?w=600&q=80' },
-  { id:8, name:'핑크네일 성수', category:'네일아트',
-    tags:['젤네일','케어','풋케어'], price:'2.5만원~',
-    address:'서울 성동구 성수일로 30', district:'성동구',
-    lat:37.5446, lng:127.0557, smartPlaceUrl:'https://naver.me/example8',
-    youtubeId:'mldig2ZiRwA', featured:false,
-    thumbnail:'https://images.unsplash.com/photo-1604654894610-df63bc536371?w=600&q=80' },
-  { id:9, name:'살롱드 뷰티 이태원', category:'헤어',
-    tags:['탈색','매직','커트'], price:'7만원~',
-    address:'서울 용산구 이태원로 200', district:'용산구',
-    lat:37.5348, lng:126.9947, smartPlaceUrl:'https://naver.me/example9',
-    youtubeId:'mldig2ZiRwA', featured:false,
-    thumbnail:'https://images.unsplash.com/photo-1522337660859-02fbefca4702?w=600&q=80' },
-  { id:10, name:'뷰티클리닉 압구정', category:'병원',
-    tags:['보톡스','필러','레이저'], price:'10만원~',
-    address:'서울 강남구 압구정로 300', district:'강남구',
-    lat:37.5270, lng:127.0290, smartPlaceUrl:'https://naver.me/example10',
-    youtubeId:'mldig2ZiRwA', featured:false,
-    thumbnail:'https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=600&q=80' },
+// 런타임 샵 스토어 (메모리)
+let shopStore: Shop[] = [
+  {
+    id: 1, name: '글로우 스킨 강남', category: '피부관리',
+    tags: ['리프팅', '보습', '트러블케어'], price: '5만원~',
+    address: '서울 강남구 논현로 123', district: '강남구',
+    lat: 37.5172, lng: 127.0473,
+    smartPlaceUrl: 'https://naver.me/example1',
+    youtubeId: 'mldig2ZiRwA', featured: true,
+    thumbnail: 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=600&q=80',
+    phone: '02-1234-5678', desc: '강남 최고의 피부관리 전문샵', active: true,
+  },
+  {
+    id: 2, name: '뷰티랩 홍대', category: '네일아트',
+    tags: ['젤네일', '네일아트', '케어'], price: '3만원~',
+    address: '서울 마포구 와우산로 45', district: '마포구',
+    lat: 37.5563, lng: 126.9236,
+    smartPlaceUrl: 'https://naver.me/example2',
+    youtubeId: 'mldig2ZiRwA', featured: true,
+    thumbnail: 'https://images.unsplash.com/photo-1604654894610-df63bc536371?w=600&q=80',
+    phone: '02-2345-6789', desc: '홍대 감성 네일아트 전문', active: true,
+  },
+  {
+    id: 3, name: '헤어스튜디오 한남', category: '헤어',
+    tags: ['염색', '펌', '커트'], price: '6만원~',
+    address: '서울 용산구 한남대로 77', district: '용산구',
+    lat: 37.5340, lng: 127.0026,
+    smartPlaceUrl: 'https://naver.me/example3',
+    youtubeId: 'mldig2ZiRwA', featured: false,
+    thumbnail: 'https://images.unsplash.com/photo-1560066984-138dadb4c035?w=600&q=80',
+    phone: '02-3456-7890', desc: '한남동 프리미엄 헤어살롱', active: true,
+  },
+  {
+    id: 4, name: '라온 왁싱샵', category: '왁싱',
+    tags: ['전신왁싱', '브라질리언', '눈썹'], price: '2만원~',
+    address: '서울 서초구 방배로 55', district: '서초구',
+    lat: 37.4836, lng: 126.9822,
+    smartPlaceUrl: 'https://naver.me/example4',
+    youtubeId: 'mldig2ZiRwA', featured: false,
+    thumbnail: 'https://images.unsplash.com/photo-1616394584738-fc6e612e71b9?w=600&q=80',
+    phone: '02-4567-8901', desc: '깔끔하고 위생적인 왁싱 전문샵', active: true,
+  },
+  {
+    id: 5, name: '퍼펙트 눈썹 신촌', category: '반영구',
+    tags: ['눈썹문신', '아이라인', '입술'], price: '15만원~',
+    address: '서울 서대문구 신촌로 88', district: '서대문구',
+    lat: 37.5596, lng: 126.9368,
+    smartPlaceUrl: 'https://naver.me/example5',
+    youtubeId: 'mldig2ZiRwA', featured: false,
+    thumbnail: 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=600&q=80',
+    phone: '02-5678-9012', desc: '자연스러운 반영구 메이크업', active: true,
+  },
+  {
+    id: 6, name: '힐링 마사지 이태원', category: '마사지',
+    tags: ['전신마사지', '아로마', '스웨디시'], price: '7만원~',
+    address: '서울 용산구 이태원로 150', district: '용산구',
+    lat: 37.5348, lng: 126.9947,
+    smartPlaceUrl: 'https://naver.me/example6',
+    youtubeId: 'mldig2ZiRwA', featured: false,
+    thumbnail: 'https://images.unsplash.com/photo-1544161515-4ab6ce6db874?w=600&q=80',
+    phone: '02-6789-0123', desc: '전문 테라피스트의 힐링 마사지', active: true,
+  },
+  {
+    id: 7, name: '핑크네일 성수', category: '네일아트',
+    tags: ['젤네일', '케어', '풋케어'], price: '2.5만원~',
+    address: '서울 성동구 성수일로 30', district: '성동구',
+    lat: 37.5446, lng: 127.0557,
+    smartPlaceUrl: 'https://naver.me/example7',
+    youtubeId: 'mldig2ZiRwA', featured: false,
+    thumbnail: 'https://images.unsplash.com/photo-1604654894610-df63bc536371?w=600&q=80',
+    phone: '02-7890-1234', desc: '성수 감성 네일아트', active: true,
+  },
+  {
+    id: 8, name: '리프트업 에스테틱', category: '피부관리',
+    tags: ['리프팅', '주름개선', '탄력'], price: '8만원~',
+    address: '서울 강남구 청담로 12', district: '강남구',
+    lat: 37.5247, lng: 127.0392,
+    smartPlaceUrl: 'https://naver.me/example8',
+    youtubeId: 'mldig2ZiRwA', featured: false,
+    thumbnail: 'https://images.unsplash.com/photo-1487412947147-5cebf100ffc2?w=600&q=80',
+    phone: '02-8901-2345', desc: '청담동 프리미엄 에스테틱', active: true,
+  },
 ]
 
-let nextId = 11
+let nextId = 9
+const viewCnt: Record<number, number> = {}
+const spCnt:   Record<number, number> = {}
 
-// ══════════════════════════════════════════════════════════════════════════
-// 통계 카운터
-// ══════════════════════════════════════════════════════════════════════════
-// 조회수
-const viewCnt: Record<number,number> = {}
-// 예약클릭 총계
-const spCnt: Record<number,number> = {}
-// 예약클릭 일별: "YYYY-MM-DD" -> count
-const spDaily: Record<string,number> = {}
-// 예약클릭 일별 + 샵별: "YYYY-MM-DD::shopId" -> count
-const spDailyShop: Record<string,number> = {}
-
-function todayStr() {
-  return new Date().toISOString().slice(0,10)
-}
-
-function calcDist(la1:number,lo1:number,la2:number,lo2:number){
-  const R=6371,dL=(la2-la1)*Math.PI/180,dO=(lo2-lo1)*Math.PI/180
-  const a=Math.sin(dL/2)**2+Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin(dO/2)**2
-  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a))
+function calcDist(la1: number, lo1: number, la2: number, lo2: number) {
+  const R = 6371, dL = (la2 - la1) * Math.PI / 180, dO = (lo2 - lo1) * Math.PI / 180
+  const a = Math.sin(dL / 2) ** 2 + Math.cos(la1 * Math.PI / 180) * Math.cos(la2 * Math.PI / 180) * Math.sin(dO / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
 // ══════════════════════════════════════════════════════════════════════════
 // API 라우트
 // ══════════════════════════════════════════════════════════════════════════
+
+// 샵 목록
 app.get('/api/shops', (c) => {
-  const cat = c.req.query('category') ?? ''
-  const q   = (c.req.query('q') ?? '').toLowerCase()
-  const lat = parseFloat(c.req.query('lat') ?? '')
-  const lng = parseFloat(c.req.query('lng') ?? '')
+  const cat    = c.req.query('category') ?? ''
+  const q      = (c.req.query('q') ?? '').toLowerCase()
+  const lat    = parseFloat(c.req.query('lat') ?? '')
+  const lng    = parseFloat(c.req.query('lng') ?? '')
   const nearby = c.req.query('nearby') === '1'
-  let list = [...shops]
+  let list = shopStore.filter(s => s.active)
   if (cat && cat !== 'all') list = list.filter(s => s.category === cat)
   if (q) list = list.filter(s =>
-    s.name.toLowerCase().includes(q) ||
-    s.tags.some(t => t.includes(q)) ||
-    s.district.includes(q)
+    s.name.toLowerCase().includes(q) || s.tags.some(t => t.includes(q)) || s.district.includes(q)
   )
   if (nearby && !isNaN(lat) && !isNaN(lng)) {
     list = list
-      .map(s => ({ ...s, dist: calcDist(lat,lng,s.lat,s.lng) }))
-      .filter((s:any) => s.dist <= 20)
-      .sort((a:any,b:any) => a.dist - b.dist)
+      .map(s => ({ ...s, dist: calcDist(lat, lng, s.lat, s.lng) }))
+      .filter((s: any) => s.dist <= 20)
+      .sort((a: any, b: any) => a.dist - b.dist)
   } else {
-    list = [...list.filter(s=>s.featured), ...list.filter(s=>!s.featured)]
+    list = [...list.filter(s => s.featured), ...list.filter(s => !s.featured)]
   }
-  return c.json(list.map(s => ({ ...s, views: viewCnt[s.id]??0 })))
+  return c.json(list.map(s => ({ ...s, views: viewCnt[s.id] ?? 0 })))
 })
 
+// 전체 샵 (지도용)
 app.get('/api/shops/all', (c) => {
-  return c.json(shops.map(s => ({ ...s, views: viewCnt[s.id]??0 })))
+  return c.json(shopStore.filter(s => s.active).map(s => ({ ...s, views: viewCnt[s.id] ?? 0 })))
 })
 
-// 조회 추적
-app.post('/api/track/view/:id', (c) => {
+// 샵 단건
+app.get('/api/shops/:id', (c) => {
   const id = +c.req.param('id')
-  viewCnt[id] = (viewCnt[id]??0) + 1
-  return c.json({ ok: true })
+  const s = shopStore.find(x => x.id === id)
+  if (!s) return c.json({ error: 'not found' }, 404)
+  return c.json({ ...s, views: viewCnt[s.id] ?? 0 })
 })
 
-// 예약클릭 추적 (일별+샵별 기록)
-app.post('/api/track/sp/:id', (c) => {
-  const id = +c.req.param('id')
-  const d  = todayStr()
-  spCnt[id]            = (spCnt[id]??0) + 1
-  spDaily[d]           = (spDaily[d]??0) + 1
-  const dk             = `${d}::${id}`
-  spDailyShop[dk]      = (spDailyShop[dk]??0) + 1
-  return c.json({ ok: true })
-})
-
-// 관리자 통계 (일별 7일 + 샵별)
-app.get('/api/admin/stats', (c) => {
-  const stats = shops.map(s => ({
-    id: s.id, name: s.name, category: s.category,
-    featured: s.featured,
-    views:    viewCnt[s.id]??0,
-    spClicks: spCnt[s.id]??0,
-  })).sort((a,b) => b.spClicks - a.spClicks)
-
-  // 최근 7일 일별 예약클릭
-  const days: { date:string; total:number; byShop:Record<number,number> }[] = []
-  for (let i=6; i>=0; i--) {
-    const d = new Date(); d.setDate(d.getDate()-i)
-    const ds = d.toISOString().slice(0,10)
-    const byShop: Record<number,number> = {}
-    shops.forEach(s => {
-      const v = spDailyShop[`${ds}::${s.id}`]??0
-      if (v>0) byShop[s.id] = v
-    })
-    days.push({ date:ds, total:spDaily[ds]??0, byShop })
-  }
-
-  return c.json({
-    stats,
-    days,
-    totalViews:  Object.values(viewCnt).reduce((a,b)=>a+b,0),
-    totalSP:     Object.values(spCnt).reduce((a,b)=>a+b,0),
-    totalShops:  shops.length,
-  })
-})
-
-// 샵 추가 (관리자)
-app.post('/api/admin/shop', async (c) => {
-  const body = await c.req.json() as Partial<Shop>
+// 샵 추가
+app.post('/api/admin/shops', async (c) => {
+  const body = await c.req.json()
   const shop: Shop = {
-    id:           nextId++,
-    name:         body.name        ?? '새 샵',
+    id: nextId++,
+    name:         body.name        ?? '새 업체',
     category:     body.category    ?? '피부관리',
     tags:         body.tags        ?? [],
     price:        body.price       ?? '',
     address:      body.address     ?? '',
     district:     body.district    ?? '',
-    lat:          body.lat         ?? 37.5326,
-    lng:          body.lng         ?? 127.0246,
-    smartPlaceUrl:body.smartPlaceUrl ?? '#',
+    lat:          parseFloat(body.lat)  || 37.5326,
+    lng:          parseFloat(body.lng)  || 127.0246,
+    smartPlaceUrl: body.smartPlaceUrl ?? '',
     youtubeId:    body.youtubeId   ?? '',
     featured:     body.featured    ?? false,
     thumbnail:    body.thumbnail   ?? 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=600&q=80',
+    phone:        body.phone       ?? '',
+    desc:         body.desc        ?? '',
+    active:       true,
   }
-  shops.push(shop)
-  return c.json({ ok:true, shop })
+  shopStore.push(shop)
+  return c.json(shop)
 })
 
-// 샵 수정 (관리자)
-app.put('/api/admin/shop/:id', async (c) => {
+// 샵 수정
+app.put('/api/admin/shops/:id', async (c) => {
   const id   = +c.req.param('id')
-  const body = await c.req.json() as Partial<Shop>
-  const idx  = shops.findIndex(s => s.id === id)
-  if (idx < 0) return c.json({ ok:false }, 404)
-  shops[idx] = { ...shops[idx], ...body, id }
-  return c.json({ ok:true, shop: shops[idx] })
+  const body = await c.req.json()
+  const idx  = shopStore.findIndex(s => s.id === id)
+  if (idx === -1) return c.json({ error: 'not found' }, 404)
+  shopStore[idx] = {
+    ...shopStore[idx],
+    ...body,
+    id,
+    lat: parseFloat(body.lat) || shopStore[idx].lat,
+    lng: parseFloat(body.lng) || shopStore[idx].lng,
+    tags: Array.isArray(body.tags)
+      ? body.tags
+      : (body.tags ?? '').split(',').map((t: string) => t.trim()).filter(Boolean),
+  }
+  return c.json(shopStore[idx])
 })
 
-// 샵 삭제 (관리자)
-app.delete('/api/admin/shop/:id', (c) => {
+// 샵 삭제
+app.delete('/api/admin/shops/:id', (c) => {
   const id  = +c.req.param('id')
-  const idx = shops.findIndex(s => s.id === id)
-  if (idx < 0) return c.json({ ok:false }, 404)
-  shops.splice(idx, 1)
-  return c.json({ ok:true })
+  const idx = shopStore.findIndex(s => s.id === id)
+  if (idx === -1) return c.json({ error: 'not found' }, 404)
+  shopStore.splice(idx, 1)
+  return c.json({ ok: true })
+})
+
+// 추적
+app.post('/api/track/view/:id', (c) => {
+  const id = +c.req.param('id'); viewCnt[id] = (viewCnt[id] ?? 0) + 1; return c.json({ ok: true })
+})
+app.post('/api/track/sp/:id', (c) => {
+  const id = +c.req.param('id'); spCnt[id] = (spCnt[id] ?? 0) + 1; return c.json({ ok: true })
+})
+
+// 어드민 통계
+app.get('/api/admin/stats', (c) => {
+  const stats = shopStore.map(s => ({
+    id: s.id, name: s.name, category: s.category,
+    featured: s.featured, active: s.active,
+    views: viewCnt[s.id] ?? 0, spClicks: spCnt[s.id] ?? 0,
+  })).sort((a, b) => b.views - a.views)
+  return c.json({
+    stats,
+    totalViews: Object.values(viewCnt).reduce((a, b) => a + b, 0),
+    totalSP:    Object.values(spCnt).reduce((a, b) => a + b, 0),
+    totalShops: shopStore.filter(s => s.active).length,
+  })
 })
 
 // favicon
-app.get('/favicon.ico', (c) => faviconRes())
-app.get('/favicon.svg', (c) => faviconRes())
-function faviconRes(){
-  const svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#FF4D7D"/><text x="16" y="23" font-size="18" text-anchor="middle" font-family="serif">💄</text></svg>`
-  return new Response(svg,{headers:{'Content-Type':'image/svg+xml','Cache-Control':'public,max-age=86400'}})
+app.get('/favicon.ico', (c) => favicon(c))
+app.get('/favicon.svg', (c) => favicon(c))
+function favicon(c: any) {
+  return new Response(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#FF4D7D"/><text x="16" y="23" font-size="18" text-anchor="middle">💄</text></svg>`,
+    { headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public,max-age=86400' } }
+  )
 }
 
 app.get('/admin', (c) => c.html(adminPage()))
-app.get('/',      (c) => c.html(mainPage()))
+app.get('/', (c) => c.html(mainPage()))
 
 // ══════════════════════════════════════════════════════════════════════════
 // 메인 페이지
 // ══════════════════════════════════════════════════════════════════════════
 const NAVER_CLIENT_ID = 'xjjg4490h8'
+const CATEGORIES = ['전체', '피부관리', '네일아트', '헤어', '왁싱', '반영구', '마사지']
+const CAT_EMOJI:  Record<string, string> = {
+  '전체': '🏠', '피부관리': '✨', '네일아트': '💅', '헤어': '💇', '왁싱': '🌸', '반영구': '👁', '마사지': '💆',
+}
 
-function catEmoji(cat:string){ return ({
-  '피부관리':'✨','네일아트':'💅','헤어':'💇','왁싱':'🌸',
-  '마사지':'💆','반영구':'👁','병원':'🏥'
-} as any)[cat] ?? '🏠' }
-
-function mainPage(){ return `<!DOCTYPE html>
+function mainPage() { return `<!DOCTYPE html>
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
@@ -270,123 +268,127 @@ function mainPage(){ return `<!DOCTYPE html>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css"/>
-<script type="text/javascript" src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpClientId=${NAVER_CLIENT_ID}"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --pink:#FF4D7D;--pink2:#FF8FA3;
-  --green:#03C75A;--green2:#02a84e;
+  --pink:#FF4D7D; --pink2:#FF8FA3;
+  --green:#03C75A; --green2:#02a84e;
   --bg:#0a0a0a;
   --hd:50px; --cat:44px; --nav:60px;
   --safe:env(safe-area-inset-bottom,0px);
 }
-html,body{height:100%;background:var(--bg);color:#fff;font-family:'Pretendard',-apple-system,sans-serif;overflow:hidden}
+html,body{height:100%;background:var(--bg);color:#fff;
+  font-family:'Pretendard',-apple-system,sans-serif;overflow:hidden}
 
-/* ━━ 헤더 ━━ */
+/* 헤더 */
 .hd{position:fixed;top:0;left:0;right:0;z-index:300;height:var(--hd);
   background:rgba(10,10,10,.97);backdrop-filter:blur(14px);
   border-bottom:1px solid rgba(255,255,255,.07);
   display:flex;align-items:center;justify-content:space-between;padding:0 16px}
-.logo{font-size:19px;font-weight:800;letter-spacing:-.3px;display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;-webkit-user-select:none}
-.logo-icon{width:28px;height:28px;background:var(--pink);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;transition:transform .15s}
-.logo-icon.pop{transform:scale(1.25)}
+.logo{font-size:19px;font-weight:800;display:flex;align-items:center;gap:7px;cursor:pointer;user-select:none}
+.logo-icon{width:28px;height:28px;background:var(--pink);border-radius:8px;
+  display:flex;align-items:center;justify-content:center;font-size:14px}
 .logo em{color:var(--pink);font-style:normal}
-.hd-badge{font-size:10px;font-weight:700;background:rgba(255,77,125,.15);color:var(--pink);padding:3px 8px;border-radius:8px;border:1px solid rgba(255,77,125,.25)}
+.hd-badge{font-size:10px;font-weight:700;background:rgba(255,77,125,.15);
+  color:var(--pink);padding:3px 8px;border-radius:8px;border:1px solid rgba(255,77,125,.25)}
 
-/* ━━ 비밀번호 오버레이 ━━ */
-.pw-overlay{position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.85);backdrop-filter:blur(16px);display:none;align-items:center;justify-content:center;flex-direction:column;gap:20px}
-.pw-overlay.on{display:flex}
-.pw-title{font-size:18px;font-weight:800;color:#fff;margin-bottom:4px}
-.pw-sub{font-size:13px;color:rgba(255,255,255,.4)}
-.pw-dots{display:flex;gap:12px;margin:16px 0 4px}
-.pw-dot{width:14px;height:14px;border-radius:50%;border:2px solid rgba(255,255,255,.3);background:transparent;transition:all .2s}
-.pw-dot.fill{background:var(--pink);border-color:var(--pink)}
-.pw-keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:240px}
-.pw-key{height:58px;border-radius:16px;border:1.5px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);
-  font-size:22px;font-weight:700;color:#fff;cursor:pointer;font-family:inherit;transition:all .15s}
-.pw-key:active{background:rgba(255,77,125,.25);border-color:var(--pink)}
-.pw-key.del{font-size:16px;color:rgba(255,255,255,.5)}
-.pw-err{font-size:13px;color:var(--pink);height:20px;margin-top:4px}
-
-/* ━━ 카탈로그 탭바 ━━ */
+/* 카탈로그 탭바 */
 .cat-bar{position:fixed;top:var(--hd);left:0;right:0;z-index:299;height:var(--cat);
   background:rgba(10,10,10,.93);backdrop-filter:blur(10px);
   border-bottom:1px solid rgba(255,255,255,.06);display:none}
 .cat-bar.show{display:block}
-.cat-scroll{display:flex;align-items:center;gap:6px;overflow-x:auto;padding:6px 12px;height:100%;scrollbar-width:none}
+.cat-scroll{display:flex;align-items:center;gap:6px;
+  overflow-x:auto;padding:6px 12px;height:100%;scrollbar-width:none}
 .cat-scroll::-webkit-scrollbar{display:none}
 .cp{flex-shrink:0;border:1.5px solid rgba(255,255,255,.15);border-radius:20px;
   padding:5px 14px;font-size:12px;font-weight:600;
   background:rgba(255,255,255,.05);color:rgba(255,255,255,.6);
   cursor:pointer;font-family:inherit;transition:all .2s;white-space:nowrap}
-.cp.active{background:var(--pink);border-color:var(--pink);color:#fff;box-shadow:0 2px 10px rgba(255,77,125,.35)}
+.cp.active{background:var(--pink);border-color:var(--pink);color:#fff;
+  box-shadow:0 2px 10px rgba(255,77,125,.35)}
 
-/* ━━ 피드 화면 ━━ */
-#feedScreen{position:fixed;top:calc(var(--hd)+var(--cat));left:0;right:0;bottom:var(--nav);
-  overflow-y:scroll;scroll-snap-type:y mandatory;-webkit-overflow-scrolling:touch;
-  scrollbar-width:none;display:none}
+/* 화면 */
+#feedScreen{position:fixed;top:calc(var(--hd)+var(--cat));left:0;right:0;
+  bottom:var(--nav);overflow-y:scroll;scroll-snap-type:y mandatory;
+  -webkit-overflow-scrolling:touch;scrollbar-width:none;display:none}
 #feedScreen.active{display:block}
 #feedScreen::-webkit-scrollbar{display:none}
-
-/* ━━ 지도 화면 ━━ */
-#mapScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:var(--nav);display:none;flex-direction:column}
+#mapScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:var(--nav);
+  display:none;flex-direction:column}
 #mapScreen.active{display:flex}
 
-/* ━━ 하단 탭바 ━━ */
+/* 하단탭 */
 .tabbar{position:fixed;bottom:0;left:0;right:0;z-index:300;height:var(--nav);
   background:rgba(10,10,10,.98);backdrop-filter:blur(20px);
-  border-top:1px solid rgba(255,255,255,.08);display:flex;padding-bottom:var(--safe)}
+  border-top:1px solid rgba(255,255,255,.08);
+  display:flex;padding-bottom:var(--safe)}
 .tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:3px;font-size:10px;font-weight:700;color:rgba(255,255,255,.28);
-  cursor:pointer;border:none;background:none;font-family:inherit;transition:color .2s;padding-top:4px}
+  cursor:pointer;border:none;background:none;font-family:inherit;
+  transition:color .2s;padding-top:4px}
 .tab i{font-size:22px;transition:transform .2s}
 .tab.active{color:#fff}
 .tab.active i{color:var(--pink);transform:scale(1.1)}
 
-/* ━━ 피드 아이템 ━━ */
-.fi{height:calc(100dvh - var(--hd) - var(--cat) - var(--nav));position:relative;
-  scroll-snap-align:start;scroll-snap-stop:always;background:#000;display:flex;flex-direction:column;overflow:hidden}
+/* 피드 아이템 */
+.fi{height:calc(100dvh - var(--hd) - var(--cat) - var(--nav));
+  scroll-snap-align:start;scroll-snap-stop:always;
+  background:#000;display:flex;flex-direction:column;overflow:hidden}
 .yt-area{flex:1;position:relative;overflow:hidden;background:#000}
 .yt-frame{position:absolute;inset:0;width:100%;height:100%;border:none}
-.shop-bar{flex-shrink:0;background:linear-gradient(to bottom,rgba(10,10,10,0) 0%,rgba(10,10,10,1) 100%);
-  padding:18px 14px 14px;display:flex;align-items:flex-end;gap:10px;position:relative}
-.shop-bar::before{content:'';position:absolute;top:-40px;left:0;right:0;height:40px;
-  background:linear-gradient(to bottom,transparent,rgba(10,10,10,.8));pointer-events:none}
+
+/* 업체 정보 바 */
+.shop-bar{flex-shrink:0;padding:18px 14px 14px;
+  display:flex;align-items:flex-end;gap:10px;position:relative;
+  background:linear-gradient(to bottom,transparent,rgba(10,10,10,.98))}
+.shop-bar::before{content:'';position:absolute;top:-44px;left:0;right:0;height:44px;
+  background:linear-gradient(to bottom,transparent,rgba(10,10,10,.7));pointer-events:none}
 .shop-bar-info{flex:1;min-width:0}
 .shop-bar-cat{display:inline-block;font-size:10px;font-weight:700;color:var(--pink);
   background:rgba(255,77,125,.12);border:1px solid rgba(255,77,125,.25);
-  padding:2px 7px;border-radius:6px;margin-bottom:5px;letter-spacing:.3px}
-.shop-bar-name{font-size:17px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  margin-bottom:4px;text-shadow:0 1px 4px rgba(0,0,0,.5)}
-.shop-bar-loc{display:flex;align-items:center;gap:4px;font-size:11px;color:rgba(255,255,255,.55);
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  padding:2px 7px;border-radius:6px;margin-bottom:5px}
+.shop-bar-name{font-size:17px;font-weight:800;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
+.shop-bar-loc{font-size:11px;color:rgba(255,255,255,.5);
+  display:flex;align-items:center;gap:4px}
 .shop-bar-loc i{color:var(--green);font-size:10px;flex-shrink:0}
-.btn-book{flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+.btn-book{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:3px;
   background:var(--green);color:#fff;border:none;border-radius:14px;
-  padding:10px 14px;font-size:12px;font-weight:800;text-decoration:none;font-family:inherit;
-  cursor:pointer;white-space:nowrap;box-shadow:0 4px 16px rgba(3,199,90,.4);min-width:64px}
+  padding:10px 14px;font-size:12px;font-weight:800;
+  text-decoration:none;font-family:inherit;cursor:pointer;
+  white-space:nowrap;box-shadow:0 4px 16px rgba(3,199,90,.4);min-width:64px}
 .btn-book i{font-size:16px}
 .btn-book span{font-size:10px;font-weight:700}
 .btn-book:active{background:var(--green2);transform:scale(.96)}
-.feed-spin{height:100%;display:flex;align-items:center;justify-content:center;background:#0a0a0a}
-.spinner{width:36px;height:36px;border:3px solid rgba(255,255,255,.08);border-top-color:var(--pink);border-radius:50%;animation:spin .8s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-.feed-empty{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:rgba(255,255,255,.25);scroll-snap-align:start;background:#0a0a0a}
-.feed-empty i{font-size:48px}
 
-/* ━━ 지도 영역 ━━ */
-.map-top{flex-shrink:0;padding:8px 12px;background:rgba(10,10,10,.97);border-bottom:1px solid rgba(255,255,255,.07)}
+/* 로딩/빈상태 */
+.feed-spin{height:100%;display:flex;align-items:center;justify-content:center;background:#0a0a0a}
+.spinner{width:36px;height:36px;border:3px solid rgba(255,255,255,.08);
+  border-top-color:var(--pink);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.feed-empty{height:100%;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:12px;color:rgba(255,255,255,.25);
+  scroll-snap-align:start;background:#0a0a0a}
+.feed-empty i{font-size:48px}
+.feed-empty p{font-size:14px;font-weight:600}
+
+/* 지도 상단 필터 */
+.map-top{flex-shrink:0;padding:8px 12px;
+  background:rgba(10,10,10,.97);border-bottom:1px solid rgba(255,255,255,.07)}
 .map-cats{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
 .map-cats::-webkit-scrollbar{display:none}
-.mc{flex-shrink:0;border:1.5px solid rgba(255,255,255,.15);border-radius:18px;padding:6px 13px;
-  font-size:11px;font-weight:600;background:transparent;color:rgba(255,255,255,.5);
-  cursor:pointer;font-family:inherit;transition:all .2s;white-space:nowrap}
-.mc.active{background:var(--pink);border-color:var(--pink);color:#fff;box-shadow:0 2px 10px rgba(255,77,125,.3)}
+.mc{flex-shrink:0;border:1.5px solid rgba(255,255,255,.15);border-radius:18px;
+  padding:6px 13px;font-size:11px;font-weight:600;background:transparent;
+  color:rgba(255,255,255,.5);cursor:pointer;font-family:inherit;transition:all .2s;white-space:nowrap}
+.mc.active{background:var(--pink);border-color:var(--pink);color:#fff;
+  box-shadow:0 2px 10px rgba(255,77,125,.3)}
+
+/* 네이버 지도 영역 */
 .map-area{flex:1;position:relative;overflow:hidden}
 #naverMap{width:100%;height:100%}
 
 /* 내 주변 FAB */
-.nearby-fab{position:absolute;bottom:16px;right:12px;z-index:50;
+.nearby-fab{position:absolute;bottom:16px;right:12px;z-index:100;
   background:rgba(10,10,10,.92);backdrop-filter:blur(8px);
   border:1.5px solid rgba(255,255,255,.18);border-radius:22px;
   padding:9px 15px;display:flex;align-items:center;gap:6px;
@@ -396,129 +398,116 @@ html,body{height:100%;background:var(--bg);color:#fff;font-family:'Pretendard',-
 .nearby-fab.on{background:var(--pink);border-color:var(--pink)}
 .nearby-fab.on i{color:#fff}
 
-/* 하단 샵 패널 */
-.shop-panel{flex-shrink:0;background:rgba(10,10,10,.98);border-top:1px solid rgba(255,255,255,.07);
-  height:196px;display:flex;align-items:center;gap:10px;
+/* 샵 패널 */
+.shop-panel{flex-shrink:0;height:196px;background:rgba(10,10,10,.98);
+  border-top:1px solid rgba(255,255,255,.07);
+  display:flex;align-items:center;gap:10px;
   padding:12px 14px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
 .shop-panel::-webkit-scrollbar{display:none}
-.spc{flex-shrink:0;width:148px;background:rgba(255,255,255,.04);border:1.5px solid rgba(255,255,255,.08);
-  border-radius:16px;overflow:hidden;cursor:pointer;transition:border-color .2s,transform .15s;
-  height:170px;display:flex;flex-direction:column}
+.spc{flex-shrink:0;width:148px;height:172px;
+  background:rgba(255,255,255,.04);border:1.5px solid rgba(255,255,255,.08);
+  border-radius:16px;overflow:hidden;cursor:pointer;
+  display:flex;flex-direction:column;transition:border-color .2s,transform .15s}
 .spc:active{transform:scale(.96)}
 .spc.sel{border-color:var(--pink);box-shadow:0 0 0 1px var(--pink)}
-.spc-img{width:100%;height:86px;object-fit:cover;display:block;flex-shrink:0}
+.spc-img{width:100%;height:88px;object-fit:cover;display:block;flex-shrink:0}
 .spc-body{padding:8px 10px;flex:1;display:flex;flex-direction:column;justify-content:space-between}
-.spc-cat{font-size:9px;font-weight:700;color:var(--pink);margin-bottom:2px;letter-spacing:.4px}
-.spc-name{font-size:12px;font-weight:700;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.spc-dist{font-size:10px;color:rgba(255,255,255,.35);margin-top:2px;display:flex;align-items:center;gap:3px}
+.spc-cat{font-size:9px;font-weight:700;color:var(--pink);margin-bottom:2px}
+.spc-name{font-size:12px;font-weight:700;line-height:1.3;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.spc-price{font-size:10px;font-weight:600;color:var(--pink2);margin-top:3px}
+.spc-dist{font-size:10px;color:rgba(255,255,255,.35);display:flex;align-items:center;gap:3px}
 .spc-dist i{font-size:9px;color:var(--green)}
-.spc-price{font-size:10px;font-weight:600;color:var(--pink2);margin-top:2px}
 
-/* ━━ 네이버 지도 마커 ━━ */
+/* 네이버 지도 커스텀 마커 */
 .nv-marker{display:flex;flex-direction:column;align-items:center;cursor:pointer;position:relative}
 .nv-pin{background:var(--pink);color:#fff;font-size:11px;font-weight:800;
-  font-family:'Pretendard',-apple-system,sans-serif;
   padding:5px 10px;border-radius:20px;white-space:nowrap;
-  box-shadow:0 3px 10px rgba(0,0,0,.4);border:2px solid rgba(255,255,255,.4);
-  max-width:100px;overflow:hidden;text-overflow:ellipsis;transition:all .2s}
+  box-shadow:0 3px 10px rgba(0,0,0,.4);border:2px solid rgba(255,255,255,.35);
+  font-family:'Pretendard',-apple-system,sans-serif;
+  max-width:100px;overflow:hidden;text-overflow:ellipsis;
+  transition:transform .2s}
 .nv-pin.cat-nail{background:#A855F7}
 .nv-pin.cat-hair{background:#F59E0B}
 .nv-pin.cat-wax{background:#EC4899}
-.nv-pin.cat-massage{background:#06B6D4}
-.nv-pin.cat-perm{background:#8B5CF6}
-.nv-pin.cat-hospital{background:#EF4444}
-.nv-pin.sel{background:#fff!important;color:var(--pink)!important;transform:scale(1.15);box-shadow:0 4px 16px rgba(255,255,255,.4)}
-.nv-tail{width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;
-  border-top:8px solid var(--pink);margin-top:-1px}
+.nv-pin.cat-perm{background:#06B6D4}
+.nv-pin.cat-massage{background:#10B981}
+.nv-pin.sel{background:#fff;color:var(--pink) !important;transform:scale(1.15);
+  box-shadow:0 4px 16px rgba(255,255,255,.35)}
+.nv-tail{width:0;height:0;border-left:6px solid transparent;
+  border-right:6px solid transparent;border-top:8px solid var(--pink);margin-top:-1px}
 .nv-tail.cat-nail{border-top-color:#A855F7}
 .nv-tail.cat-hair{border-top-color:#F59E0B}
 .nv-tail.cat-wax{border-top-color:#EC4899}
-.nv-tail.cat-massage{border-top-color:#06B6D4}
-.nv-tail.cat-perm{border-top-color:#8B5CF6}
-.nv-tail.cat-hospital{border-top-color:#EF4444}
+.nv-tail.cat-perm{border-top-color:#06B6D4}
+.nv-tail.cat-massage{border-top-color:#10B981}
 
-/* ━━ 바텀시트 ━━ */
-.dim{position:fixed;inset:0;background:rgba(0,0,0,0);z-index:400;pointer-events:none;transition:background .3s}
+/* 바텀시트 */
+.dim{position:fixed;inset:0;background:rgba(0,0,0,0);z-index:400;
+  pointer-events:none;transition:background .3s}
 .dim.on{background:rgba(0,0,0,.6);pointer-events:auto}
-.sheet{position:fixed;bottom:0;left:0;right:0;z-index:401;background:#141414;border-radius:24px 24px 0 0;
+.sheet{position:fixed;bottom:0;left:0;right:0;z-index:401;
+  background:#141414;border-radius:24px 24px 0 0;
   transform:translateY(100%);transition:transform .38s cubic-bezier(.32,1,.23,1);
-  max-height:85vh;display:flex;flex-direction:column;padding-bottom:calc(20px+var(--safe));
+  max-height:85vh;display:flex;flex-direction:column;
+  padding-bottom:calc(20px + var(--safe));
   box-shadow:0 -4px 30px rgba(0,0,0,.5)}
 .sheet.open{transform:translateY(0)}
-.sheet-handle{width:38px;height:4px;background:rgba(255,255,255,.1);border-radius:4px;margin:14px auto 0;flex-shrink:0}
-.sheet-img{width:calc(100% - 28px);height:175px;object-fit:cover;border-radius:16px;margin:14px 14px 0;flex-shrink:0;box-shadow:0 4px 20px rgba(0,0,0,.4)}
+.sheet-handle{width:38px;height:4px;background:rgba(255,255,255,.1);
+  border-radius:4px;margin:14px auto 0;flex-shrink:0}
+.sheet-img{width:calc(100% - 28px);height:180px;object-fit:cover;
+  border-radius:16px;margin:14px 14px 0;flex-shrink:0}
 .sheet-body{padding:16px 18px 0;overflow-y:auto;flex:1}
 .s-cat{display:inline-block;font-size:10px;font-weight:700;color:var(--pink);
   background:rgba(255,77,125,.12);border:1px solid rgba(255,77,125,.25);
-  padding:2px 8px;border-radius:6px;margin-bottom:6px;letter-spacing:.3px}
+  padding:2px 8px;border-radius:6px;margin-bottom:6px}
 .s-name{font-size:22px;font-weight:800;margin-bottom:6px;line-height:1.2}
-.s-addr{font-size:12px;color:rgba(255,255,255,.45);display:flex;align-items:center;gap:5px;margin-bottom:10px}
+.s-addr{font-size:12px;color:rgba(255,255,255,.45);
+  display:flex;align-items:center;gap:5px;margin-bottom:4px}
+.s-phone{font-size:12px;color:rgba(255,255,255,.4);
+  display:flex;align-items:center;gap:5px;margin-bottom:10px}
+.s-desc{font-size:13px;color:rgba(255,255,255,.5);margin-bottom:10px;line-height:1.5}
 .s-tags{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px}
-.s-tag{font-size:11px;background:rgba(255,255,255,.07);color:rgba(255,255,255,.6);padding:4px 10px;border-radius:9px;font-weight:500}
+.s-tag{font-size:11px;background:rgba(255,255,255,.07);
+  color:rgba(255,255,255,.6);padding:4px 10px;border-radius:9px;font-weight:500}
 .s-price{font-size:13px;color:rgba(255,255,255,.6);margin-bottom:18px}
 .s-price span{color:var(--pink2);font-size:18px;font-weight:800}
 .s-actions{display:flex;gap:10px}
 .s-book{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;
   background:var(--green);color:#fff;border:none;border-radius:14px;
-  padding:15px;font-size:15px;font-weight:800;text-decoration:none;font-family:inherit;cursor:pointer;
-  box-shadow:0 4px 16px rgba(3,199,90,.35);transition:background .2s}
+  padding:15px;font-size:15px;font-weight:800;
+  text-decoration:none;font-family:inherit;cursor:pointer;
+  box-shadow:0 4px 16px rgba(3,199,90,.35)}
 .s-book:active{background:var(--green2)}
 .s-map-btn{flex-shrink:0;display:flex;align-items:center;justify-content:center;
   background:rgba(255,255,255,.07);border:1.5px solid rgba(255,255,255,.12);
-  border-radius:14px;padding:15px 16px;cursor:pointer;font-size:18px;color:rgba(255,255,255,.6)}
-.s-map-btn:active{background:rgba(255,255,255,.12)}
+  border-radius:14px;padding:15px 16px;cursor:pointer;
+  font-size:18px;color:rgba(255,255,255,.6)}
 
-/* ━━ 토스트 ━━ */
-.toast{position:fixed;bottom:calc(var(--nav)+12px);left:50%;transform:translateX(-50%) translateY(8px);
+/* 토스트 */
+.toast{position:fixed;bottom:calc(var(--nav)+12px);left:50%;
+  transform:translateX(-50%) translateY(8px);
   background:rgba(20,20,20,.97);color:#fff;border:1px solid rgba(255,255,255,.1);
   padding:10px 20px;border-radius:22px;font-size:13px;font-weight:600;
-  z-index:600;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;white-space:nowrap}
+  z-index:600;opacity:0;transition:opacity .25s,transform .25s;
+  pointer-events:none;white-space:nowrap}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
 </head>
 <body>
 
-<!-- 헤더 -->
 <header class="hd">
   <div class="logo" id="logoBtn">
-    <div class="logo-icon" id="logoIcon">💄</div>
+    <div class="logo-icon">💄</div>
     마이<em>뷰티</em>맵
   </div>
   <span class="hd-badge">BETA</span>
 </header>
 
-<!-- 비밀번호 오버레이 -->
-<div class="pw-overlay" id="pwOverlay">
-  <div class="pw-title">🔐 관리자 인증</div>
-  <div class="pw-sub">4자리 비밀번호를 입력하세요</div>
-  <div class="pw-dots">
-    <div class="pw-dot" id="d0"></div>
-    <div class="pw-dot" id="d1"></div>
-    <div class="pw-dot" id="d2"></div>
-    <div class="pw-dot" id="d3"></div>
-  </div>
-  <div class="pw-err" id="pwErr"></div>
-  <div class="pw-keypad">
-    ${[1,2,3,4,5,6,7,8,9,'','0','⌫'].map((k,i)=>
-      k==='' ? `<div></div>` :
-      k==='⌫' ? `<button class="pw-key del" onclick="pwDel()">⌫</button>` :
-      `<button class="pw-key" onclick="pwInput('${k}')">${k}</button>`
-    ).join('')}
-  </div>
-  <button onclick="closePw()" style="margin-top:16px;background:none;border:none;color:rgba(255,255,255,.3);font-size:13px;cursor:pointer;font-family:inherit">취소</button>
-</div>
-
-<!-- 카탈로그 탭바 -->
+<!-- 카탈로그 탭바 (피드 전용) -->
 <div class="cat-bar show" id="catBar">
   <div class="cat-scroll">
-    <button class="cp active" onclick="filterFeed(this,'all')">🏠 전체</button>
-    <button class="cp" onclick="filterFeed(this,'피부관리')">✨ 피부관리</button>
-    <button class="cp" onclick="filterFeed(this,'네일아트')">💅 네일아트</button>
-    <button class="cp" onclick="filterFeed(this,'헤어')">💇 헤어</button>
-    <button class="cp" onclick="filterFeed(this,'왁싱')">🌸 왁싱</button>
-    <button class="cp" onclick="filterFeed(this,'마사지')">💆 마사지</button>
-    <button class="cp" onclick="filterFeed(this,'반영구')">👁 반영구</button>
-    <button class="cp" onclick="filterFeed(this,'병원')">🏥 병원</button>
+    ${CATEGORIES.map((c, i) => `<button class="cp${i === 0 ? ' active' : ''}" onclick="filterFeed(this,'${c === '전체' ? 'all' : c}')">${CAT_EMOJI[c]} ${c}</button>`).join('')}
   </div>
 </div>
 
@@ -531,14 +520,7 @@ html,body{height:100%;background:var(--bg);color:#fff;font-family:'Pretendard',-
 <section id="mapScreen">
   <div class="map-top">
     <div class="map-cats">
-      <button class="mc active" onclick="filterMap(this,'all')">🏠 전체</button>
-      <button class="mc" onclick="filterMap(this,'피부관리')">✨ 피부관리</button>
-      <button class="mc" onclick="filterMap(this,'네일아트')">💅 네일아트</button>
-      <button class="mc" onclick="filterMap(this,'헤어')">💇 헤어</button>
-      <button class="mc" onclick="filterMap(this,'왁싱')">🌸 왁싱</button>
-      <button class="mc" onclick="filterMap(this,'마사지')">💆 마사지</button>
-      <button class="mc" onclick="filterMap(this,'반영구')">👁 반영구</button>
-      <button class="mc" onclick="filterMap(this,'병원')">🏥 병원</button>
+      ${CATEGORIES.map((c, i) => `<button class="mc${i === 0 ? ' active' : ''}" onclick="filterMap(this,'${c === '전체' ? 'all' : c}')">${CAT_EMOJI[c]} ${c}</button>`).join('')}
     </div>
   </div>
   <div class="map-area">
@@ -566,16 +548,18 @@ html,body{height:100%;background:var(--bg);color:#fff;font-family:'Pretendard',-
   <div class="sheet-handle"></div>
   <img class="sheet-img" id="sImg" src="" alt=""/>
   <div class="sheet-body">
-    <div class="s-cat" id="sCat"></div>
+    <div class="s-cat"  id="sCat"></div>
     <div class="s-name" id="sName"></div>
     <div class="s-addr"><i class="fas fa-map-pin" style="color:var(--green)"></i><span id="sAddr"></span></div>
+    <div class="s-phone"><i class="fas fa-phone" style="color:rgba(255,255,255,.3)"></i><span id="sPhone"></span></div>
+    <div class="s-desc" id="sDesc"></div>
     <div class="s-tags" id="sTags"></div>
     <div class="s-price">시술 <span id="sPrice"></span></div>
     <div class="s-actions">
       <a class="s-book" id="sBook" href="#" target="_blank" rel="noopener" onclick="trackSP()">
         <i class="fas fa-calendar-check"></i> 네이버 예약하기
       </a>
-      <button class="s-map-btn" onclick="focusShopOnMap()">
+      <button class="s-map-btn" onclick="focusShopOnMap()" title="지도에서 보기">
         <i class="fas fa-map-marked-alt"></i>
       </button>
     </div>
@@ -583,268 +567,319 @@ html,body{height:100%;background:var(--bg);color:#fff;font-family:'Pretendard',-
 </div>
 <div class="toast" id="toast"></div>
 
+<!-- 네이버 지도 SDK -->
+<script>
+window.__naverMapCb = function() { window.__naverMapReady = true; };
+</script>
+<script src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpClientId=${NAVER_CLIENT_ID}&callback=__naverMapCb" async></script>
+
 <script>
 // ── 전역 ──────────────────────────────────────────────────────────────────
-let allShops=[], mapCat='all', nearbyOn=false;
-let userLat=null, userLng=null, curShop=null;
-let naverMap=null, mapInited=false;
-let nvMarkers={};  // id -> naver Marker
-let userMarker=null;
+let allShops   = [];
+let mapCat     = 'all';
+let nearbyOn   = false;
+let userLat    = null;
+let userLng    = null;
+let curShop    = null;
+let naverMap   = null;
+let mapInited  = false;
+let nvMarkers  = {};   // id -> {marker, overlay}
+let userMarker = null;
 
-// 카테고리 → 마커 CSS 클래스
-const CAT_CLS={'피부관리':'','네일아트':'cat-nail','헤어':'cat-hair',
-  '왁싱':'cat-wax','마사지':'cat-massage','반영구':'cat-perm','병원':'cat-hospital'};
-
-// ── 로고 3초내 2번 더블클릭 → 비밀번호 ──────────────────────────────────
-let logoClicks=[], PW='0907', pwBuf='';
-document.getElementById('logoBtn').addEventListener('click', ()=>{
-  const now=Date.now();
-  logoClicks=logoClicks.filter(t=>now-t<3000);
-  logoClicks.push(now);
-  const icon=document.getElementById('logoIcon');
-  icon.classList.add('pop'); setTimeout(()=>icon.classList.remove('pop'),200);
-  if(logoClicks.length>=2){ logoClicks=[]; openPw(); }
-});
-
-function openPw(){
-  pwBuf=''; updateDots(); document.getElementById('pwErr').textContent='';
-  document.getElementById('pwOverlay').classList.add('on');
-}
-function closePw(){ document.getElementById('pwOverlay').classList.remove('on'); pwBuf=''; }
-function pwInput(k){
-  if(pwBuf.length>=4) return;
-  pwBuf+=k; updateDots();
-  if(pwBuf.length===4){
-    if(pwBuf===PW){ closePw(); setTimeout(()=>location.href='/admin',200); }
-    else{
-      document.getElementById('pwErr').textContent='비밀번호가 틀렸어요';
-      setTimeout(()=>{ pwBuf=''; updateDots(); document.getElementById('pwErr').textContent=''; },900);
-    }
-  }
-}
-function pwDel(){ if(pwBuf.length>0){ pwBuf=pwBuf.slice(0,-1); updateDots(); } }
-function updateDots(){
-  for(let i=0;i<4;i++) document.getElementById('d'+i).classList.toggle('fill',i<pwBuf.length);
-}
+const CAT_CLASS = {
+  '피부관리':'', '네일아트':'cat-nail',
+  '헤어':'cat-hair', '왁싱':'cat-wax',
+  '반영구':'cat-perm', '마사지':'cat-massage',
+};
 
 // ── 탭 전환 ───────────────────────────────────────────────────────────────
-function switchTab(tab){
-  ['feed','map'].forEach(t=>{
-    document.getElementById('tab-'+t).classList.toggle('active',t===tab);
-    document.getElementById(t+'Screen').classList.toggle('active',t===tab);
+function switchTab(tab) {
+  ['feed','map'].forEach(t => {
+    document.getElementById('tab-'+t).classList.toggle('active', t===tab);
+    document.getElementById(t+'Screen').classList.toggle('active', t===tab);
   });
-  document.getElementById('catBar').classList.toggle('show',tab==='feed');
-  if(tab==='map'){
-    if(!mapInited){ initNaverMap(); mapInited=true; }
-    else setTimeout(()=>{ if(naverMap) naver.maps.Event.trigger(naverMap,'resize'); },150);
-  }
+  document.getElementById('catBar').classList.toggle('show', tab==='feed');
+  if (tab==='map') initMap();
 }
 
-// ━━ 피드 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-async function loadFeed(cat='all'){
-  const sc=document.getElementById('feedScreen');
-  sc.innerHTML='<div class="feed-spin"><div class="spinner"></div></div>';
-  const res=await fetch('/api/shops?category='+encodeURIComponent(cat==='all'?'':cat));
-  const list=await res.json();
-  if(!list.length){ sc.innerHTML='<div class="feed-empty"><i class="fas fa-store-slash"></i><p>등록된 샵이 없어요</p></div>'; return; }
-  sc.innerHTML=list.map((s,i)=>\`
+// ── 로고 더블클릭 → 관리자 ───────────────────────────────────────────────
+let logoCnt=0, logoTmr;
+document.getElementById('logoBtn').addEventListener('click', ()=>{
+  logoCnt++;
+  clearTimeout(logoTmr);
+  logoTmr = setTimeout(()=>{logoCnt=0;}, 600);
+  if (logoCnt >= 3) {
+    logoCnt = 0;
+    const pw = prompt('관리자 비밀번호를 입력하세요');
+    if (pw === '0907') location.href = '/admin';
+    else if (pw !== null) showToast('비밀번호가 틀렸어요');
+  }
+});
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 피드
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+async function loadFeed(cat='all') {
+  const screen = document.getElementById('feedScreen');
+  screen.innerHTML = '<div class="feed-spin"><div class="spinner"></div></div>';
+  const res   = await fetch('/api/shops?category='+encodeURIComponent(cat==='all'?'':cat));
+  const shops = await res.json();
+  if (!shops.length) {
+    screen.innerHTML = '<div class="feed-empty"><i class="fas fa-store-slash"></i><p>등록된 샵이 없어요</p></div>';
+    return;
+  }
+  screen.innerHTML = shops.map((s,i) => \`
     <div class="fi">
       <div class="yt-area">
-        <iframe class="yt-frame"
-          src="https://www.youtube.com/embed/\${s.youtubeId}?autoplay=\${i===0?1:0}&mute=1&playsinline=1&rel=0&modestbranding=1&controls=1&loop=1&playlist=\${s.youtubeId}"
-          allow="autoplay;encrypted-media;picture-in-picture" allowfullscreen loading="lazy"></iframe>
+        \${s.youtubeId
+          ? \`<iframe class="yt-frame"
+              src="https://www.youtube.com/embed/\${s.youtubeId}?autoplay=\${i===0?1:0}&mute=1&playsinline=1&rel=0&modestbranding=1&controls=1&loop=1&playlist=\${s.youtubeId}"
+              allow="autoplay;encrypted-media;picture-in-picture" allowfullscreen loading="lazy"></iframe>\`
+          : \`<img src="\${s.thumbnail}" style="width:100%;height:100%;object-fit:cover"/>\`
+        }
       </div>
       <div class="shop-bar">
         <div class="shop-bar-info">
           <div class="shop-bar-cat">\${s.category}</div>
           <div class="shop-bar-name">\${s.name}</div>
-          <div class="shop-bar-loc"><i class="fas fa-map-marker-alt"></i><span>\${s.district} · \${s.price}</span></div>
+          <div class="shop-bar-loc">
+            <i class="fas fa-map-marker-alt"></i>
+            <span>\${s.district} · \${s.price}</span>
+          </div>
         </div>
-        <a class="btn-book" href="\${s.smartPlaceUrl}" target="_blank" rel="noopener"
-           onclick="fetch('/api/track/sp/\${s.id}',{method:'POST'})">
-          <i class="fas fa-calendar-check"></i><span>예약하기</span>
-        </a>
+        \${s.smartPlaceUrl
+          ? \`<a class="btn-book" href="\${s.smartPlaceUrl}" target="_blank" rel="noopener"
+               onclick="fetch('/api/track/sp/\${s.id}',{method:'POST'})">
+              <i class="fas fa-calendar-check"></i>
+              <span>예약하기</span>
+             </a>\`
+          : \`<div style="flex-shrink:0;width:64px;text-align:center;font-size:10px;color:rgba(255,255,255,.3)">예약링크<br>없음</div>\`
+        }
       </div>
-    </div>\`).join('');
-  sc.scrollTo(0,0);
+    </div>
+  \`).join('');
+  screen.scrollTo(0, 0);
 }
 
-function filterFeed(btn,cat){
+function filterFeed(btn, cat) {
   document.querySelectorAll('.cp').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   loadFeed(cat);
 }
 
-// ━━ 네이버 지도 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-async function initNaverMap(){
-  naverMap=new naver.maps.Map('naverMap',{
-    center: new naver.maps.LatLng(37.5326,127.0246),
-    zoom: 12,
-    mapTypeId: naver.maps.MapTypeId.NORMAL,
-    scaleControl: false,
-    mapDataControl: false,
-  });
-  const res=await fetch('/api/shops/all');
-  allShops=await res.json();
-  renderNaverMarkers(allShops);
-  renderPanel(allShops);
-  naver.maps.Event.addListener(naverMap,'click',()=>closeSheet());
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 네이버 지도
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function waitNaverMap(cb, tries=0) {
+  if (window.naver && window.naver.maps) { cb(); return; }
+  if (tries > 40) { showToast('지도 로드 실패. 새로고침 해주세요'); return; }
+  setTimeout(()=>waitNaverMap(cb, tries+1), 200);
 }
 
-function getCatCls(cat){ return CAT_CLS[cat]||''; }
+function initMap() {
+  if (mapInited) {
+    if (naverMap) naverMap.autoResize();
+    return;
+  }
+  waitNaverMap(()=>{
+    mapInited = true;
+    naverMap = new naver.maps.Map('naverMap', {
+      center: new naver.maps.LatLng(37.5326, 127.0246),
+      zoom: 12,
+      mapTypeId: naver.maps.MapTypeId.NORMAL,
+      mapTypeControl: false,
+      scaleControl: false,
+      logoControl: false,
+      mapDataControl: false,
+    });
+    naver.maps.Event.addListener(naverMap, 'click', ()=>closeSheet());
+    loadMapShops('all', false);
+  });
+}
 
-function makeNaverMarker(shop, sel=false){
-  const cc=getCatCls(shop.category);
-  const el=document.createElement('div');
-  el.innerHTML=\`<div class="nv-marker">
-    <div class="nv-pin \${cc}\${sel?' sel':''}"\${shop.featured?' style="box-shadow:0 0 0 2px #fff,0 4px 12px rgba(0,0,0,.5)"':''}>
-      \${shop.name}
-    </div>
+function catClass(cat) { return CAT_CLASS[cat] || ''; }
+
+function createNaverMarker(shop, selected=false) {
+  const cc   = catClass(shop.category);
+  const sel  = selected ? ' sel' : '';
+  const html = \`<div class="nv-marker">
+    <div class="nv-pin \${cc}\${sel}">\${shop.name}</div>
     <div class="nv-tail \${cc}"></div>
   </div>\`;
-  return new naver.maps.Marker({
-    position: new naver.maps.LatLng(shop.lat, shop.lng),
+  const pos = new naver.maps.LatLng(shop.lat, shop.lng);
+  const overlay = new naver.maps.CustomOverlay({
+    position: pos,
+    content: html,
+    anchor: new naver.maps.Point(50, 38),
+    zIndex: selected ? 200 : (shop.featured ? 100 : 10),
     map: naverMap,
-    icon: { content: el, anchor: new naver.maps.Point(45,40) },
-    zIndex: shop.featured ? 10 : 1,
+  });
+  overlay.addListener('click', ()=>selectShopOnMap(shop.id));
+  return overlay;
+}
+
+function renderNaverMarkers(shops) {
+  Object.values(nvMarkers).forEach(o => o.setMap(null));
+  nvMarkers = {};
+  shops.forEach(shop => {
+    nvMarkers[shop.id] = createNaverMarker(shop, false);
   });
 }
 
-function renderNaverMarkers(list){
-  Object.values(nvMarkers).forEach(m=>m.setMap(null));
-  nvMarkers={};
-  list.forEach(shop=>{
-    const m=makeNaverMarker(shop,false);
-    naver.maps.Event.addListener(m,'click',()=>selectShopOnMap(shop.id));
-    nvMarkers[shop.id]=m;
-  });
-}
-
-function selectShopOnMap(id){
-  const shop=allShops.find(s=>s.id===id); if(!shop) return;
-  // 마커 강조
-  Object.entries(nvMarkers).forEach(([sid,m])=>{
-    const s=allShops.find(x=>x.id===+sid); if(!s) return;
-    const cc=getCatCls(s.category), sel=+sid===id;
-    const el=document.createElement('div');
-    el.innerHTML=\`<div class="nv-marker">
-      <div class="nv-pin \${cc}\${sel?' sel':''}"\${s.featured?' style="box-shadow:0 0 0 2px #fff,0 4px 12px rgba(0,0,0,.5)"':''}>
-        \${s.name}
-      </div>
+function selectShopOnMap(id) {
+  const shop = allShops.find(s=>s.id===id);
+  if (!shop) return;
+  // 마커 선택 상태 갱신
+  Object.entries(nvMarkers).forEach(([sid, o])=>{
+    const s = allShops.find(x=>x.id===+sid);
+    if (!s) return;
+    const cc  = catClass(s.category);
+    const sel = +sid===id ? ' sel' : '';
+    o.setContent(\`<div class="nv-marker" onclick="selectShopOnMap(\${s.id})">
+      <div class="nv-pin \${cc}\${sel}">\${s.name}</div>
       <div class="nv-tail \${cc}"></div>
-    </div>\`;
-    m.setIcon({content:el, anchor:new naver.maps.Point(45,40)});
-    if(sel) m.setZIndex(999);
+    </div>\`);
+    o.setZIndex(+sid===id ? 200 : (s.featured?100:10));
   });
-  naverMap.panTo(new naver.maps.LatLng(shop.lat,shop.lng));
-  // 패널 카드
+  naverMap.panTo(new naver.maps.LatLng(shop.lat, shop.lng));
+  // 카드 하이라이트
   document.querySelectorAll('.spc').forEach(c=>c.classList.remove('sel'));
-  const el=document.getElementById('spc-'+id);
-  if(el){ el.classList.add('sel'); el.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'}); }
+  const el = document.getElementById('spc-'+id);
+  if (el) { el.classList.add('sel'); el.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'}); }
   openSheet(id);
 }
 
-function focusShopOnMap(){
-  if(!curShop) return;
-  closeSheet(); switchTab('map');
-  setTimeout(()=>{ if(naverMap){ naverMap.morph(new naver.maps.LatLng(curShop.lat,curShop.lng),16); selectShopOnMap(curShop.id); } },300);
+function focusShopOnMap() {
+  if (!curShop) return;
+  closeSheet();
+  switchTab('map');
+  setTimeout(()=>{
+    if (naverMap) {
+      naverMap.setCenter(new naver.maps.LatLng(curShop.lat, curShop.lng));
+      naverMap.setZoom(15);
+      selectShopOnMap(curShop.id);
+    }
+  }, 300);
 }
 
-async function loadMapShops(cat='all',nearby=false){
-  let url='/api/shops?category='+encodeURIComponent(cat==='all'?'':cat);
-  if(nearby&&userLat) url+='&nearby=1&lat='+userLat+'&lng='+userLng;
-  const res=await fetch(url);
-  allShops=await res.json();
+async function loadMapShops(cat, nearby) {
+  let url = '/api/shops?category='+encodeURIComponent(cat==='all'?'':cat);
+  if (nearby && userLat) url += '&nearby=1&lat='+userLat+'&lng='+userLng;
+  const res = await fetch(url);
+  allShops  = await res.json();
   renderNaverMarkers(allShops);
   renderPanel(allShops);
 }
 
-function renderPanel(list){
-  const panel=document.getElementById('shopPanel');
-  if(!list.length){ panel.innerHTML='<div style="color:rgba(255,255,255,.2);font-size:13px;font-weight:600;padding:16px;white-space:nowrap">주변 샵이 없어요 🥲</div>'; return; }
-  panel.innerHTML=list.map(s=>{
-    const dist=s.dist!=null?(s.dist<1?Math.round(s.dist*1000)+'m':s.dist.toFixed(1)+'km'):'';
+function renderPanel(shops) {
+  const panel = document.getElementById('shopPanel');
+  if (!shops.length) {
+    panel.innerHTML = '<div style="color:rgba(255,255,255,.2);font-size:13px;font-weight:600;padding:16px;white-space:nowrap">등록된 샵이 없어요 🥲</div>';
+    return;
+  }
+  panel.innerHTML = shops.map(s => {
+    const dist = s.dist!=null
+      ? (s.dist<1 ? Math.round(s.dist*1000)+'m' : s.dist.toFixed(1)+'km')
+      : '';
     return \`<div class="spc" id="spc-\${s.id}" onclick="selectShopOnMap(\${s.id})">
       <img class="spc-img" src="\${s.thumbnail}" alt="\${s.name}" loading="lazy"/>
       <div class="spc-body">
-        <div><div class="spc-cat">\${s.category}</div><div class="spc-name">\${s.name}</div></div>
-        <div>\${dist?'<div class="spc-dist"><i class="fas fa-location-arrow"></i>'+dist+'</div>':''}<div class="spc-price">\${s.price}</div></div>
-      </div></div>\`;
+        <div>
+          <div class="spc-cat">\${s.category}</div>
+          <div class="spc-name">\${s.name}</div>
+        </div>
+        <div>
+          \${dist?'<div class="spc-dist"><i class="fas fa-location-arrow"></i>'+dist+'</div>':''}
+          <div class="spc-price">\${s.price}</div>
+        </div>
+      </div>
+    </div>\`;
   }).join('');
 }
 
-function filterMap(btn,cat){
+function filterMap(btn, cat) {
   document.querySelectorAll('.mc').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active'); mapCat=cat;
-  loadMapShops(cat,nearbyOn);
+  btn.classList.add('active');
+  mapCat = cat;
+  loadMapShops(cat, nearbyOn);
 }
 
-// 내 주변
-function toggleNearby(){
-  const fab=document.getElementById('nearbyFab');
-  if(nearbyOn){
+function toggleNearby() {
+  const fab = document.getElementById('nearbyFab');
+  if (nearbyOn) {
     nearbyOn=false; userLat=null; userLng=null;
-    fab.classList.remove('on'); fab.innerHTML='<i class="fas fa-location-arrow"></i> 내 주변';
-    if(userMarker){ userMarker.setMap(null); userMarker=null; }
-    loadMapShops(mapCat,false); return;
+    fab.classList.remove('on');
+    fab.innerHTML='<i class="fas fa-location-arrow"></i> 내 주변';
+    if (userMarker) { userMarker.setMap(null); userMarker=null; }
+    loadMapShops(mapCat, false);
+    return;
   }
-  if(!navigator.geolocation){ showToast('위치 서비스를 지원하지 않아요'); return; }
+  if (!navigator.geolocation) { showToast('위치 서비스를 지원하지 않아요'); return; }
   showToast('📍 위치 확인 중...');
   navigator.geolocation.getCurrentPosition(pos=>{
-    userLat=pos.coords.latitude; userLng=pos.coords.longitude; nearbyOn=true;
-    fab.classList.add('on'); fab.innerHTML='<i class="fas fa-location-arrow"></i> 내 주변 ON';
-    if(userMarker) userMarker.setMap(null);
-    userMarker=new naver.maps.Marker({
-      position:new naver.maps.LatLng(userLat,userLng), map:naverMap,
-      icon:{content:'<div style="width:16px;height:16px;border-radius:50%;background:#FF4D7D;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.4)"></div>',
-        anchor:new naver.maps.Point(8,8)}
+    userLat=pos.coords.latitude; userLng=pos.coords.longitude;
+    nearbyOn=true;
+    fab.classList.add('on');
+    fab.innerHTML='<i class="fas fa-location-arrow"></i> 내 주변 ON';
+    if (userMarker) userMarker.setMap(null);
+    userMarker = new naver.maps.Marker({
+      position: new naver.maps.LatLng(userLat, userLng),
+      map: naverMap,
+      icon: {
+        content:'<div style="width:16px;height:16px;border-radius:50%;background:#FF4D7D;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.4)"></div>',
+        anchor: new naver.maps.Point(8,8),
+      }
     });
-    naverMap.morph(new naver.maps.LatLng(userLat,userLng),14);
-    loadMapShops(mapCat,true); showToast('📍 내 주변 샵을 찾았어요!');
-  },()=>showToast('위치 권한이 필요해요'),{timeout:8000,enableHighAccuracy:true});
+    naverMap.setCenter(new naver.maps.LatLng(userLat, userLng));
+    naverMap.setZoom(14);
+    loadMapShops(mapCat, true);
+    showToast('📍 내 주변 샵을 찾았어요!');
+  }, ()=>{ showToast('위치 권한이 필요해요'); }, {timeout:8000,enableHighAccuracy:true});
 }
 
 // ── 바텀시트 ─────────────────────────────────────────────────────────────
-function openSheet(id){
-  const s=allShops.find(x=>x.id===id); if(!s) return;
-  curShop=s; fetch('/api/track/view/'+id,{method:'POST'});
-  document.getElementById('sImg').src=s.thumbnail;
-  document.getElementById('sCat').textContent=s.category;
-  document.getElementById('sName').textContent=s.name;
-  document.getElementById('sAddr').textContent=s.address;
-  document.getElementById('sPrice').textContent=s.price;
-  document.getElementById('sTags').innerHTML=s.tags.map(t=>\`<span class="s-tag">\${t}</span>\`).join('');
-  document.getElementById('sBook').href=s.smartPlaceUrl;
+function openSheet(id) {
+  const s = allShops.find(x=>x.id===id);
+  if (!s) return;
+  curShop = s;
+  fetch('/api/track/view/'+id,{method:'POST'});
+  document.getElementById('sImg').src            = s.thumbnail;
+  document.getElementById('sCat').textContent    = s.category;
+  document.getElementById('sName').textContent   = s.name;
+  document.getElementById('sAddr').textContent   = s.address;
+  document.getElementById('sPhone').textContent  = s.phone||'';
+  document.getElementById('sDesc').textContent   = s.desc||'';
+  document.getElementById('sPrice').textContent  = s.price;
+  document.getElementById('sTags').innerHTML     = s.tags.map(t=>\`<span class="s-tag">\${t}</span>\`).join('');
+  const bookEl = document.getElementById('sBook');
+  bookEl.href  = s.smartPlaceUrl||'#';
+  bookEl.style.opacity = s.smartPlaceUrl ? '1' : '.4';
+  bookEl.style.pointerEvents = s.smartPlaceUrl ? 'auto' : 'none';
   document.getElementById('dim').classList.add('on');
   document.getElementById('sheet').classList.add('open');
 }
-function closeSheet(){
+function closeSheet() {
   document.getElementById('dim').classList.remove('on');
   document.getElementById('sheet').classList.remove('open');
   document.querySelectorAll('.spc').forEach(c=>c.classList.remove('sel'));
-  // 마커 선택 해제
-  Object.entries(nvMarkers).forEach(([sid,m])=>{
-    const s=allShops.find(x=>x.id===+sid); if(!s) return;
-    const cc=getCatCls(s.category);
-    const el=document.createElement('div');
-    el.innerHTML=\`<div class="nv-marker"><div class="nv-pin \${cc}">\${s.name}</div><div class="nv-tail \${cc}"></div></div>\`;
-    m.setIcon({content:el,anchor:new naver.maps.Point(45,40)}); m.setZIndex(s.featured?10:1);
-  });
 }
-function trackSP(){ if(curShop) fetch('/api/track/sp/'+curShop.id,{method:'POST'}); }
+function trackSP() { if(curShop) fetch('/api/track/sp/'+curShop.id,{method:'POST'}); }
+
+// 스와이프 다운
 let tsY=0;
 const sh=document.getElementById('sheet');
 sh.addEventListener('touchstart',e=>{tsY=e.touches[0].clientY},{passive:true});
-sh.addEventListener('touchend',e=>{if(e.changedTouches[0].clientY-tsY>70)closeSheet()},{passive:true});
+sh.addEventListener('touchend',  e=>{if(e.changedTouches[0].clientY-tsY>70)closeSheet()},{passive:true});
 
 // ── 토스트 ───────────────────────────────────────────────────────────────
 let toastTmr;
-function showToast(msg){
-  const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
-  clearTimeout(toastTmr); toastTmr=setTimeout(()=>t.classList.remove('show'),2600);
+function showToast(msg) {
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  clearTimeout(toastTmr);
+  toastTmr=setTimeout(()=>t.classList.remove('show'),2600);
 }
 
-// ── 초기 실행 ─────────────────────────────────────────────────────────────
 loadFeed('all');
 </script>
 </body>
@@ -854,7 +889,7 @@ loadFeed('all');
 // ══════════════════════════════════════════════════════════════════════════
 // 관리자 페이지
 // ══════════════════════════════════════════════════════════════════════════
-function adminPage(){ return `<!DOCTYPE html>
+function adminPage() { return `<!DOCTYPE html>
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
@@ -868,367 +903,403 @@ function adminPage(){ return `<!DOCTYPE html>
 :root{--pink:#FF4D7D;--green:#03C75A;--bg:#0a0a0a}
 body{font-family:'Pretendard',sans-serif;background:var(--bg);color:#fff;min-height:100vh}
 
-/* ── 상단바 ── */
-.top{background:rgba(18,18,18,.98);border-bottom:1px solid rgba(255,255,255,.07);
+/* 상단바 */
+.top{background:rgba(16,16,16,.98);border-bottom:1px solid rgba(255,255,255,.07);
   padding:0 16px;height:56px;display:flex;align-items:center;gap:12px;
-  position:sticky;top:0;z-index:100;backdrop-filter:blur(14px)}
-.back{font-size:20px;color:rgba(255,255,255,.6);text-decoration:none;transition:color .2s}
+  position:sticky;top:0;z-index:50;backdrop-filter:blur(10px)}
+.back{font-size:20px;color:rgba(255,255,255,.6);text-decoration:none}
 .back:hover{color:#fff}
 .ttl{font-size:17px;font-weight:800;flex:1}
-.top-tabs{display:flex;gap:4px}
-.ttab{padding:6px 14px;border-radius:10px;border:none;background:transparent;
-  color:rgba(255,255,255,.4);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .2s}
-.ttab.on{background:rgba(255,77,125,.15);color:var(--pink);border:1px solid rgba(255,77,125,.25)}
+.add-btn{background:var(--pink);color:#fff;border:none;border-radius:10px;
+  padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;
+  display:flex;align-items:center;gap:6px;font-family:inherit}
 
-/* ── 공통 레이아웃 ── */
-.wrap{max-width:600px;margin:0 auto;padding:20px 16px 80px}
-.section{display:none}.section.on{display:block}
-.sec-title{font-size:11px;font-weight:800;color:rgba(255,255,255,.28);
-  text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px}
+/* 통계 */
+.wrap{max-width:600px;margin:0 auto;padding:16px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:20px}
+.sc{background:rgba(255,255,255,.04);border:1.5px solid rgba(255,255,255,.07);
+  border-radius:14px;padding:14px;text-align:center}
+.sn{font-size:26px;font-weight:800;color:#FF8FA3}
+.sl{font-size:11px;color:rgba(255,255,255,.3);margin-top:4px;font-weight:600}
 
-/* ── 통계 카드 ── */
-.stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:24px}
-.stat-card{background:rgba(255,255,255,.04);border:1.5px solid rgba(255,255,255,.07);
-  border-radius:16px;padding:16px;text-align:center}
-.stat-num{font-size:26px;font-weight:800;color:#FF8FA3}
-.stat-lbl{font-size:10px;color:rgba(255,255,255,.3);margin-top:5px;font-weight:600}
+/* 탭 */
+.tabs{display:flex;gap:0;margin-bottom:16px;border:1.5px solid rgba(255,255,255,.1);
+  border-radius:12px;overflow:hidden}
+.atab{flex:1;padding:10px;text-align:center;font-size:13px;font-weight:700;
+  cursor:pointer;background:transparent;color:rgba(255,255,255,.4);
+  border:none;font-family:inherit;transition:all .2s}
+.atab.active{background:var(--pink);color:#fff}
 
-/* ── 일별 그래프 ── */
-.chart-wrap{background:rgba(255,255,255,.04);border:1.5px solid rgba(255,255,255,.07);
-  border-radius:16px;padding:16px;margin-bottom:20px}
-.chart-title{font-size:13px;font-weight:700;margin-bottom:14px;color:rgba(255,255,255,.8)}
-.bar-chart{display:flex;align-items:flex-end;gap:6px;height:80px}
-.bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
-.bar{width:100%;background:var(--pink);border-radius:4px 4px 0 0;min-height:2px;transition:height .4s}
-.bar-lbl{font-size:9px;color:rgba(255,255,255,.3);white-space:nowrap}
-.bar-val{font-size:10px;font-weight:700;color:rgba(255,255,255,.6)}
-
-/* ── 샵별 통계 ── */
-.stat-row{background:rgba(255,255,255,.04);border:1.5px solid rgba(255,255,255,.07);
-  border-radius:14px;padding:14px;margin-bottom:8px}
-.stat-rt{display:flex;align-items:center;gap:8px;margin-bottom:10px}
-.stat-rn{font-size:14px;font-weight:700;flex:1}
-.stat-rc{font-size:10px;background:rgba(255,77,125,.12);color:#FF8FA3;
-  padding:2px 8px;border-radius:10px;font-weight:700;border:1px solid rgba(255,77,125,.2)}
-.stat-cells{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.stat-cell{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);
-  border-radius:12px;padding:12px;text-align:center}
-.stat-bn{font-size:22px;font-weight:800}
-.stat-bl{font-size:10px;color:rgba(255,255,255,.3);margin-top:3px;font-weight:600}
-
-/* ── 샵/영상 관리 ── */
-.add-btn{width:100%;padding:14px;border:2px dashed rgba(255,77,125,.3);border-radius:16px;
-  background:rgba(255,77,125,.05);color:var(--pink);font-size:14px;font-weight:700;
-  cursor:pointer;font-family:inherit;transition:all .2s;margin-bottom:16px}
-.add-btn:hover{border-color:var(--pink);background:rgba(255,77,125,.1)}
-
+/* 샵 카드 */
 .shop-card{background:rgba(255,255,255,.04);border:1.5px solid rgba(255,255,255,.07);
-  border-radius:16px;overflow:hidden;margin-bottom:10px;display:flex;gap:0}
-.shop-card-img{width:80px;height:80px;object-fit:cover;flex-shrink:0}
-.shop-card-body{flex:1;padding:10px 12px;min-width:0}
-.shop-card-top{display:flex;align-items:center;gap:6px;margin-bottom:4px}
-.shop-card-name{font-size:14px;font-weight:700;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.shop-card-cat{font-size:10px;background:rgba(255,77,125,.12);color:#FF8FA3;
-  padding:1px 7px;border-radius:8px;font-weight:700;flex-shrink:0}
-.shop-card-addr{font-size:11px;color:rgba(255,255,255,.4);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.shop-card-btns{display:flex;gap:6px}
-.card-btn{padding:5px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.12);
-  background:rgba(255,255,255,.06);color:rgba(255,255,255,.6);font-size:11px;
-  font-weight:600;cursor:pointer;font-family:inherit;transition:all .2s}
-.card-btn.del{border-color:rgba(239,68,68,.3);color:#EF4444;background:rgba(239,68,68,.06)}
-.card-btn:hover{background:rgba(255,255,255,.12)}
-.card-btn.del:hover{background:rgba(239,68,68,.15)}
-.feat-badge{font-size:9px;background:rgba(255,200,0,.15);color:#FFD700;
-  padding:1px 6px;border-radius:6px;font-weight:700;border:1px solid rgba(255,200,0,.25)}
+  border-radius:16px;padding:14px;margin-bottom:10px;position:relative}
+.sc-top{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.sc-thumb{width:52px;height:52px;border-radius:10px;object-fit:cover;flex-shrink:0}
+.sc-info{flex:1;min-width:0}
+.sc-name{font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc-cat{font-size:11px;color:var(--pink);font-weight:600;margin-top:2px}
+.sc-addr{font-size:11px;color:rgba(255,255,255,.35);margin-top:2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc-btns{display:flex;gap:6px}
+.btn-edit{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);
+  color:#fff;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;
+  cursor:pointer;font-family:inherit}
+.btn-del{background:rgba(255,77,125,.1);border:1px solid rgba(255,77,125,.2);
+  color:var(--pink);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;
+  cursor:pointer;font-family:inherit}
+.sc-detail{border-top:1px solid rgba(255,255,255,.06);margin-top:10px;padding-top:10px;
+  display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.sc-field{font-size:11px;color:rgba(255,255,255,.35)}
+.sc-field strong{display:block;color:rgba(255,255,255,.7);font-size:12px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.badge-feat{background:rgba(255,77,125,.15);color:var(--pink);
+  font-size:10px;font-weight:700;padding:2px 6px;border-radius:5px;margin-left:6px}
+.badge-hide{background:rgba(255,255,255,.07);color:rgba(255,255,255,.3);
+  font-size:10px;font-weight:700;padding:2px 6px;border-radius:5px;margin-left:6px}
 
-/* ── 모달 ── */
-.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;display:none;
-  align-items:flex-end;justify-content:center;backdrop-filter:blur(6px)}
-.modal-bg.on{display:flex}
-.modal{background:#161616;border-radius:24px 24px 0 0;width:100%;max-width:600px;
-  max-height:92vh;overflow-y:auto;padding:20px 20px 40px;
-  box-shadow:0 -4px 30px rgba(0,0,0,.5)}
-.modal-title{font-size:18px;font-weight:800;margin-bottom:20px;display:flex;align-items:center;gap:8px}
-.form-group{margin-bottom:14px}
-.form-label{font-size:12px;font-weight:700;color:rgba(255,255,255,.5);margin-bottom:6px;display:block;letter-spacing:.3px}
-.form-input,.form-select,.form-textarea{width:100%;background:rgba(255,255,255,.06);
+/* 통계 탭 */
+.stat-row{background:rgba(255,255,255,.04);border:1.5px solid rgba(255,255,255,.07);
+  border-radius:14px;padding:12px;margin-bottom:8px}
+.sr-top{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.sr-name{font-size:14px;font-weight:700;flex:1}
+.sr-cat{font-size:10px;background:rgba(255,77,125,.12);color:#FF8FA3;
+  padding:2px 7px;border-radius:8px;font-weight:700}
+.sr-nums{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.sr-num{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);
+  border-radius:10px;padding:10px;text-align:center}
+.sr-n{font-size:20px;font-weight:800}
+.sr-l{font-size:10px;color:rgba(255,255,255,.3);margin-top:2px;font-weight:600}
+
+/* 모달 */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;
+  display:flex;align-items:flex-end;justify-content:center}
+.modal-bg.hidden{display:none}
+.modal{background:#1a1a1a;border-radius:22px 22px 0 0;width:100%;max-width:600px;
+  max-height:90vh;overflow-y:auto;padding:20px 18px 40px}
+.modal-handle{width:36px;height:4px;background:rgba(255,255,255,.1);
+  border-radius:4px;margin:0 auto 16px}
+.modal-ttl{font-size:18px;font-weight:800;margin-bottom:16px}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:11px;font-weight:700;
+  color:rgba(255,255,255,.4);margin-bottom:5px;text-transform:uppercase}
+.field input,.field select,.field textarea{
+  width:100%;background:rgba(255,255,255,.07);border:1.5px solid rgba(255,255,255,.1);
+  border-radius:10px;padding:10px 12px;color:#fff;font-size:14px;font-family:inherit;outline:none}
+.field input:focus,.field select,.field textarea:focus{border-color:var(--pink)}
+.field textarea{resize:vertical;min-height:70px}
+.field select option{background:#1a1a1a}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.modal-actions{display:flex;gap:10px;margin-top:18px}
+.btn-save{flex:1;background:var(--pink);color:#fff;border:none;border-radius:12px;
+  padding:14px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit}
+.btn-cancel{background:rgba(255,255,255,.07);color:rgba(255,255,255,.6);
   border:1.5px solid rgba(255,255,255,.1);border-radius:12px;
-  color:#fff;font-family:inherit;font-size:14px;padding:11px 14px;outline:none;
-  transition:border-color .2s}
-.form-input:focus,.form-select:focus,.form-textarea:focus{border-color:var(--pink)}
-.form-select{cursor:pointer}
-.form-select option{background:#1a1a1a}
-.form-textarea{resize:vertical;min-height:70px}
-.form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.form-check{display:flex;align-items:center;gap:8px;cursor:pointer}
-.form-check input{width:18px;height:18px;accent-color:var(--pink);cursor:pointer}
-.form-check span{font-size:13px;font-weight:600}
-.modal-btns{display:flex;gap:10px;margin-top:20px}
-.btn-save{flex:1;padding:14px;background:var(--green);color:#fff;border:none;
-  border-radius:14px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit}
-.btn-save:hover{background:#02a84e}
-.btn-cancel{padding:14px 20px;background:rgba(255,255,255,.07);border:1.5px solid rgba(255,255,255,.1);
-  color:rgba(255,255,255,.6);border-radius:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit}
+  padding:14px 18px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit}
+.yt-preview{margin-top:6px;border-radius:8px;overflow:hidden;
+  background:#000;aspect-ratio:16/9;display:none}
+.yt-preview iframe{width:100%;height:100%;border:none}
+.url-preview{margin-top:6px;font-size:11px;color:var(--green);word-break:break-all}
 </style>
 </head>
 <body>
+
 <div class="top">
   <a class="back" href="/"><i class="fas fa-arrow-left"></i></a>
-  <span class="ttl">마이뷰티맵 관리</span>
-  <div class="top-tabs">
-    <button class="ttab on" onclick="showSec('stats')">통계</button>
-    <button class="ttab" onclick="showSec('shops')">업체</button>
-  </div>
+  <span class="ttl">관리자 대시보드</span>
+  <button class="add-btn" onclick="openModal()">
+    <i class="fas fa-plus"></i> 업체 추가
+  </button>
 </div>
 
 <div class="wrap">
-  <!-- 통계 섹션 -->
-  <div class="section on" id="sec-stats">
-    <div class="stat-grid">
-      <div class="stat-card"><div class="stat-num" id="tv">-</div><div class="stat-lbl">👁 총 조회</div></div>
-      <div class="stat-card"><div class="stat-num" id="ts">-</div><div class="stat-lbl">📅 예약클릭</div></div>
-      <div class="stat-card"><div class="stat-num" id="tc">-</div><div class="stat-lbl">💄 등록 샵</div></div>
-    </div>
-
-    <!-- 일별 예약클릭 차트 -->
-    <div class="chart-wrap">
-      <div class="chart-title">📊 최근 7일 예약하기 클릭</div>
-      <div class="bar-chart" id="barChart"></div>
-    </div>
-
-    <div class="sec-title">샵별 예약하기 클릭 통계</div>
-    <div id="statRows"></div>
+  <!-- 통계 요약 -->
+  <div class="stats">
+    <div class="sc"><div class="sn" id="tv">-</div><div class="sl">👁 총 조회</div></div>
+    <div class="sc"><div class="sn" id="ts">-</div><div class="sl">📍 예약클릭</div></div>
+    <div class="sc"><div class="sn" id="tc">-</div><div class="sl">💄 등록 샵</div></div>
   </div>
 
-  <!-- 업체 관리 섹션 -->
-  <div class="section" id="sec-shops">
-    <button class="add-btn" onclick="openModal()">
-      <i class="fas fa-plus"></i> 새 업체 추가하기
+  <!-- 탭 -->
+  <div class="tabs">
+    <button class="atab active" id="tab-shops" onclick="showTab('shops')">
+      <i class="fas fa-store"></i> 업체 관리
     </button>
-    <div class="sec-title">등록된 업체</div>
-    <div id="shopList"></div>
+    <button class="atab" id="tab-stats" onclick="showTab('stats')">
+      <i class="fas fa-chart-bar"></i> 통계
+    </button>
   </div>
+
+  <!-- 업체 목록 -->
+  <div id="panel-shops"></div>
+  <!-- 통계 목록 -->
+  <div id="panel-stats" style="display:none"></div>
 </div>
 
-<!-- 업체 추가/수정 모달 -->
-<div class="modal-bg" id="modalBg">
-  <div class="modal">
-    <div class="modal-title"><i class="fas fa-store"></i> <span id="modalTtl">업체 추가</span></div>
-    <input type="hidden" id="editId"/>
-    <div class="form-group">
-      <label class="form-label">업체명 *</label>
-      <input class="form-input" id="fName" placeholder="예) 글로우 스킨 강남"/>
+<!-- 추가/수정 모달 -->
+<div class="modal-bg hidden" id="modalBg" onclick="closeModal(event)">
+  <div class="modal" id="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-ttl" id="modalTtl">업체 추가</div>
+
+    <div class="field">
+      <label>업체명 *</label>
+      <input id="f-name" type="text" placeholder="예: 글로우 스킨 강남"/>
     </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">카테고리 *</label>
-        <select class="form-select" id="fCat">
-          ${CATEGORIES.map(c=>`<option value="${c}">${catEmoji(c)} ${c}</option>`).join('')}
+    <div class="row2">
+      <div class="field">
+        <label>카테고리 *</label>
+        <select id="f-cat">
+          <option>피부관리</option><option>네일아트</option><option>헤어</option>
+          <option>왁싱</option><option>반영구</option><option>마사지</option>
         </select>
       </div>
-      <div class="form-group">
-        <label class="form-label">가격대</label>
-        <input class="form-input" id="fPrice" placeholder="예) 5만원~"/>
+      <div class="field">
+        <label>가격대</label>
+        <input id="f-price" type="text" placeholder="예: 5만원~"/>
       </div>
     </div>
-    <div class="form-group">
-      <label class="form-label">주소 *</label>
-      <input class="form-input" id="fAddr" placeholder="서울 강남구 논현로 123"/>
+    <div class="field">
+      <label>주소 *</label>
+      <input id="f-addr" type="text" placeholder="서울 강남구 논현로 123"/>
     </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">구/동</label>
-        <input class="form-input" id="fDistrict" placeholder="강남구"/>
+    <div class="row2">
+      <div class="field">
+        <label>구/지역</label>
+        <input id="f-dist" type="text" placeholder="강남구"/>
       </div>
-      <div class="form-group">
-        <label class="form-label">태그 (쉼표 구분)</label>
-        <input class="form-input" id="fTags" placeholder="리프팅,보습,트러블케어"/>
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">위도 (lat)</label>
-        <input class="form-input" id="fLat" placeholder="37.5172" type="number" step="0.0001"/>
-      </div>
-      <div class="form-group">
-        <label class="form-label">경도 (lng)</label>
-        <input class="form-input" id="fLng" placeholder="127.0473" type="number" step="0.0001"/>
+      <div class="field">
+        <label>전화번호</label>
+        <input id="f-phone" type="text" placeholder="02-1234-5678"/>
       </div>
     </div>
-    <div class="form-group">
-      <label class="form-label">유튜브 영상 ID</label>
-      <input class="form-input" id="fYtId" placeholder="mldig2ZiRwA"/>
+    <div class="row2">
+      <div class="field">
+        <label>위도 (lat) *</label>
+        <input id="f-lat" type="number" step="0.0001" placeholder="37.5172"/>
+      </div>
+      <div class="field">
+        <label>경도 (lng) *</label>
+        <input id="f-lng" type="number" step="0.0001" placeholder="127.0473"/>
+      </div>
     </div>
-    <div class="form-group">
-      <label class="form-label">네이버 예약 URL</label>
-      <input class="form-input" id="fSpUrl" placeholder="https://naver.me/..."/>
+    <div class="field">
+      <label>🎬 유튜브 영상 ID</label>
+      <input id="f-yt" type="text" placeholder="예: mldig2ZiRwA (URL 마지막 부분)"
+        oninput="previewYt(this.value)"/>
+      <div class="yt-preview" id="ytPreview">
+        <iframe id="ytFrame" src="" allow="autoplay;encrypted-media" allowfullscreen></iframe>
+      </div>
     </div>
-    <div class="form-group">
-      <label class="form-label">썸네일 이미지 URL</label>
-      <input class="form-input" id="fThumb" placeholder="https://..."/>
+    <div class="field">
+      <label>📅 네이버 예약 URL</label>
+      <input id="f-url" type="text" placeholder="https://naver.me/xxxxx"
+        oninput="previewUrl(this.value)"/>
+      <div class="url-preview" id="urlPreview"></div>
     </div>
-    <div class="form-group">
-      <label class="form-check">
-        <input type="checkbox" id="fFeatured"/>
-        <span>⭐ 추천 업체 (상단 노출)</span>
-      </label>
+    <div class="field">
+      <label>썸네일 이미지 URL</label>
+      <input id="f-thumb" type="text" placeholder="https://..."/>
     </div>
-    <div class="modal-btns">
+    <div class="field">
+      <label>태그 (쉼표로 구분)</label>
+      <input id="f-tags" type="text" placeholder="리프팅, 보습, 트러블케어"/>
+    </div>
+    <div class="field">
+      <label>업체 소개</label>
+      <textarea id="f-desc" placeholder="업체 간단 소개"></textarea>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>상단 노출 (추천)</label>
+        <select id="f-feat"><option value="false">일반</option><option value="true">상단 추천</option></select>
+      </div>
+      <div class="field">
+        <label>공개 여부</label>
+        <select id="f-active"><option value="true">공개</option><option value="false">비공개</option></select>
+      </div>
+    </div>
+    <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal()">취소</button>
-      <button class="btn-save" onclick="saveShop()"><i class="fas fa-check"></i> 저장하기</button>
+      <button class="btn-save" onclick="saveShop()">저장하기</button>
     </div>
   </div>
 </div>
 
 <script>
-const CATS=['피부관리','네일아트','헤어','왁싱','마사지','반영구','병원'];
-let statsData=null, shopData=[];
+let editId  = null;
+let curTab  = 'shops';
+let shopList = [];
 
-// ── 섹션 전환 ─────────────────────────────────────────────────────────────
-function showSec(id){
-  document.querySelectorAll('.section').forEach(s=>s.classList.remove('on'));
-  document.querySelectorAll('.ttab').forEach(b=>b.classList.remove('on'));
-  document.getElementById('sec-'+id).classList.add('on');
-  document.querySelectorAll('.ttab')[id==='stats'?0:1].classList.add('on');
-  if(id==='stats') loadStats();
-  else loadShops();
+async function loadAll() {
+  const d = await (await fetch('/api/admin/stats')).json();
+  document.getElementById('tv').textContent = d.totalViews.toLocaleString();
+  document.getElementById('ts').textContent = d.totalSP.toLocaleString();
+  document.getElementById('tc').textContent = d.totalShops;
+  shopList = d.stats;
+  renderShops(d.stats);
+  renderStats(d.stats);
 }
 
-// ── 통계 로드 ─────────────────────────────────────────────────────────────
-async function loadStats(){
-  const d=await(await fetch('/api/admin/stats')).json();
-  statsData=d;
-  document.getElementById('tv').textContent=d.totalViews.toLocaleString();
-  document.getElementById('ts').textContent=d.totalSP.toLocaleString();
-  document.getElementById('tc').textContent=d.totalShops;
-
-  // 일별 차트
-  const max=Math.max(...d.days.map(x=>x.total),1);
-  document.getElementById('barChart').innerHTML=d.days.map(day=>{
-    const h=Math.max(Math.round((day.total/max)*76),day.total>0?4:2);
-    const dt=day.date.slice(5); // MM-DD
-    return \`<div class="bar-col">
-      <div class="bar-val">\${day.total||''}</div>
-      <div class="bar" style="height:\${h}px"></div>
-      <div class="bar-lbl">\${dt}</div>
-    </div>\`;
-  }).join('');
-
-  // 샵별 통계 (예약클릭 기준 정렬)
-  document.getElementById('statRows').innerHTML=d.stats.map(s=>{
-    // 오늘 예약클릭
-    const today=d.days[d.days.length-1];
-    const todayCnt=today?.byShop?.[s.id]??0;
-    return \`<div class="stat-row">
-      <div class="stat-rt">
-        <div class="stat-rn">\${s.name}</div>
-        <span class="stat-rc">\${s.category}</span>
-        \${s.featured?'<span style="font-size:10px;color:#FFD700">⭐</span>':''}
-      </div>
-      <div class="stat-cells">
-        <div class="stat-cell">
-          <div class="stat-bn">\${s.spClicks.toLocaleString()}</div>
-          <div class="stat-bl">📅 예약클릭 (전체)</div>
-        </div>
-        <div class="stat-cell">
-          <div class="stat-bn" style="color:#FF8FA3">\${todayCnt}</div>
-          <div class="stat-bl">📅 오늘 예약클릭</div>
-        </div>
-      </div>
-    </div>\`;
-  }).join('');
+function showTab(t) {
+  curTab = t;
+  ['shops','stats'].forEach(x=>{
+    document.getElementById('tab-'+x).classList.toggle('active', x===t);
+    document.getElementById('panel-'+x).style.display = x===t?'block':'none';
+  });
 }
 
-// ── 업체 관리 ─────────────────────────────────────────────────────────────
-async function loadShops(){
-  const res=await fetch('/api/shops/all');
-  shopData=await res.json();
-  document.getElementById('shopList').innerHTML=shopData.map(s=>\`
-    <div class="shop-card">
-      <img class="shop-card-img" src="\${s.thumbnail}" alt="\${s.name}" loading="lazy"/>
-      <div class="shop-card-body">
-        <div class="shop-card-top">
-          <div class="shop-card-name">\${s.name}</div>
-          <span class="shop-card-cat">\${s.category}</span>
-          \${s.featured?'<span class="feat-badge">추천</span>':''}
-        </div>
-        <div class="shop-card-addr"><i class="fas fa-map-marker-alt" style="color:#03C75A;font-size:10px"></i> \${s.address}</div>
-        <div class="shop-card-btns">
-          <button class="card-btn" onclick="openModal(\${s.id})"><i class="fas fa-edit"></i> 수정</button>
-          <button class="card-btn del" onclick="deleteShop(\${s.id},'\${s.name.replace(/'/g,\\"\\\\'\\")}')"><i class="fas fa-trash"></i> 삭제</button>
+function renderShops(stats) {
+  const panel = document.getElementById('panel-shops');
+  if (!stats.length) { panel.innerHTML='<div style="text-align:center;color:rgba(255,255,255,.2);padding:40px">등록된 업체가 없어요</div>'; return; }
+  panel.innerHTML = stats.map(s=>\`
+    <div class="shop-card" id="card-\${s.id}">
+      <div class="sc-top">
+        <img class="sc-thumb" src="\${s.thumbnail||'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=120&q=60'}" onerror="this.src='https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=120&q=60'"/>
+        <div class="sc-info">
+          <div class="sc-name">
+            \${s.name}
+            \${s.featured?'<span class="badge-feat">추천</span>':''}
+            \${!s.active?'<span class="badge-hide">비공개</span>':''}
+          </div>
+          <div class="sc-cat">\${s.category}</div>
+          <div class="sc-addr">\${s.address||''}</div>
         </div>
       </div>
-    </div>\`).join('');
+      <div class="sc-detail">
+        <div class="sc-field">🎬 유튜브<strong>\${s.youtubeId||'미등록'}</strong></div>
+        <div class="sc-field">📅 예약URL<strong>\${s.smartPlaceUrl?'등록됨':'미등록'}</strong></div>
+        <div class="sc-field">📍 위도<strong>\${s.lat}</strong></div>
+        <div class="sc-field">📍 경도<strong>\${s.lng}</strong></div>
+      </div>
+      <div class="sc-btns" style="margin-top:10px">
+        <button class="btn-edit" onclick="openModal(\${s.id})"><i class="fas fa-edit"></i> 수정</button>
+        <button class="btn-del" onclick="delShop(\${s.id},'\${s.name.replace(/'/g,'\\\\'+'\\'')}')"><i class="fas fa-trash"></i> 삭제</button>
+      </div>
+    </div>
+  \`).join('');
+}
+
+function renderStats(stats) {
+  document.getElementById('panel-stats').innerHTML = stats.map(s=>\`
+    <div class="stat-row">
+      <div class="sr-top">
+        <div class="sr-name">\${s.name}</div>
+        <span class="sr-cat">\${s.category}</span>
+      </div>
+      <div class="sr-nums">
+        <div class="sr-num"><div class="sr-n">\${s.views.toLocaleString()}</div><div class="sr-l">👁 조회수</div></div>
+        <div class="sr-num"><div class="sr-n">\${s.spClicks.toLocaleString()}</div><div class="sr-l">📅 예약클릭</div></div>
+      </div>
+    </div>
+  \`).join('');
 }
 
 // ── 모달 열기/닫기 ────────────────────────────────────────────────────────
-function openModal(id){
-  document.getElementById('editId').value=id||'';
-  document.getElementById('modalTtl').textContent=id?'업체 수정':'업체 추가';
-  // 초기화
-  ['fName','fPrice','fAddr','fDistrict','fTags','fYtId','fSpUrl','fThumb'].forEach(f=>document.getElementById(f).value='');
-  document.getElementById('fLat').value='37.5326';
-  document.getElementById('fLng').value='127.0246';
-  document.getElementById('fCat').value='피부관리';
-  document.getElementById('fFeatured').checked=false;
+async function openModal(id=null) {
+  editId = id;
+  document.getElementById('modalTtl').textContent = id ? '업체 수정' : '업체 추가';
+  // 필드 초기화
+  ['name','addr','dist','phone','yt','url','thumb','tags','desc'].forEach(k=>
+    document.getElementById('f-'+k).value='');
+  document.getElementById('f-price').value='';
+  document.getElementById('f-lat').value='';
+  document.getElementById('f-lng').value='';
+  document.getElementById('f-feat').value='false';
+  document.getElementById('f-active').value='true';
+  document.getElementById('f-cat').value='피부관리';
+  document.getElementById('ytPreview').style.display='none';
+  document.getElementById('urlPreview').textContent='';
 
-  if(id){
-    const s=shopData.find(x=>x.id===id); if(!s) return;
-    document.getElementById('fName').value=s.name;
-    document.getElementById('fCat').value=s.category;
-    document.getElementById('fPrice').value=s.price;
-    document.getElementById('fAddr').value=s.address;
-    document.getElementById('fDistrict').value=s.district;
-    document.getElementById('fTags').value=s.tags.join(',');
-    document.getElementById('fLat').value=s.lat;
-    document.getElementById('fLng').value=s.lng;
-    document.getElementById('fYtId').value=s.youtubeId;
-    document.getElementById('fSpUrl').value=s.smartPlaceUrl;
-    document.getElementById('fThumb').value=s.thumbnail;
-    document.getElementById('fFeatured').checked=s.featured;
+  if (id) {
+    const s = await (await fetch('/api/shops/'+id)).json();
+    document.getElementById('f-name').value  = s.name||'';
+    document.getElementById('f-cat').value   = s.category||'피부관리';
+    document.getElementById('f-price').value = s.price||'';
+    document.getElementById('f-addr').value  = s.address||'';
+    document.getElementById('f-dist').value  = s.district||'';
+    document.getElementById('f-phone').value = s.phone||'';
+    document.getElementById('f-lat').value   = s.lat||'';
+    document.getElementById('f-lng').value   = s.lng||'';
+    document.getElementById('f-yt').value    = s.youtubeId||'';
+    document.getElementById('f-url').value   = s.smartPlaceUrl||'';
+    document.getElementById('f-thumb').value = s.thumbnail||'';
+    document.getElementById('f-tags').value  = (s.tags||[]).join(', ');
+    document.getElementById('f-desc').value  = s.desc||'';
+    document.getElementById('f-feat').value  = String(s.featured);
+    document.getElementById('f-active').value= String(s.active);
+    if (s.youtubeId) previewYt(s.youtubeId);
+    if (s.smartPlaceUrl) previewUrl(s.smartPlaceUrl);
   }
-  document.getElementById('modalBg').classList.add('on');
+  document.getElementById('modalBg').classList.remove('hidden');
+  document.getElementById('modal').scrollTop=0;
 }
-function closeModal(){ document.getElementById('modalBg').classList.remove('on'); }
-document.getElementById('modalBg').addEventListener('click',e=>{ if(e.target===e.currentTarget) closeModal(); });
 
-async function saveShop(){
-  const id=document.getElementById('editId').value;
-  const body={
-    name:    document.getElementById('fName').value.trim(),
-    category:document.getElementById('fCat').value,
-    price:   document.getElementById('fPrice').value.trim(),
-    address: document.getElementById('fAddr').value.trim(),
-    district:document.getElementById('fDistrict').value.trim(),
-    tags:    document.getElementById('fTags').value.split(',').map(t=>t.trim()).filter(Boolean),
-    lat:     parseFloat(document.getElementById('fLat').value)||37.5326,
-    lng:     parseFloat(document.getElementById('fLng').value)||127.0246,
-    youtubeId:    document.getElementById('fYtId').value.trim(),
-    smartPlaceUrl:document.getElementById('fSpUrl').value.trim()||'#',
-    thumbnail:    document.getElementById('fThumb').value.trim()||'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=600&q=80',
-    featured: document.getElementById('fFeatured').checked,
+function closeModal(e) {
+  if (e && e.target !== document.getElementById('modalBg')) return;
+  document.getElementById('modalBg').classList.add('hidden');
+}
+
+// 유튜브 미리보기
+function previewYt(id) {
+  const clean = id.trim();
+  const box   = document.getElementById('ytPreview');
+  if (!clean) { box.style.display='none'; return; }
+  box.style.display='block';
+  document.getElementById('ytFrame').src =
+    'https://www.youtube.com/embed/'+clean+'?mute=1&controls=1';
+}
+
+// URL 미리보기
+function previewUrl(url) {
+  const el = document.getElementById('urlPreview');
+  el.textContent = url.trim() ? '✅ '+url.trim() : '';
+}
+
+// ── 저장 ─────────────────────────────────────────────────────────────────
+async function saveShop() {
+  const name = document.getElementById('f-name').value.trim();
+  const lat  = document.getElementById('f-lat').value.trim();
+  const lng  = document.getElementById('f-lng').value.trim();
+  if (!name) { alert('업체명을 입력하세요'); return; }
+  if (!lat || !lng) { alert('위도/경도를 입력하세요'); return; }
+
+  const body = {
+    name,
+    category:     document.getElementById('f-cat').value,
+    price:        document.getElementById('f-price').value.trim(),
+    address:      document.getElementById('f-addr').value.trim(),
+    district:     document.getElementById('f-dist').value.trim(),
+    phone:        document.getElementById('f-phone').value.trim(),
+    lat:          parseFloat(lat),
+    lng:          parseFloat(lng),
+    youtubeId:    document.getElementById('f-yt').value.trim(),
+    smartPlaceUrl:document.getElementById('f-url').value.trim(),
+    thumbnail:    document.getElementById('f-thumb').value.trim(),
+    tags:         document.getElementById('f-tags').value.split(',').map(t=>t.trim()).filter(Boolean),
+    desc:         document.getElementById('f-desc').value.trim(),
+    featured:     document.getElementById('f-feat').value === 'true',
+    active:       document.getElementById('f-active').value === 'true',
   };
-  if(!body.name){ alert('업체명을 입력하세요'); return; }
-  if(!body.address){ alert('주소를 입력하세요'); return; }
-  const url=id?'/api/admin/shop/'+id:'/api/admin/shop';
-  const method=id?'PUT':'POST';
-  const res=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  const data=await res.json();
-  if(data.ok){ closeModal(); loadShops(); }
-  else alert('저장에 실패했어요');
+
+  const url    = editId ? '/api/admin/shops/'+editId : '/api/admin/shops';
+  const method = editId ? 'PUT' : 'POST';
+  const r = await fetch(url, {method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  if (r.ok) {
+    document.getElementById('modalBg').classList.add('hidden');
+    loadAll();
+  } else { alert('저장 실패: '+r.status); }
 }
 
-async function deleteShop(id,name){
-  if(!confirm(\`"\${name}" 을(를) 삭제할까요?\`)) return;
-  const res=await fetch('/api/admin/shop/'+id,{method:'DELETE'});
-  const data=await res.json();
-  if(data.ok) loadShops();
-  else alert('삭제에 실패했어요');
+// ── 삭제 ─────────────────────────────────────────────────────────────────
+async function delShop(id, name) {
+  if (!confirm(\`[삔\${name}]\\ 업체를 삭제할까요?\`)) return;
+  const r = await fetch('/api/admin/shops/'+id, {method:'DELETE'});
+  if (r.ok) loadAll();
+  else alert('삭제 실패');
 }
 
-// ── 초기 로드 ─────────────────────────────────────────────────────────────
-loadStats();
-setInterval(()=>{ if(document.getElementById('sec-stats').classList.contains('on')) loadStats(); },30000);
+loadAll();
+setInterval(loadAll, 30000);
 </script>
 </body>
 </html>`
