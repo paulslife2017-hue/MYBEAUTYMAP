@@ -1,6 +1,6 @@
-import pages from '@hono/vite-cloudflare-pages'
+import build from '@hono/vite-build/vercel'
 import { defineConfig } from 'vite'
 
 export default defineConfig({
-  plugins: [pages()],
+  plugins: [build()],
 })
