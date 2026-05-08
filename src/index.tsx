@@ -713,22 +713,65 @@ function initMap() {
 
 function catClass(cat) { return CAT_CLASS[cat] || ''; }
 
+// 카테고리별 배경색 (인라인 스타일용)
+const CAT_COLOR = {
+  '마사지':'#10B981', '헤드스파':'#6366F1',
+  '피부관리':'#FF4D7D', '헤어':'#F59E0B',
+  '왁싱':'#EC4899', '반영구':'#06B6D4', '병원':'#3B82F6',
+};
+function pinColor(cat) { return CAT_COLOR[cat] || '#FF4D7D'; }
+
+// DOM 엘리먼트 방식으로 마커 생성 (인라인 스타일 → CSS 클래스 의존 없음)
+function buildMarkerEl(shop, selected) {
+  const bg  = selected ? '#ffffff' : pinColor(shop.category);
+  const txt = selected ? pinColor(shop.category) : '#ffffff';
+  const scale = selected ? 'scale(1.18)' : 'scale(1)';
+  const shadow = selected
+    ? '0 4px 18px rgba(255,255,255,.35)'
+    : '0 3px 10px rgba(0,0,0,.45)';
+
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;cursor:pointer;transform:'+scale+';transition:transform .2s';
+
+  const pin = document.createElement('div');
+  pin.style.cssText = \`
+    background:\${bg};color:\${txt};
+    font-size:11px;font-weight:800;
+    padding:5px 11px;border-radius:20px;
+    white-space:nowrap;max-width:110px;
+    overflow:hidden;text-overflow:ellipsis;
+    box-shadow:\${shadow};
+    border:2px solid rgba(255,255,255,\${selected?'.9':'.35'});
+    font-family:-apple-system,sans-serif;
+    letter-spacing:-.2px;
+  \`;
+  pin.textContent = shop.name;
+
+  const tail = document.createElement('div');
+  tail.style.cssText = \`
+    width:0;height:0;
+    border-left:6px solid transparent;
+    border-right:6px solid transparent;
+    border-top:8px solid \${bg};
+    margin-top:-1px;
+  \`;
+
+  wrap.appendChild(pin);
+  wrap.appendChild(tail);
+  wrap.onclick = (e) => { e.stopPropagation(); selectShopOnMap(shop.id); };
+  return wrap;
+}
+
 function createNaverMarker(shop, selected=false) {
-  const cc   = catClass(shop.category);
-  const sel  = selected ? ' sel' : '';
-  const html = \`<div class="nv-marker">
-    <div class="nv-pin \${cc}\${sel}">\${shop.name}</div>
-    <div class="nv-tail \${cc}"></div>
-  </div>\`;
+  const el  = buildMarkerEl(shop, selected);
   const pos = new naver.maps.LatLng(shop.lat, shop.lng);
   const overlay = new naver.maps.CustomOverlay({
     position: pos,
-    content: html,
-    anchor: new naver.maps.Point(50, 38),
+    content: el,
+    anchor: new naver.maps.Point(el.offsetWidth/2||50, 38),
     zIndex: selected ? 200 : (shop.featured ? 100 : 10),
     map: naverMap,
   });
-  overlay.addListener('click', ()=>selectShopOnMap(shop.id));
   return overlay;
 }
 
@@ -743,20 +786,16 @@ function renderNaverMarkers(shops) {
 function selectShopOnMap(id) {
   const shop = allShops.find(s=>s.id===id);
   if (!shop) return;
-  // 마커 선택 상태 갱신
-  Object.entries(nvMarkers).forEach(([sid, o])=>{
+  // 마커 선택 상태 갱신 (DOM 엘리먼트 교체)
+  Object.entries(nvMarkers).forEach(([sid, overlay])=>{
     const s = allShops.find(x=>x.id===+sid);
     if (!s) return;
-    const cc  = catClass(s.category);
-    const sel = +sid===id ? ' sel' : '';
-    o.setContent(\`<div class="nv-marker" onclick="selectShopOnMap(\${s.id})">
-      <div class="nv-pin \${cc}\${sel}">\${s.name}</div>
-      <div class="nv-tail \${cc}"></div>
-    </div>\`);
-    o.setZIndex(+sid===id ? 200 : (s.featured?100:10));
+    const sel = +sid === id;
+    overlay.setContent(buildMarkerEl(s, sel));
+    overlay.setZIndex(sel ? 200 : (s.featured ? 100 : 10));
   });
   naverMap.panTo(new naver.maps.LatLng(shop.lat, shop.lng));
-  // 카드 하이라이트
+  // 하단 카드 하이라이트
   document.querySelectorAll('.spc').forEach(c=>c.classList.remove('sel'));
   const el = document.getElementById('spc-'+id);
   if (el) { el.classList.add('sel'); el.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'}); }
