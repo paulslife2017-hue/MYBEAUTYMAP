@@ -563,6 +563,58 @@ html,body{height:100%;background:var(--bg);color:#fff;
   border-radius:14px;padding:15px 16px;cursor:pointer;
   font-size:18px;color:rgba(255,255,255,.6)}
 
+/* 인앱 브라우저 */
+.inapp-bg{
+  position:fixed;inset:0;z-index:800;
+  background:rgba(0,0,0,.5);
+  opacity:0;pointer-events:none;transition:opacity .3s}
+.inapp-bg.show{opacity:1;pointer-events:auto}
+.inapp-sheet{
+  position:fixed;bottom:0;left:0;right:0;z-index:801;
+  height:92dvh;
+  background:#111;border-radius:22px 22px 0 0;
+  display:flex;flex-direction:column;
+  transform:translateY(100%);
+  transition:transform .38s cubic-bezier(.32,1,.23,1);
+  box-shadow:0 -6px 40px rgba(0,0,0,.6)}
+.inapp-sheet.show{transform:translateY(0)}
+.inapp-bar{
+  flex-shrink:0;height:52px;
+  display:flex;align-items:center;gap:8px;
+  padding:0 12px;
+  border-bottom:1px solid rgba(255,255,255,.07)}
+.inapp-handle{
+  position:absolute;top:8px;left:50%;transform:translateX(-50%);
+  width:36px;height:4px;background:rgba(255,255,255,.15);border-radius:4px}
+.inapp-title{
+  flex:1;font-size:13px;font-weight:700;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  color:rgba(255,255,255,.75)}
+.inapp-btn{
+  flex-shrink:0;width:36px;height:36px;
+  border:none;border-radius:10px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  font-size:15px;font-family:inherit;transition:background .15s}
+.inapp-btn-ext{
+  background:rgba(255,255,255,.07);color:rgba(255,255,255,.5)}
+.inapp-btn-ext:active{background:rgba(255,255,255,.14)}
+.inapp-btn-close{
+  background:rgba(255,77,125,.15);color:var(--pink)}
+.inapp-btn-close:active{background:rgba(255,77,125,.28)}
+.inapp-iframe{
+  flex:1;border:none;width:100%;background:#fff;
+  border-radius:0 0 22px 22px}
+.inapp-loader{
+  position:absolute;top:52px;left:0;right:0;
+  height:2px;background:rgba(255,255,255,.07);
+  overflow:hidden;pointer-events:none}
+.inapp-loader::after{
+  content:'';position:absolute;top:0;left:-60%;
+  width:60%;height:100%;background:var(--pink);
+  animation:loader-slide 1.2s ease-in-out infinite}
+@keyframes loader-slide{to{left:110%}}
+.inapp-loader.done{display:none}
+
 /* 토스트 */
 .toast{position:fixed;bottom:calc(var(--nav)+12px);left:50%;
   transform:translateX(-50%) translateY(8px);
@@ -622,9 +674,9 @@ html,body{height:100%;background:var(--bg);color:#fff;
         <div class="mp-tags" id="mpTags"></div>
       </div>
       <div class="mp-actions">
-        <a class="mp-book" id="mpBook" href="#" target="_blank" rel="noopener" onclick="trackSP()">
+        <button class="mp-book" id="mpBook" onclick="openInapp()">
           <i class="fas fa-calendar-check"></i> 예약
-        </a>
+        </button>
         <button class="mp-close" onclick="closeMapPopup()"><i class="fas fa-times"></i></button>
       </div>
     </div>
@@ -658,13 +710,30 @@ html,body{height:100%;background:var(--bg);color:#fff;
     <div class="s-tags" id="sTags"></div>
     <div class="s-price">시술 <span id="sPrice"></span></div>
     <div class="s-actions">
-      <a class="s-book" id="sBook" href="#" target="_blank" rel="noopener" onclick="trackSP()">
+      <button class="s-book" id="sBook" onclick="openInapp()">
         <i class="fas fa-calendar-check"></i> 네이버 예약하기
-      </a>
+      </button>
     </div>
   </div>
 </div>
 <div class="toast" id="toast"></div>
+
+<!-- 인앱 브라우저 -->
+<div class="inapp-bg" id="inappBg" onclick="closeInapp()"></div>
+<div class="inapp-sheet" id="inappSheet">
+  <div class="inapp-handle"></div>
+  <div class="inapp-bar">
+    <span class="inapp-title" id="inappTitle">예약하기</span>
+    <button class="inapp-btn inapp-btn-ext" id="inappExtBtn" onclick="openInappExternal()" title="외부 브라우저로 열기">
+      <i class="fas fa-external-link-alt"></i>
+    </button>
+    <button class="inapp-btn inapp-btn-close" onclick="closeInapp()" title="닫기">
+      <i class="fas fa-times"></i>
+    </button>
+  </div>
+  <div class="inapp-loader" id="inappLoader"></div>
+  <iframe class="inapp-iframe" id="inappFrame" src="" allowfullscreen></iframe>
+</div>
 
 <!-- 네이버 지도 SDK -->
 <script>
@@ -748,11 +817,11 @@ async function loadFeed(cat='all') {
           </div>
         </div>
         \${s.smartPlaceUrl
-          ? \`<a class="btn-book" href="\${s.smartPlaceUrl}" target="_blank" rel="noopener"
-               onclick="fetch('/api/track/sp/\${s.id}',{method:'POST'})">
+          ? \`<button class="btn-book"
+               onclick="curShop=\${JSON.stringify({id:s.id,name:s.name,smartPlaceUrl:s.smartPlaceUrl}).replace(/'/g,'\\'')};openInapp()">
               <i class="fas fa-calendar-check"></i>
               <span>예약하기</span>
-             </a>\`
+             </button>\`
           : \`<div style="flex-shrink:0;width:64px;text-align:center;font-size:10px;color:rgba(255,255,255,.3)">예약링크<br>없음</div>\`
         }
       </div>
@@ -938,7 +1007,6 @@ function openMapPopup(shop) {
     shop.tags.map(t=>\`<span class="mp-tag">\${t}</span>\`).join('');
 
   const bookEl = document.getElementById('mpBook');
-  bookEl.href  = shop.smartPlaceUrl || '#';
   bookEl.style.opacity      = shop.smartPlaceUrl ? '1' : '.35';
   bookEl.style.pointerEvents= shop.smartPlaceUrl ? 'auto' : 'none';
 
@@ -1058,7 +1126,6 @@ function openFeedSheet(id) {
   document.getElementById('sPrice').textContent  = s.price;
   document.getElementById('sTags').innerHTML     = s.tags.map(t=>\`<span class="s-tag">\${t}</span>\`).join('');
   const bookEl = document.getElementById('sBook');
-  bookEl.href  = s.smartPlaceUrl||'#';
   bookEl.style.opacity = s.smartPlaceUrl ? '1' : '.4';
   bookEl.style.pointerEvents = s.smartPlaceUrl ? 'auto' : 'none';
   document.getElementById('dim').classList.add('on');
@@ -1069,6 +1136,60 @@ function closeFeedSheet() {
   document.getElementById('sheet').classList.remove('open');
 }
 function trackSP() { if(curShop) fetch('/api/track/sp/'+curShop.id,{method:'POST'}); }
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 인앱 브라우저
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+let inappUrl = '';
+
+function openInapp() {
+  if (!curShop || !curShop.smartPlaceUrl) { showToast('예약 링크가 없어요'); return; }
+  trackSP();
+  inappUrl = curShop.smartPlaceUrl;
+
+  // 타이틀 세팅
+  document.getElementById('inappTitle').textContent = curShop.name + ' 예약하기';
+
+  // iframe 로드
+  const frame  = document.getElementById('inappFrame');
+  const loader = document.getElementById('inappLoader');
+  loader.classList.remove('done');
+  frame.src = '';
+  setTimeout(() => { frame.src = inappUrl; }, 30);
+  frame.onload = () => loader.classList.add('done');
+
+  // 시트 열기
+  document.getElementById('inappBg').classList.add('show');
+  document.getElementById('inappSheet').classList.add('show');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeInapp() {
+  document.getElementById('inappBg').classList.remove('show');
+  document.getElementById('inappSheet').classList.remove('show');
+  document.body.style.overflow = '';
+  // iframe src 초기화 (백그라운드 재생 방지)
+  setTimeout(() => { document.getElementById('inappFrame').src = ''; }, 400);
+}
+
+function openInappExternal() {
+  if (inappUrl) window.open(inappUrl, '_blank', 'noopener');
+}
+
+// 인앱 시트 스와이프 다운 닫기
+(function(){
+  const sheet = document.getElementById('inappSheet');
+  let sy = 0, dragging = false;
+  sheet.addEventListener('touchstart', e => {
+    // 아이프레임 위면 무시
+    if (e.target.closest('iframe')) return;
+    sy = e.touches[0].clientY; dragging = true;
+  }, {passive:true});
+  sheet.addEventListener('touchend', e => {
+    if (!dragging) return; dragging = false;
+    if (e.changedTouches[0].clientY - sy > 80) closeInapp();
+  }, {passive:true});
+})();
 
 // 스와이프 다운으로 피드 시트 닫기
 let tsY=0;
