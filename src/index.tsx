@@ -382,81 +382,148 @@ html,body{height:100%;background:var(--bg);color:#fff;
 .feed-empty i{font-size:48px}
 .feed-empty p{font-size:14px;font-weight:600}
 
-/* 지도 상단 필터 */
-.map-top{flex-shrink:0;padding:8px 12px;
-  background:rgba(10,10,10,.97);border-bottom:1px solid rgba(255,255,255,.07)}
-.map-cats{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
-.map-cats::-webkit-scrollbar{display:none}
-.mc{flex-shrink:0;border:1.5px solid rgba(255,255,255,.15);border-radius:18px;
-  padding:6px 13px;font-size:11px;font-weight:600;background:transparent;
-  color:rgba(255,255,255,.5);cursor:pointer;font-family:inherit;transition:all .2s;white-space:nowrap}
-.mc.active{background:var(--pink);border-color:var(--pink);color:#fff;
-  box-shadow:0 2px 10px rgba(255,77,125,.3)}
-
-/* 네이버 지도 영역 */
-.map-area{flex:1;position:relative;overflow:hidden}
+/* ── 지도 화면: 풀스크린 ── */
+#mapScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:var(--nav);display:none}
+#mapScreen.active{display:block}
 #naverMap{width:100%;height:100%}
 
+/* 지도 위 카테고리 필터 (floating) */
+.map-cat-bar{
+  position:absolute;top:10px;left:0;right:0;z-index:100;
+  display:flex;gap:6px;overflow-x:auto;
+  padding:0 12px;scrollbar-width:none;pointer-events:auto}
+.map-cat-bar::-webkit-scrollbar{display:none}
+.mc{flex-shrink:0;border:none;border-radius:20px;
+  padding:7px 14px;font-size:12px;font-weight:700;
+  background:rgba(18,18,18,.88);backdrop-filter:blur(12px);
+  color:rgba(255,255,255,.65);
+  cursor:pointer;font-family:inherit;transition:all .2s;
+  white-space:nowrap;box-shadow:0 2px 10px rgba(0,0,0,.35)}
+.mc.active{
+  background:var(--pink);color:#fff;
+  box-shadow:0 3px 14px rgba(255,77,125,.45)}
+
 /* 내 주변 FAB */
-.nearby-fab{position:absolute;bottom:16px;right:12px;z-index:100;
-  background:rgba(10,10,10,.92);backdrop-filter:blur(8px);
-  border:1.5px solid rgba(255,255,255,.18);border-radius:22px;
-  padding:9px 15px;display:flex;align-items:center;gap:6px;
-  font-size:12px;font-weight:700;color:#fff;cursor:pointer;
-  box-shadow:0 2px 14px rgba(0,0,0,.6);font-family:inherit;transition:all .2s}
-.nearby-fab i{color:var(--pink);font-size:13px}
+.nearby-fab{
+  position:absolute;top:56px;right:12px;z-index:100;
+  background:rgba(18,18,18,.9);backdrop-filter:blur(10px);
+  border:1.5px solid rgba(255,255,255,.15);border-radius:50px;
+  padding:8px 13px;display:flex;align-items:center;gap:5px;
+  font-size:11px;font-weight:700;color:#fff;cursor:pointer;
+  box-shadow:0 2px 12px rgba(0,0,0,.5);font-family:inherit;transition:all .2s}
+.nearby-fab i{color:var(--pink);font-size:12px}
 .nearby-fab.on{background:var(--pink);border-color:var(--pink)}
 .nearby-fab.on i{color:#fff}
 
-/* 샵 패널 */
-.shop-panel{flex-shrink:0;height:196px;background:rgba(10,10,10,.98);
+/* ── 지도 위 팝업 카드 (두바이쿠키맵 스타일) ── */
+.map-popup{
+  position:absolute;bottom:calc(var(--panel-h) + 12px);left:12px;right:12px;
+  z-index:200;
+  background:#111;border-radius:20px;
+  overflow:hidden;
+  box-shadow:0 8px 32px rgba(0,0,0,.7);
+  border:1px solid rgba(255,255,255,.1);
+  transform:translateY(20px) scale(.96);
+  opacity:0;pointer-events:none;
+  transition:transform .32s cubic-bezier(.34,1.56,.64,1),opacity .25s}
+.map-popup.show{
+  transform:translateY(0) scale(1);
+  opacity:1;pointer-events:auto}
+
+/* 팝업 유튜브 영역 */
+.mp-yt{
+  position:relative;width:100%;padding-top:52%;
+  background:#000;overflow:hidden}
+.mp-yt iframe{position:absolute;inset:0;width:100%;height:100%;border:none}
+.mp-yt-thumb{
+  position:absolute;inset:0;width:100%;height:100%;
+  object-fit:cover;cursor:pointer}
+.mp-play-btn{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.3);cursor:pointer;transition:background .2s}
+.mp-play-btn:hover{background:rgba(0,0,0,.15)}
+.mp-play-icon{
+  width:52px;height:52px;border-radius:50%;
+  background:rgba(255,255,255,.92);
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 4px 20px rgba(0,0,0,.4)}
+.mp-play-icon i{color:#111;font-size:20px;margin-left:3px}
+
+/* 팝업 정보 영역 */
+.mp-info{padding:13px 14px 14px;display:flex;align-items:flex-start;gap:10px}
+.mp-info-main{flex:1;min-width:0}
+.mp-badge{
+  display:inline-flex;align-items:center;gap:4px;
+  font-size:10px;font-weight:700;color:var(--pink);
+  background:rgba(255,77,125,.12);border:1px solid rgba(255,77,125,.2);
+  padding:2px 8px;border-radius:6px;margin-bottom:5px}
+.mp-name{
+  font-size:17px;font-weight:800;line-height:1.2;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  margin-bottom:4px}
+.mp-meta{
+  font-size:11px;color:rgba(255,255,255,.4);
+  display:flex;align-items:center;gap:6px;margin-bottom:5px}
+.mp-meta i{font-size:10px}
+.mp-desc{
+  font-size:12px;color:rgba(255,255,255,.5);line-height:1.45;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.mp-actions{display:flex;flex-direction:column;gap:6px;flex-shrink:0}
+.mp-book{
+  display:flex;align-items:center;justify-content:center;gap:5px;
+  background:var(--green);color:#fff;border:none;border-radius:11px;
+  padding:9px 12px;font-size:11px;font-weight:800;
+  text-decoration:none;font-family:inherit;cursor:pointer;
+  white-space:nowrap;box-shadow:0 3px 12px rgba(3,199,90,.4)}
+.mp-book:active{background:var(--green2)}
+.mp-close{
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);
+  border-radius:11px;width:38px;height:38px;
+  cursor:pointer;font-size:14px;color:rgba(255,255,255,.5)}
+.mp-close:active{background:rgba(255,255,255,.15)}
+.mp-tags{
+  display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
+.mp-tag{
+  font-size:10px;background:rgba(255,255,255,.07);
+  color:rgba(255,255,255,.5);padding:3px 8px;border-radius:8px}
+
+/* ── 하단 미니카드 패널 ── */
+:root{--panel-h:110px}
+.shop-panel{
+  position:absolute;bottom:0;left:0;right:0;z-index:150;
+  height:var(--panel-h);
+  background:rgba(10,10,10,.94);backdrop-filter:blur(14px);
   border-top:1px solid rgba(255,255,255,.07);
-  display:flex;align-items:center;gap:10px;
-  padding:12px 14px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+  display:flex;align-items:center;gap:8px;
+  padding:10px 12px;
+  overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
 .shop-panel::-webkit-scrollbar{display:none}
-.spc{flex-shrink:0;width:148px;height:172px;
-  background:rgba(255,255,255,.04);border:1.5px solid rgba(255,255,255,.08);
-  border-radius:16px;overflow:hidden;cursor:pointer;
-  display:flex;flex-direction:column;transition:border-color .2s,transform .15s}
+
+.spc{
+  flex-shrink:0;width:200px;height:88px;
+  background:rgba(255,255,255,.05);border:1.5px solid rgba(255,255,255,.09);
+  border-radius:14px;overflow:hidden;cursor:pointer;
+  display:flex;transition:border-color .2s,transform .15s;gap:0}
 .spc:active{transform:scale(.96)}
 .spc.sel{border-color:var(--pink);box-shadow:0 0 0 1px var(--pink)}
-.spc-img{width:100%;height:88px;object-fit:cover;display:block;flex-shrink:0}
-.spc-body{padding:8px 10px;flex:1;display:flex;flex-direction:column;justify-content:space-between}
-.spc-cat{font-size:9px;font-weight:700;color:var(--pink);margin-bottom:2px}
-.spc-name{font-size:12px;font-weight:700;line-height:1.3;
+.spc-img{width:72px;height:100%;object-fit:cover;display:block;flex-shrink:0}
+.spc-body{
+  padding:8px 10px;flex:1;display:flex;
+  flex-direction:column;justify-content:center;gap:3px;min-width:0}
+.spc-cat{font-size:9px;font-weight:700;color:var(--pink)}
+.spc-name{
+  font-size:12px;font-weight:800;line-height:1.25;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.spc-price{font-size:10px;font-weight:600;color:var(--pink2);margin-top:3px}
-.spc-dist{font-size:10px;color:rgba(255,255,255,.35);display:flex;align-items:center;gap:3px}
+.spc-price{font-size:11px;font-weight:600;color:rgba(255,255,255,.45)}
+.spc-dist{
+  font-size:10px;color:rgba(255,255,255,.3);
+  display:flex;align-items:center;gap:3px}
 .spc-dist i{font-size:9px;color:var(--green)}
 
-/* 네이버 지도 커스텀 마커 */
-.nv-marker{display:flex;flex-direction:column;align-items:center;cursor:pointer;position:relative}
-.nv-pin{background:var(--pink);color:#fff;font-size:11px;font-weight:800;
-  padding:5px 10px;border-radius:20px;white-space:nowrap;
-  box-shadow:0 3px 10px rgba(0,0,0,.4);border:2px solid rgba(255,255,255,.35);
-  font-family:'Pretendard',-apple-system,sans-serif;
-  max-width:100px;overflow:hidden;text-overflow:ellipsis;
-  transition:transform .2s}
-.nv-pin.cat-massage{background:#10B981}
-.nv-pin.cat-headspa{background:#6366F1}
-.nv-pin.cat-skin{background:#F472B6}
-.nv-pin.cat-hair{background:#F59E0B}
-.nv-pin.cat-wax{background:#EC4899}
-.nv-pin.cat-perm{background:#06B6D4}
-.nv-pin.cat-hospital{background:#3B82F6}
-.nv-pin.sel{background:#fff;color:var(--pink) !important;transform:scale(1.15);
-  box-shadow:0 4px 16px rgba(255,255,255,.35)}
-.nv-tail{width:0;height:0;border-left:6px solid transparent;
-  border-right:6px solid transparent;border-top:8px solid var(--pink);margin-top:-1px}
-.nv-tail.cat-massage{border-top-color:#10B981}
-.nv-tail.cat-headspa{border-top-color:#6366F1}
-.nv-tail.cat-skin{border-top-color:#F472B6}
-.nv-tail.cat-hair{border-top-color:#F59E0B}
-.nv-tail.cat-wax{border-top-color:#EC4899}
-.nv-tail.cat-perm{border-top-color:#06B6D4}
-.nv-tail.cat-hospital{border-top-color:#3B82F6}
+/* 네이버 지도 커스텀 마커 → 인라인 스타일로 처리, CSS 불필요 */
 
-/* 바텀시트 */
+/* 피드용 바텀시트 */
 .dim{position:fixed;inset:0;background:rgba(0,0,0,0);z-index:400;
   pointer-events:none;transition:background .3s}
 .dim.on{background:rgba(0,0,0,.6);pointer-events:auto}
@@ -530,19 +597,42 @@ html,body{height:100%;background:var(--bg);color:#fff;
   <div class="feed-spin"><div class="spinner"></div></div>
 </main>
 
-<!-- 지도 화면 -->
+<!-- 지도 화면: 풀스크린 -->
 <section id="mapScreen">
-  <div class="map-top">
-    <div class="map-cats">
-      ${CATEGORIES.map((c, i) => `<button class="mc${i === 0 ? ' active' : ''}" onclick="filterMap(this,'${c === '전체' ? 'all' : c}')">${CAT_EMOJI[c]} ${c}</button>`).join('')}
+  <!-- 지도 자체 -->
+  <div id="naverMap" style="width:100%;height:100%"></div>
+
+  <!-- 카테고리 필터 (지도 위 floating) -->
+  <div class="map-cat-bar" id="mapCatBar">
+    ${CATEGORIES.map((c, i) => `<button class="mc${i === 0 ? ' active' : ''}" onclick="filterMap(this,'${c === '전체' ? 'all' : c}')">${CAT_EMOJI[c]} ${c}</button>`).join('')}
+  </div>
+
+  <!-- 내 주변 FAB -->
+  <button class="nearby-fab" id="nearbyFab" onclick="toggleNearby()">
+    <i class="fas fa-location-arrow"></i> 내 주변
+  </button>
+
+  <!-- 지도 위 팝업 카드 -->
+  <div class="map-popup" id="mapPopup">
+    <div class="mp-yt" id="mpYt"></div>
+    <div class="mp-info">
+      <div class="mp-info-main">
+        <div class="mp-badge" id="mpBadge"></div>
+        <div class="mp-name"  id="mpName"></div>
+        <div class="mp-meta" id="mpMeta"></div>
+        <div class="mp-desc" id="mpDesc"></div>
+        <div class="mp-tags" id="mpTags"></div>
+      </div>
+      <div class="mp-actions">
+        <a class="mp-book" id="mpBook" href="#" target="_blank" rel="noopener" onclick="trackSP()">
+          <i class="fas fa-calendar-check"></i> 예약
+        </a>
+        <button class="mp-close" onclick="closeMapPopup()"><i class="fas fa-times"></i></button>
+      </div>
     </div>
   </div>
-  <div class="map-area">
-    <div id="naverMap"></div>
-    <button class="nearby-fab" id="nearbyFab" onclick="toggleNearby()">
-      <i class="fas fa-location-arrow"></i> 내 주변
-    </button>
-  </div>
+
+  <!-- 하단 미니카드 패널 -->
   <div class="shop-panel" id="shopPanel"></div>
 </section>
 
@@ -556,8 +646,8 @@ html,body{height:100%;background:var(--bg);color:#fff;
   </button>
 </nav>
 
-<!-- 딤 + 바텀시트 -->
-<div class="dim" id="dim" onclick="closeSheet()"></div>
+<!-- 피드 전용 딤 + 바텀시트 -->
+<div class="dim" id="dim" onclick="closeFeedSheet()"></div>
 <div class="sheet" id="sheet">
   <div class="sheet-handle"></div>
   <img class="sheet-img" id="sImg" src="" alt=""/>
@@ -573,9 +663,6 @@ html,body{height:100%;background:var(--bg);color:#fff;
       <a class="s-book" id="sBook" href="#" target="_blank" rel="noopener" onclick="trackSP()">
         <i class="fas fa-calendar-check"></i> 네이버 예약하기
       </a>
-      <button class="s-map-btn" onclick="focusShopOnMap()" title="지도에서 보기">
-        <i class="fas fa-map-marked-alt"></i>
-      </button>
     </div>
   </div>
 </div>
@@ -613,7 +700,8 @@ function switchTab(tab) {
     document.getElementById(t+'Screen').classList.toggle('active', t===tab);
   });
   document.getElementById('catBar').classList.toggle('show', tab==='feed');
-  if (tab==='map') initMap();
+  if (tab==='map') { closeMapPopup(); initMap(); }
+  if (tab==='feed') closeMapPopup();
 }
 
 // ── 로고 더블클릭 → 관리자 ───────────────────────────────────────────────
@@ -706,7 +794,8 @@ function initMap() {
       logoControl: false,
       mapDataControl: false,
     });
-    naver.maps.Event.addListener(naverMap, 'click', ()=>closeSheet());
+    // 지도 빈 곳 클릭 → 팝업 닫기
+    naver.maps.Event.addListener(naverMap, 'click', ()=>closeMapPopup());
     loadMapShops('all', false);
   });
 }
@@ -786,33 +875,99 @@ function renderNaverMarkers(shops) {
 function selectShopOnMap(id) {
   const shop = allShops.find(s=>s.id===id);
   if (!shop) return;
-  // 마커 선택 상태 갱신 (DOM 엘리먼트 교체)
+  curShop = shop;
+  fetch('/api/track/view/'+id, {method:'POST'});
+
+  // 마커 선택 상태 갱신
   Object.entries(nvMarkers).forEach(([sid, overlay])=>{
     const s = allShops.find(x=>x.id===+sid);
     if (!s) return;
-    const sel = +sid === id;
-    overlay.setContent(buildMarkerEl(s, sel));
-    overlay.setZIndex(sel ? 200 : (s.featured ? 100 : 10));
+    overlay.setContent(buildMarkerEl(s, +sid===id));
+    overlay.setZIndex(+sid===id ? 200 : (s.featured?100:10));
   });
+
+  // 지도 중심 이동 (팝업 높이만큼 위로 offset)
   naverMap.panTo(new naver.maps.LatLng(shop.lat, shop.lng));
-  // 하단 카드 하이라이트
+
+  // 하단 미니카드 하이라이트
   document.querySelectorAll('.spc').forEach(c=>c.classList.remove('sel'));
-  const el = document.getElementById('spc-'+id);
-  if (el) { el.classList.add('sel'); el.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'}); }
-  openSheet(id);
+  const spcEl = document.getElementById('spc-'+id);
+  if (spcEl) { spcEl.classList.add('sel'); spcEl.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'}); }
+
+  // ── 지도 위 팝업 카드 열기 ──
+  openMapPopup(shop);
 }
 
-function focusShopOnMap() {
-  if (!curShop) return;
-  closeSheet();
-  switchTab('map');
-  setTimeout(()=>{
-    if (naverMap) {
-      naverMap.setCenter(new naver.maps.LatLng(curShop.lat, curShop.lng));
-      naverMap.setZoom(15);
-      selectShopOnMap(curShop.id);
-    }
-  }, 300);
+// ── 지도 위 팝업 카드 ──────────────────────────────────────────────────────
+let popupYtLoaded = false;
+
+function openMapPopup(shop) {
+  const popup = document.getElementById('mapPopup');
+  const ytEl  = document.getElementById('mpYt');
+
+  // 유튜브 or 썸네일
+  if (shop.youtubeId) {
+    ytEl.innerHTML = \`
+      <div class="mp-yt-thumb-wrap" style="position:relative;width:100%;padding-top:52%;background:#000;overflow:hidden">
+        <img src="https://img.youtube.com/vi/\${shop.youtubeId}/hqdefault.jpg"
+          style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;cursor:pointer"
+          onclick="loadYtInPopup('\${shop.youtubeId}')" alt=""/>
+        <div onclick="loadYtInPopup('\${shop.youtubeId}')"
+          style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+                 background:rgba(0,0,0,.25);cursor:pointer">
+          <div style="width:54px;height:54px;border-radius:50%;background:rgba(255,255,255,.93);
+                      display:flex;align-items:center;justify-content:center;
+                      box-shadow:0 4px 20px rgba(0,0,0,.4)">
+            <i class="fas fa-play" style="color:#111;font-size:20px;margin-left:4px"></i>
+          </div>
+        </div>
+      </div>
+    \`;
+  } else {
+    ytEl.innerHTML = \`<img src="\${shop.thumbnail}"
+      style="width:100%;height:160px;object-fit:cover;display:block" alt=""/>\`;
+  }
+
+  // 텍스트 정보
+  const bg = pinColor(shop.category);
+  document.getElementById('mpBadge').innerHTML =
+    \`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:\${bg};margin-right:4px"></span>\${shop.category}\`;
+  document.getElementById('mpName').textContent  = shop.name;
+  document.getElementById('mpMeta').innerHTML    =
+    \`<i class="fas fa-map-marker-alt" style="color:var(--green)"></i>\${shop.district}&nbsp;·&nbsp;\${shop.price}\`;
+  document.getElementById('mpDesc').textContent  = shop.desc || '';
+  document.getElementById('mpTags').innerHTML    =
+    shop.tags.map(t=>\`<span class="mp-tag">\${t}</span>\`).join('');
+
+  const bookEl = document.getElementById('mpBook');
+  bookEl.href  = shop.smartPlaceUrl || '#';
+  bookEl.style.opacity      = shop.smartPlaceUrl ? '1' : '.35';
+  bookEl.style.pointerEvents= shop.smartPlaceUrl ? 'auto' : 'none';
+
+  popup.classList.add('show');
+}
+
+function loadYtInPopup(ytId) {
+  document.getElementById('mpYt').innerHTML = \`
+    <div style="position:relative;width:100%;padding-top:52%;background:#000">
+      <iframe style="position:absolute;inset:0;width:100%;height:100%;border:none"
+        src="https://www.youtube.com/embed/\${ytId}?autoplay=1&mute=0&playsinline=1&rel=0&modestbranding=1"
+        allow="autoplay;encrypted-media;picture-in-picture" allowfullscreen></iframe>
+    </div>
+  \`;
+}
+
+function closeMapPopup() {
+  document.getElementById('mapPopup').classList.remove('show');
+  // 유튜브 멈추기
+  document.getElementById('mpYt').innerHTML = '';
+  // 마커 선택 해제
+  Object.entries(nvMarkers).forEach(([sid, overlay])=>{
+    const s = allShops.find(x=>x.id===+sid);
+    if (s) { overlay.setContent(buildMarkerEl(s,false)); overlay.setZIndex(s.featured?100:10); }
+  });
+  document.querySelectorAll('.spc').forEach(c=>c.classList.remove('sel'));
+  curShop = null;
 }
 
 async function loadMapShops(cat, nearby) {
@@ -890,8 +1045,8 @@ function toggleNearby() {
   }, ()=>{ showToast('위치 권한이 필요해요'); }, {timeout:8000,enableHighAccuracy:true});
 }
 
-// ── 바텀시트 ─────────────────────────────────────────────────────────────
-function openSheet(id) {
+// ── 피드 바텀시트 (피드 탭 전용) ─────────────────────────────────────────
+function openFeedSheet(id) {
   const s = allShops.find(x=>x.id===id);
   if (!s) return;
   curShop = s;
@@ -911,18 +1066,17 @@ function openSheet(id) {
   document.getElementById('dim').classList.add('on');
   document.getElementById('sheet').classList.add('open');
 }
-function closeSheet() {
+function closeFeedSheet() {
   document.getElementById('dim').classList.remove('on');
   document.getElementById('sheet').classList.remove('open');
-  document.querySelectorAll('.spc').forEach(c=>c.classList.remove('sel'));
 }
 function trackSP() { if(curShop) fetch('/api/track/sp/'+curShop.id,{method:'POST'}); }
 
-// 스와이프 다운
+// 스와이프 다운으로 피드 시트 닫기
 let tsY=0;
 const sh=document.getElementById('sheet');
 sh.addEventListener('touchstart',e=>{tsY=e.touches[0].clientY},{passive:true});
-sh.addEventListener('touchend',  e=>{if(e.changedTouches[0].clientY-tsY>70)closeSheet()},{passive:true});
+sh.addEventListener('touchend',  e=>{if(e.changedTouches[0].clientY-tsY>70)closeFeedSheet()},{passive:true});
 
 // ── 토스트 ───────────────────────────────────────────────────────────────
 let toastTmr;
