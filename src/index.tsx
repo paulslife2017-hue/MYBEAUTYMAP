@@ -299,9 +299,37 @@ html,body{height:100%;background:var(--bg);color:#fff;
 .logo em{color:var(--pink);font-style:normal}
 .hd-badge{font-size:10px;font-weight:700;background:rgba(255,77,125,.15);
   color:var(--pink);padding:3px 8px;border-radius:8px;border:1px solid rgba(255,77,125,.25)}
+.hd-right{display:flex;align-items:center;gap:8px}
+.search-btn{background:none;border:none;color:rgba(255,255,255,.6);font-size:18px;
+  cursor:pointer;padding:6px;display:flex;align-items:center;justify-content:center;
+  border-radius:10px;transition:color .2s}
+.search-btn:active{color:#fff}
+
+/* 검색바 */
+.search-bar{position:fixed;top:var(--hd);left:0;right:0;z-index:302;
+  background:rgba(10,10,10,.98);backdrop-filter:blur(20px);
+  border-bottom:1px solid rgba(255,77,125,.2);
+  padding:10px 12px;
+  transform:translateY(-110%);opacity:0;
+  transition:transform .3s cubic-bezier(.32,1,.23,1),opacity .25s;
+  pointer-events:none}
+.search-bar.open{transform:translateY(0);opacity:1;pointer-events:auto}
+.search-inner{display:flex;align-items:center;gap:8px;
+  background:rgba(255,255,255,.07);border:1.5px solid rgba(255,255,255,.12);
+  border-radius:14px;padding:0 14px;height:42px}
+.search-bar.open .search-inner{border-color:rgba(255,77,125,.4)}
+.search-inner i{color:rgba(255,255,255,.35);font-size:14px;flex-shrink:0}
+.search-input{flex:1;background:none;border:none;outline:none;
+  color:#fff;font-size:15px;font-family:inherit;font-weight:500}
+.search-input::placeholder{color:rgba(255,255,255,.25)}
+.search-clear{background:none;border:none;color:rgba(255,255,255,.3);
+  font-size:16px;cursor:pointer;padding:4px;display:none;flex-shrink:0}
+.search-clear.show{display:block}
+.search-hint{font-size:11px;color:rgba(255,255,255,.25);margin-top:7px;
+  padding:0 4px;line-height:1.5}
 
 /* 카탈로그 탭바 */
-.cat-bar{position:fixed;top:var(--hd);left:0;right:0;z-index:299;height:var(--cat);
+.cat-bar{position:fixed;top:calc(var(--hd) + var(--sb,0px));left:0;right:0;z-index:299;height:var(--cat);
   background:rgba(10,10,10,.93);backdrop-filter:blur(10px);
   border-bottom:1px solid rgba(255,255,255,.06);display:none}
 .cat-bar.show{display:block}
@@ -632,8 +660,27 @@ html,body{height:100%;background:var(--bg);color:#fff;
     <div class="logo-icon">💄</div>
     마이<em>뷰티</em>맵
   </div>
-  <span class="hd-badge">BETA</span>
+  <div class="hd-right">
+    <span class="hd-badge">BETA</span>
+    <button class="search-btn" id="searchToggleBtn" onclick="toggleSearch()" aria-label="검색">
+      <i class="fas fa-search" id="searchBtnIcon"></i>
+    </button>
+  </div>
 </header>
+
+<!-- 검색바 -->
+<div class="search-bar" id="searchBar">
+  <div class="search-inner">
+    <i class="fas fa-search"></i>
+    <input class="search-input" id="searchInput" type="search"
+      placeholder="샵 이름, 지역, 태그 검색..."
+      oninput="onSearchInput(this.value)"
+      onkeydown="if(event.key==='Enter'){this.blur();}"
+    />
+    <button class="search-clear" id="searchClear" onclick="clearSearch()"><i class="fas fa-times-circle"></i></button>
+  </div>
+  <div class="search-hint">예) 강남 마사지 &nbsp;·&nbsp; 눈썹문신 &nbsp;·&nbsp; 리프팅</div>
+</div>
 
 <!-- 카탈로그 탭바 (피드 전용) -->
 <div class="cat-bar show" id="catBar">
@@ -788,13 +835,20 @@ document.getElementById('logoBtn').addEventListener('click', ()=>{
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // 피드
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-async function loadFeed(cat='all') {
+let feedCat = 'all';
+let searchQ = '';
+let searchTimer = null;
+
+async function loadFeed(cat='all', q='') {
+  feedCat = cat;
   const screen = document.getElementById('feedScreen');
   screen.innerHTML = '<div class="feed-spin"><div class="spinner"></div></div>';
-  const res   = await fetch('/api/shops?category='+encodeURIComponent(cat==='all'?'':cat));
+  let url = '/api/shops?category='+encodeURIComponent(cat==='all'?'':cat);
+  if (q) url += '&q='+encodeURIComponent(q);
+  const res   = await fetch(url);
   const shops = await res.json();
   if (!shops.length) {
-    screen.innerHTML = '<div class="feed-empty"><i class="fas fa-store-slash"></i><p>등록된 샵이 없어요</p></div>';
+    screen.innerHTML = '<div class="feed-empty"><i class="fas fa-search"></i><p>'+(searchQ?'\''+searchQ+'\' 검색 결과가 없어요':'등록된 샵이 없어요')+'</p></div>';
     return;
   }
   screen.innerHTML = shops.map((s,i) => \`
@@ -833,7 +887,55 @@ async function loadFeed(cat='all') {
 function filterFeed(btn, cat) {
   document.querySelectorAll('.cp').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
-  loadFeed(cat);
+  loadFeed(cat, searchQ);
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 검색
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+let searchOpen = false;
+
+function toggleSearch() {
+  searchOpen = !searchOpen;
+  const bar  = document.getElementById('searchBar');
+  const icon = document.getElementById('searchBtnIcon');
+  const catBar = document.getElementById('catBar');
+  bar.classList.toggle('open', searchOpen);
+  icon.className = searchOpen ? 'fas fa-times' : 'fas fa-search';
+  // 검색바 높이(62px)만큼 catBar 아래로
+  document.documentElement.style.setProperty('--sb', searchOpen ? '62px' : '0px');
+  if (searchOpen) {
+    setTimeout(()=>document.getElementById('searchInput').focus(), 320);
+  } else {
+    clearSearch();
+  }
+}
+
+function onSearchInput(val) {
+  searchQ = val.trim();
+  document.getElementById('searchClear').classList.toggle('show', !!searchQ);
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    const activeTab = document.getElementById('mapScreen').classList.contains('active') ? 'map' : 'feed';
+    if (activeTab === 'map') {
+      loadMapShops(mapCat, nearbyOn, searchQ);
+    } else {
+      loadFeed(feedCat, searchQ);
+    }
+  }, 350);
+}
+
+function clearSearch() {
+  searchQ = '';
+  const input = document.getElementById('searchInput');
+  if (input) input.value = '';
+  document.getElementById('searchClear').classList.remove('show');
+  const activeTab = document.getElementById('mapScreen').classList.contains('active') ? 'map' : 'feed';
+  if (activeTab === 'map') {
+    loadMapShops(mapCat, nearbyOn, '');
+  } else {
+    loadFeed(feedCat, '');
+  }
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1036,9 +1138,10 @@ function closeMapPopup() {
   curShop = null;
 }
 
-async function loadMapShops(cat, nearby) {
+async function loadMapShops(cat, nearby, q='') {
   let url = '/api/shops?category='+encodeURIComponent(cat==='all'?'':cat);
   if (nearby && userLat) url += '&nearby=1&lat='+userLat+'&lng='+userLng;
+  if (q) url += '&q='+encodeURIComponent(q);
   const res = await fetch(url);
   allShops  = await res.json();
   renderNaverMarkers(allShops);
@@ -1075,7 +1178,7 @@ function filterMap(btn, cat) {
   document.querySelectorAll('.mc').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   mapCat = cat;
-  loadMapShops(cat, nearbyOn);
+  loadMapShops(cat, nearbyOn, searchQ);
 }
 
 function toggleNearby() {
