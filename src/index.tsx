@@ -133,7 +133,20 @@ app.get('/api/shops/all', (c) => {
   return c.json(shops.map(s=>({...s, views: viewCnt[s.id]??0})))
 })
 
-app.get('/favicon.ico', (c)=> c.redirect('/favicon.svg', 301))
+app.get('/favicon.ico', (c)=> {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <rect width="32" height="32" rx="8" fill="#FF4D7D"/>
+  <text x="16" y="23" font-size="18" text-anchor="middle" font-family="serif">💄</text>
+</svg>`
+  return new Response(svg, { headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public,max-age=86400' } })
+})
+app.get('/favicon.svg', (c)=> {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <rect width="32" height="32" rx="8" fill="#FF4D7D"/>
+  <text x="16" y="23" font-size="18" text-anchor="middle" font-family="serif">💄</text>
+</svg>`
+  return new Response(svg, { headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public,max-age=86400' } })
+})
 app.get('/admin',(c)=>c.html(adminPage()))
 app.get('/',    (c)=>c.html(mainPage()))
 
