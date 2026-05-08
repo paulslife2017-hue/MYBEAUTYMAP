@@ -39,14 +39,14 @@ let shopStore: Shop[] = [
     phone: '02-1234-5678', desc: '강남 최고의 피부관리 전문샵', active: true,
   },
   {
-    id: 2, name: '뷰티랩 홍대', category: '네일아트',
-    tags: ['젤네일', '네일아트', '케어'], price: '3만원~',
+    id: 2, name: '헤드힐링 홍대', category: '헤드스파',
+    tags: ['두피케어', '헤드마사지', '탈모케어'], price: '4만원~',
     address: '서울 마포구 와우산로 45', district: '마포구',
     lat: 37.5563, lng: 126.9236,
     smartPlaceUrl: 'https://naver.me/example2',
     youtubeId: 'mldig2ZiRwA', featured: true,
-    thumbnail: 'https://images.unsplash.com/photo-1604654894610-df63bc536371?w=600&q=80',
-    phone: '02-2345-6789', desc: '홍대 감성 네일아트 전문', active: true,
+    thumbnail: 'https://images.unsplash.com/photo-1519823551278-64ac92734fb1?w=600&q=80',
+    phone: '02-2345-6789', desc: '홍대 감성 두피·헤드스파 전문', active: true,
   },
   {
     id: 3, name: '헤어스튜디오 한남', category: '헤어',
@@ -89,14 +89,14 @@ let shopStore: Shop[] = [
     phone: '02-6789-0123', desc: '전문 테라피스트의 힐링 마사지', active: true,
   },
   {
-    id: 7, name: '핑크네일 성수', category: '네일아트',
-    tags: ['젤네일', '케어', '풋케어'], price: '2.5만원~',
+    id: 7, name: '스칼프클리닉 성수', category: '헤드스파',
+    tags: ['두피스케일링', '헤드스파', '아로마'], price: '5만원~',
     address: '서울 성동구 성수일로 30', district: '성동구',
     lat: 37.5446, lng: 127.0557,
     smartPlaceUrl: 'https://naver.me/example7',
     youtubeId: 'mldig2ZiRwA', featured: false,
-    thumbnail: 'https://images.unsplash.com/photo-1604654894610-df63bc536371?w=600&q=80',
-    phone: '02-7890-1234', desc: '성수 감성 네일아트', active: true,
+    thumbnail: 'https://images.unsplash.com/photo-1562322140-8baeececf3df?w=600&q=80',
+    phone: '02-7890-1234', desc: '성수 프리미엄 두피 & 헤드스파', active: true,
   },
   {
     id: 8, name: '리프트업 에스테틱', category: '피부관리',
@@ -108,9 +108,19 @@ let shopStore: Shop[] = [
     thumbnail: 'https://images.unsplash.com/photo-1487412947147-5cebf100ffc2?w=600&q=80',
     phone: '02-8901-2345', desc: '청담동 프리미엄 에스테틱', active: true,
   },
+  {
+    id: 9, name: '뷰티메디컬 강남', category: '병원',
+    tags: ['보톡스', '필러', '피부레이저'], price: '10만원~',
+    address: '서울 강남구 역삼로 222', district: '강남구',
+    lat: 37.5006, lng: 127.0368,
+    smartPlaceUrl: 'https://naver.me/example9',
+    youtubeId: 'mldig2ZiRwA', featured: false,
+    thumbnail: 'https://images.unsplash.com/photo-1629909613654-28e377c37b09?w=600&q=80',
+    phone: '02-9012-3456', desc: '강남 피부과 전문의 직접 시술', active: true,
+  },
 ]
 
-let nextId = 9
+let nextId = 10
 const viewCnt: Record<number, number> = {}
 const spCnt:   Record<number, number> = {}
 
@@ -253,9 +263,9 @@ app.get('/', (c) => c.html(mainPage()))
 // 메인 페이지
 // ══════════════════════════════════════════════════════════════════════════
 const NAVER_CLIENT_ID = 'xjjg4490h8'
-const CATEGORIES = ['전체', '피부관리', '네일아트', '헤어', '왁싱', '반영구', '마사지']
+const CATEGORIES = ['전체', '마사지', '헤드스파', '피부관리', '헤어', '왁싱', '반영구', '병원']
 const CAT_EMOJI:  Record<string, string> = {
-  '전체': '🏠', '피부관리': '✨', '네일아트': '💅', '헤어': '💇', '왁싱': '🌸', '반영구': '👁', '마사지': '💆',
+  '전체': '🏠', '마사지': '💆', '헤드스파': '🧖', '피부관리': '✨', '헤어': '💇', '왁싱': '🌸', '반영구': '👁', '병원': '🏥',
 }
 
 function mainPage() { return `<!DOCTYPE html>
@@ -427,20 +437,24 @@ html,body{height:100%;background:var(--bg);color:#fff;
   font-family:'Pretendard',-apple-system,sans-serif;
   max-width:100px;overflow:hidden;text-overflow:ellipsis;
   transition:transform .2s}
-.nv-pin.cat-nail{background:#A855F7}
+.nv-pin.cat-massage{background:#10B981}
+.nv-pin.cat-headspa{background:#6366F1}
+.nv-pin.cat-skin{background:#F472B6}
 .nv-pin.cat-hair{background:#F59E0B}
 .nv-pin.cat-wax{background:#EC4899}
 .nv-pin.cat-perm{background:#06B6D4}
-.nv-pin.cat-massage{background:#10B981}
+.nv-pin.cat-hospital{background:#3B82F6}
 .nv-pin.sel{background:#fff;color:var(--pink) !important;transform:scale(1.15);
   box-shadow:0 4px 16px rgba(255,255,255,.35)}
 .nv-tail{width:0;height:0;border-left:6px solid transparent;
   border-right:6px solid transparent;border-top:8px solid var(--pink);margin-top:-1px}
-.nv-tail.cat-nail{border-top-color:#A855F7}
+.nv-tail.cat-massage{border-top-color:#10B981}
+.nv-tail.cat-headspa{border-top-color:#6366F1}
+.nv-tail.cat-skin{border-top-color:#F472B6}
 .nv-tail.cat-hair{border-top-color:#F59E0B}
 .nv-tail.cat-wax{border-top-color:#EC4899}
 .nv-tail.cat-perm{border-top-color:#06B6D4}
-.nv-tail.cat-massage{border-top-color:#10B981}
+.nv-tail.cat-hospital{border-top-color:#3B82F6}
 
 /* 바텀시트 */
 .dim{position:fixed;inset:0;background:rgba(0,0,0,0);z-index:400;
@@ -571,7 +585,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
 <script>
 window.__naverMapCb = function() { window.__naverMapReady = true; };
 </script>
-<script src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpClientId=${NAVER_CLIENT_ID}&callback=__naverMapCb" async></script>
+<script src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${NAVER_CLIENT_ID}&callback=__naverMapCb" async></script>
 
 <script>
 // ── 전역 ──────────────────────────────────────────────────────────────────
@@ -587,9 +601,9 @@ let nvMarkers  = {};   // id -> {marker, overlay}
 let userMarker = null;
 
 const CAT_CLASS = {
-  '피부관리':'', '네일아트':'cat-nail',
-  '헤어':'cat-hair', '왁싱':'cat-wax',
-  '반영구':'cat-perm', '마사지':'cat-massage',
+  '마사지':'cat-massage', '헤드스파':'cat-headspa',
+  '피부관리':'cat-skin', '헤어':'cat-hair',
+  '왁싱':'cat-wax', '반영구':'cat-perm', '병원':'cat-hospital',
 };
 
 // ── 탭 전환 ───────────────────────────────────────────────────────────────
@@ -1049,8 +1063,8 @@ body{font-family:'Pretendard',sans-serif;background:var(--bg);color:#fff;min-hei
       <div class="field">
         <label>카테고리 *</label>
         <select id="f-cat">
-          <option>피부관리</option><option>네일아트</option><option>헤어</option>
-          <option>왁싱</option><option>반영구</option><option>마사지</option>
+          <option>마사지</option><option>헤드스파</option><option>피부관리</option>
+          <option>헤어</option><option>왁싱</option><option>반영구</option><option>병원</option>
         </select>
       </div>
       <div class="field">
