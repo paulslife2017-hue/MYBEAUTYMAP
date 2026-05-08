@@ -1,8 +1,6 @@
 import { Hono } from 'hono'
-import { serveStatic } from 'hono/cloudflare-workers'
 
 const app = new Hono()
-app.use('/static/*', serveStatic({ root: './public' }))
 
 // ══════════════════════════════════════════════════════════════════════════
 // 데이터 구조
