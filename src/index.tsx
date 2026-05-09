@@ -1614,14 +1614,17 @@ function fitMapToBounds(shops) {
   if (!shops.length || !naverMap) return;
   if (shops.length === 1) {
     naverMap.setCenter(new naver.maps.LatLng(shops[0].lat, shops[0].lng));
-    naverMap.setZoom(15);
+    naverMap.setZoom(14);
   } else {
     const lats = shops.map(s => s.lat);
     const lngs = shops.map(s => s.lng);
     const sw = new naver.maps.LatLng(Math.min(...lats), Math.min(...lngs));
     const ne = new naver.maps.LatLng(Math.max(...lats), Math.max(...lngs));
     const bounds = new naver.maps.LatLngBounds(sw, ne);
-    naverMap.fitBounds(bounds, { top: 80, right: 40, bottom: 100, left: 40 });
+    naverMap.fitBounds(bounds, { top: 80, right: 60, bottom: 140, left: 60 });
+    setTimeout(() => {
+      if (naverMap.getZoom() > 14) naverMap.setZoom(14);
+    }, 350);
   }
 }
 
@@ -2245,14 +2248,20 @@ function renderMarkers() {
 function fitToBounds(list) {
   if (!list.length || !map) return;
   if (list.length === 1) {
+    // 업체 1개: 적당한 줌(14)으로 중앙 표시
     map.setCenter(new naver.maps.LatLng(list[0].lat, list[0].lng));
-    map.setZoom(15);
+    map.setZoom(14);
   } else {
     const lats = list.map(s => s.lat);
     const lngs = list.map(s => s.lng);
     const sw = new naver.maps.LatLng(Math.min(...lats), Math.min(...lngs));
     const ne = new naver.maps.LatLng(Math.max(...lats), Math.max(...lngs));
-    map.fitBounds(new naver.maps.LatLngBounds(sw, ne), { top:60, right:40, bottom:120, left:40 });
+    const bounds = new naver.maps.LatLngBounds(sw, ne);
+    map.fitBounds(bounds, { top:80, right:60, bottom:140, left:60 });
+    // fitBounds 후 너무 가까이 줌인됐으면 최대 줌 14로 제한
+    setTimeout(() => {
+      if (map.getZoom() > 14) map.setZoom(14);
+    }, 350);
   }
 }
 
