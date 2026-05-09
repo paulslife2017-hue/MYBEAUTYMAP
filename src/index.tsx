@@ -453,9 +453,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
 .feed-empty i{font-size:48px}
 .feed-empty p{font-size:14px;font-weight:600}
 
-/* ── 지도 화면: 풀스크린 ── */
-#mapScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:var(--nav);display:none}
-#mapScreen.active{display:block}
+/* ── 지도 화면 ── */
 #naverMap{position:absolute;top:0;left:0;right:0;bottom:0;}
 
 /* 지도 위 카테고리 필터 (floating) */
