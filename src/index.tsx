@@ -406,20 +406,32 @@ html,body{height:100%;background:var(--bg);color:#fff;
   background:#000;display:flex;flex-direction:column;overflow:hidden}
 .yt-area{flex:1;position:relative;overflow:hidden;background:#000;cursor:pointer}
 .yt-thumb{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
-  transition:opacity .3s}
-.yt-play-btn{position:absolute;inset:0;display:flex;align-items:center;
-  justify-content:center;pointer-events:none}
-.yt-play-btn::after{content:'';width:64px;height:64px;border-radius:50%;
-  background:rgba(0,0,0,.55);border:3px solid rgba(255,255,255,.9);
-  box-shadow:0 4px 24px rgba(0,0,0,.5)}
-.yt-play-btn::before{content:'▶';position:absolute;font-size:22px;
-  color:#fff;margin-left:4px;z-index:1}
-.yt-frame{position:absolute;inset:0;width:100%;height:100%;border:none;
-  opacity:0;transition:opacity .4s}
-.yt-frame.loaded{opacity:1}
+  transition:opacity .35s;z-index:2}
+.yt-play-btn{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  z-index:3;transition:opacity .2s}
+.yt-play-btn::after{
+  content:'';width:68px;height:68px;border-radius:50%;
+  background:rgba(0,0,0,.6);border:3px solid rgba(255,255,255,.95);
+  box-shadow:0 4px 24px rgba(0,0,0,.6)}
+.yt-play-btn::before{
+  content:'▶';position:absolute;font-size:24px;
+  color:#fff;margin-left:5px;z-index:1}
+/* 유튜브 player div */
+.yt-player{position:absolute;inset:0;width:100%;height:100%;z-index:1}
 .yt-area.playing .yt-thumb{opacity:0;pointer-events:none}
-.yt-area.playing .yt-play-btn{display:none}
-.yt-area.playing .yt-frame{opacity:1}
+.yt-area.playing .yt-play-btn{opacity:0;pointer-events:none}
+/* 음소거 해제 버튼 */
+.unmute-btn{
+  position:absolute;bottom:12px;right:12px;z-index:10;
+  background:rgba(0,0,0,.65);backdrop-filter:blur(4px);
+  border:1px solid rgba(255,255,255,.25);color:#fff;
+  border-radius:999px;padding:6px 12px;
+  font-size:12px;font-weight:700;cursor:pointer;
+  display:none;align-items:center;gap:5px;
+  font-family:-apple-system,sans-serif;
+}
+.unmute-btn.show{display:flex}
 
 /* 업체 정보 바 */
 .shop-bar{flex-shrink:0;padding:18px 14px 14px;
@@ -843,13 +855,12 @@ async function loadFeed(cat='all', q='') {
       : s.thumbnail;
     const ytArea = s.youtubeId
       ? \`<div class="yt-area" id="yta-\${s.id}" data-ytid="\${s.youtubeId}" onclick="playYt(event.currentTarget)">
-           <img class="yt-thumb" src="\${thumb}" alt="\${s.name}" loading="lazy"/>
-           <div class="yt-play-btn"></div>
-           <iframe class="yt-frame" id="ytf-\${s.id}" src=""
-             allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-             allowfullscreen></iframe>
+           <img class="yt-thumb" id="ytt-\${s.id}" src="\${thumb}" alt="\${s.name}" loading="lazy"/>
+           <div class="yt-play-btn" id="ypb-\${s.id}"></div>
+           <div class="yt-player" id="ytp-\${s.id}"></div>
+           <button class="unmute-btn" id="unm-\${s.id}" onclick="unmuteYt(event,'\${s.id}')">🔇 탭하여 소리켜기</button>
          </div>\`
-      : \`<div class="yt-area"><img class="yt-thumb" src="\${thumb}" alt="\${s.name}" loading="lazy" style="pointer-events:none"/></div>\`;
+      : \`<div class="yt-area no-video"><img class="yt-thumb" src="\${thumb}" alt="\${s.name}" loading="lazy" style="pointer-events:none"/></div>\`;
     return \`
     <div class="fi">
       \${ytArea}
@@ -891,26 +902,96 @@ async function loadFeed(cat='all', q='') {
   };
 }
 
+// ── 유튜브 IFrame Player API ──────────────────────────────────────────────
+const ytPlayers = {};  // id → YT.Player 인스턴스
+
+// YT API 로드 (한 번만)
+function loadYTAPI() {
+  if (window.YT || document.getElementById('yt-api-script')) return;
+  const s = document.createElement('script');
+  s.id  = 'yt-api-script';
+  s.src = 'https://www.youtube.com/iframe_api';
+  document.head.appendChild(s);
+}
+loadYTAPI();
+
 function playYt(el) {
-  // 클릭된 요소가 자식일 수 있으므로 .yt-area 까지 올라감
   const area = el.closest ? el.closest('.yt-area') : el;
   if (!area) return;
   const ytId = area.dataset.ytid;
+  const sid  = area.id.replace('yta-', '');
   if (!ytId) return;
   if (area.classList.contains('playing')) return;
-  // 다른 재생 중인 영상 중지
-  document.querySelectorAll('.yt-area.playing').forEach(a => {
-    a.classList.remove('playing');
-    const f = a.querySelector('.yt-frame');
-    if (f) f.src = '';
-  });
-  // iframe src 세팅 — enablejsapi=1 로 모바일 자동재생 허용
-  const frame = area.querySelector('.yt-frame');
-  if (!frame) return;
-  frame.src = \`https://www.youtube.com/embed/\${ytId}?autoplay=1&mute=0&playsinline=1&rel=0&modestbranding=1&controls=1&enablejsapi=1\`;
-  frame.onload = () => frame.classList.add('loaded');
+
+  // 다른 플레이어 모두 중지
+  Object.values(ytPlayers).forEach(p => { try { p.pauseVideo(); } catch(e){} });
+  document.querySelectorAll('.yt-area.playing').forEach(a => a.classList.remove('playing'));
+  document.querySelectorAll('.unmute-btn').forEach(b => b.classList.remove('show'));
+
   area.classList.add('playing');
   area.onclick = null;
+
+  const containerId = 'ytp-' + sid;
+
+  // 이미 플레이어가 있으면 재생만
+  if (ytPlayers[sid]) {
+    try {
+      ytPlayers[sid].muted ? ytPlayers[sid].unMute() : null;
+      ytPlayers[sid].playVideo();
+    } catch(e) {}
+    return;
+  }
+
+  // YT API 준비됐으면 바로, 아니면 onYouTubeIframeAPIReady 이후
+  const create = () => {
+    ytPlayers[sid] = new YT.Player(containerId, {
+      videoId: ytId,
+      playerVars: {
+        autoplay:       1,
+        mute:           1,   // 브라우저 정책 우회 — 먼저 음소거로 시작
+        playsinline:    1,
+        controls:       1,
+        rel:            0,
+        modestbranding: 1,
+        origin: location.origin,
+      },
+      events: {
+        onReady(e) {
+          e.target.playVideo();
+          // 음소거 해제 버튼 표시
+          const btn = document.getElementById('unm-' + sid);
+          if (btn) btn.classList.add('show');
+        },
+        onStateChange(e) {
+          // 재생 중일 때 썸네일/플레이버튼 숨기기
+          if (e.data === YT.PlayerState.PLAYING) {
+            const t = document.getElementById('ytt-' + sid);
+            const b = document.getElementById('ypb-' + sid);
+            if (t) t.style.opacity = '0';
+            if (b) b.style.opacity = '0';
+          }
+        },
+      },
+    });
+  };
+
+  if (window.YT && window.YT.Player) {
+    create();
+  } else {
+    const prev = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => { if(prev) prev(); create(); };
+  }
+}
+
+function unmuteYt(e, sid) {
+  e.stopPropagation();
+  const p = ytPlayers[sid];
+  if (!p) return;
+  try {
+    p.unMute();
+    p.setVolume(100);
+    document.getElementById('unm-' + sid)?.classList.remove('show');
+  } catch(err) {}
 }
 
 function filterFeed(btn, cat) {
