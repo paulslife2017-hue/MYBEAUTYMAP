@@ -710,7 +710,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
 <!-- 지도 화면: 풀스크린 -->
 <section id="mapScreen">
   <!-- 지도 자체 -->
-  <div id="naverMap" style="width:100%;height:100%"></div>
+  <div id="naverMap"></div>
 
   <!-- 카테고리 필터 (지도 위 floating) -->
   <div class="map-cat-bar" id="mapCatBar">
