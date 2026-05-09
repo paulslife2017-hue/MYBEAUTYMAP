@@ -2,8 +2,8 @@ module.exports = {
   apps: [
     {
       name: 'mybeautyshop',
-      script: 'npx',
-      args: 'wrangler pages dev dist --ip 0.0.0.0 --port 3000',
+      script: 'node',
+      args: 'dist/index.js',
       env: {
         NODE_ENV: 'development',
         PORT: 3000
