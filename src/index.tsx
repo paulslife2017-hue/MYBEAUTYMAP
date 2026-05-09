@@ -461,9 +461,10 @@ html,body{height:100%;background:var(--bg);color:#fff;
 #feedScreen{position:fixed;
   top:calc(var(--hd)+var(--cat)+var(--sb,0px));
   left:0;right:0;
-  height:calc(100dvh - var(--hd) - var(--cat) - var(--nav) - var(--sb,0px));
+  /* tabbar = height(--nav) + padding-bottom(safe-area) 이므로 bottom으로 지정 */
+  bottom:calc(var(--nav) + var(--safe));
   overflow:hidden;
-  transition:top .3s cubic-bezier(.32,1,.23,1), height .3s cubic-bezier(.32,1,.23,1);
+  transition:top .3s cubic-bezier(.32,1,.23,1), bottom .3s cubic-bezier(.32,1,.23,1);
   display:none;}
 #feedScreen.active{display:block;}
 /* 피드 내부 슬라이더 컨테이너 */
@@ -1161,15 +1162,17 @@ let feedIdx    = 0;    // 현재 보이는 인덱스
 let feedSliderH = 0;   // 슬라이더 높이 (px)
 
 function feedCardHTML(s) {
+  // 썸네일: maxresdefault(1280×720 고화질) 우선, 실패 시 hqdefault → mqdefault 폴백
   const thumb = s.youtubeId
-    ? 'https://img.youtube.com/vi/' + s.youtubeId + '/hqdefault.jpg'
+    ? 'https://img.youtube.com/vi/' + s.youtubeId + '/maxresdefault.jpg'
     : (s.thumbnail || '');
-  // onerror: data-fb 속성에 폴백 URL 저장 → 따옴표 충돌 완전 회피
-  const fb = s.youtubeId ? 'https://img.youtube.com/vi/' + s.youtubeId + '/mqdefault.jpg' : '';
+  const fb1 = s.youtubeId ? 'https://img.youtube.com/vi/' + s.youtubeId + '/hqdefault.jpg' : '';
+  const fb2 = s.youtubeId ? 'https://img.youtube.com/vi/' + s.youtubeId + '/mqdefault.jpg' : '';
   const ytArea = s.youtubeId
     ? '<div class="yt-area" id="yta-' + s.id + '" data-ytid="' + s.youtubeId + '" data-sid="' + s.id + '">'
         + '<img class="yt-thumb" id="ytt-' + s.id + '" src="' + thumb + '" loading="lazy"'
-        + ' data-fb="' + fb + '" onerror="this.onerror=null;this.src=this.dataset.fb">'
+        + ' data-fb1="' + fb1 + '" data-fb2="' + fb2 + '"'
+        + ' onerror="var s=this.src;if(s.indexOf(\'maxresdefault\')>-1){this.src=this.dataset.fb1;}else if(s.indexOf(\'hqdefault\')>-1){this.src=this.dataset.fb2;}else{this.onerror=null;}">'
         + '<div class="yt-play-btn" id="ypb-' + s.id + '"></div>'
         + '<div class="yt-player"  id="ytp-' + s.id + '"></div>'
         + '<button class="unmute-btn" id="unm-' + s.id + '" data-sid="' + s.id + '">🔇 탭하여 소리켜기</button>'
@@ -1222,17 +1225,17 @@ function feedGoTo(idx, animate) {
 }
 
 function getFeedHeight() {
-  // CSS 변수 파싱 (env() 함수는 parseFloat로 못 읽으므로 실제 계산된 픽셀값 사용)
+  // feedScreen이 bottom:calc(--nav + --safe) 방식이므로
+  // tabbar 실측 높이(env() safe-area 포함)를 직접 재서 계산
   const style = getComputedStyle(document.documentElement);
   const hd  = parseFloat(style.getPropertyValue('--hd'))  || 50;
   const cat = parseFloat(style.getPropertyValue('--cat')) || 44;
-  const nav = parseFloat(style.getPropertyValue('--nav')) || 60;
   const sb  = parseFloat(style.getPropertyValue('--sb'))  || 0;
-  // --safe는 env() 함수이므로 직접 계산: tabbar의 padding-bottom으로 측정
+  // tabbar.getBoundingClientRect().height = --nav(60) + safe-area padding
   const tabbar = document.querySelector('.tabbar');
-  const safe = tabbar ? Math.max(0, tabbar.offsetHeight - nav) : 0;
-  const h = window.innerHeight - hd - cat - nav - sb - safe;
-  return Math.max(h, 200); // 최소 200px 보장
+  const tabH = tabbar ? tabbar.getBoundingClientRect().height : 60;
+  const h = window.innerHeight - hd - cat - sb - tabH;
+  return Math.max(h, 200);
 }
 
 // 이벤트 리스너 중복 등록 방지용 플래그
