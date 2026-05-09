@@ -1188,11 +1188,7 @@ function feedCardHTML(s) {
   const fb2 = s.youtubeId ? 'https://img.youtube.com/vi/' + s.youtubeId + '/mqdefault.jpg' : '';
   // onerror: maxres → hq → mq 3단계 폴백 (각 단계마다 onerror 재등록)
   const onerrorAttr = s.youtubeId
-    ? 'onerror="(function(img){'
-      + 'if(img.src===img.dataset.fb2){img.onerror=null;img.style.opacity=\'0.4\';return;}'
-      + 'if(img.src===img.dataset.fb1){img.src=img.dataset.fb2;return;}'
-      + 'img.src=img.dataset.fb1;'
-      + '})(this)"'
+    ? 'onerror="(function(i){if(i.src===i.dataset.fb2){i.onerror=null;return;}if(i.src===i.dataset.fb1){i.src=i.dataset.fb2;return;}i.src=i.dataset.fb1;})(this)"'
     : '';
   const ytArea = s.youtubeId
     ? '<div class="yt-area" id="yta-' + s.id + '" data-ytid="' + s.youtubeId + '" data-sid="' + s.id + '">'
@@ -1203,7 +1199,7 @@ function feedCardHTML(s) {
         + '<button class="unmute-btn" id="unm-' + s.id + '" data-sid="' + s.id + '">🔇 탭하여 소리켜기</button>'
         + '<div class="yt-error-overlay" id="yte-' + s.id + '">'
           + '<div class="yt-err-msg">이 영상은 외부 재생이<br>제한되어 있어요</div>'
-          + '<button class="yt-err-btn" onclick="window.open(\'https://www.youtube.com/watch?v=' + s.youtubeId + '\',\'_blank\')" >'
+          + '<button class="yt-err-btn" data-yturl="https://www.youtube.com/watch?v=' + s.youtubeId + '">'
             + '<i class="fab fa-youtube"></i> YouTube에서 보기'
           + '</button>'
         + '</div>'
@@ -1323,6 +1319,13 @@ function feedInitSlider() {
     if (unmuteBtn) {
       e.stopPropagation();
       unmuteYt(e, unmuteBtn.dataset.sid);
+      return;
+    }
+    const errBtn = e.target.closest('.yt-err-btn');
+    if (errBtn) {
+      e.stopPropagation();
+      const url = errBtn.dataset.yturl;
+      if (url) window.open(url, '_blank');
       return;
     }
     if (Math.abs(feedTsDiff) > 5) return;
