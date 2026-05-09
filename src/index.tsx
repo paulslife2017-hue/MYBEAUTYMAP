@@ -826,7 +826,15 @@ function switchTab(tab) {
     document.getElementById(t+'Screen').classList.toggle('active', t===tab);
   });
   document.getElementById('catBar').classList.toggle('show', tab==='feed');
-  if (tab==='map') { closeMapPopup(); setTimeout(initMap, 300); }
+  if (tab==='map') {
+    closeMapPopup();
+    // 컨테이너 크기 강제 지정 후 초기화
+    const ms = document.getElementById('mapScreen');
+    const nm = document.getElementById('naverMap');
+    nm.style.width  = ms.offsetWidth  + 'px';
+    nm.style.height = ms.offsetHeight + 'px';
+    setTimeout(initMap, 100);
+  }
   if (tab==='feed') closeMapPopup();
 }
 
