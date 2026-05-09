@@ -1440,6 +1440,17 @@ window.onload = async () => {
   });
   map.addListener('click', closePopup);
 
+  // ── 테스트용 강남역 더미 핀 ──
+  new naver.maps.Marker({
+    position: new naver.maps.LatLng(37.4979, 127.0276),
+    map: map,
+    title: '강남역 테스트',
+    icon: {
+      content: '<div style="background:#FF4D7D;color:#fff;padding:6px 10px;border-radius:8px;font-size:13px;font-weight:700;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.4)">📍 강남역 테스트</div>',
+      anchor: new naver.maps.Point(60, 20),
+    }
+  });
+
   // 샵 데이터 로드
   const res = await fetch('/api/shops/all');
   allShops = await res.json();
