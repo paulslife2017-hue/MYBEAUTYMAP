@@ -1506,20 +1506,40 @@ function openCard(shop) {
 /* 마커 생성 */
 function makeMarker(shop) {
   const color = CAT_COLOR[shop.category] || '#FF4D7D';
-  const wrap  = document.createElement('div');
-  wrap.className = 'nv-pin';
-  wrap.innerHTML = \`
-    <div class="nv-pin-label" style="background:\${color}">\${shop.name}</div>
-    <div class="nv-pin-dot"   style="background:\${color}"></div>
-  \`;
-  wrap.onclick = (e) => { e.stopPropagation(); openCard(shop); };
-  return new naver.maps.CustomOverlay({
+  const html = \`<div style="
+    display:inline-flex;flex-direction:column;align-items:center;
+    cursor:pointer;transform-origin:bottom center;transition:transform .15s;
+  " onmouseenter="this.style.transform='scale(1.1)'" onmouseleave="this.style.transform='scale(1)'">
+    <div style="
+      background:\${color};color:#fff;
+      font-size:11px;font-weight:800;
+      padding:5px 12px;border-radius:999px;
+      white-space:nowrap;
+      box-shadow:0 3px 12px rgba(0,0,0,.5);
+      border:2px solid rgba(255,255,255,.4);
+      letter-spacing:-.2px;line-height:1;
+      font-family:-apple-system,sans-serif;
+    ">\${shop.name}</div>
+    <div style="
+      width:6px;height:6px;border-radius:50%;
+      background:\${color};margin-top:3px;
+      box-shadow:0 0 0 2px rgba(255,255,255,.3);
+    "></div>
+  </div>\`;
+  const marker = new naver.maps.Marker({
     position: new naver.maps.LatLng(shop.lat, shop.lng),
-    content:  wrap,
-    anchor:   new naver.maps.Point(50, 34),
-    map:      map,
-    zIndex:   shop.featured ? 100 : 10,
+    map: map,
+    icon: {
+      content: html,
+      anchor: new naver.maps.Point(0, 0),
+    },
+    zIndex: shop.featured ? 100 : 10,
   });
+  naver.maps.Event.addListener(marker, 'click', (e) => {
+    e.domEvent?.stopPropagation?.();
+    openCard(shop);
+  });
+  return marker;
 }
 
 /* 마커 렌더링 */
