@@ -457,21 +457,19 @@ html,body{height:100%;background:var(--bg);color:#fff;
 .cp.active{background:var(--pink);border-color:var(--pink);color:#fff;
   box-shadow:0 2px 10px rgba(255,77,125,.35)}
 
-/* 화면 */
-#feedScreen{position:fixed;
-  top:calc(var(--hd)+var(--cat)+var(--sb,0px));
+/* 피드 화면 */
+#feedScreen{
+  position:fixed;
+  top:calc(var(--hd) + var(--cat) + var(--sb,0px));
   left:0;right:0;
-  /* height: 뷰포트 - 상단(헤더+카탈로그+검색바) - 하단(탭바+safe-area) */
   height:calc(100dvh - var(--hd) - var(--cat) - var(--sb,0px) - var(--nav) - env(safe-area-inset-bottom,0px));
-  overflow:hidden;
-  transition:top .3s cubic-bezier(.32,1,.23,1), height .3s cubic-bezier(.32,1,.23,1);
-  display:none;}
+  overflow-y:scroll;
+  scroll-snap-type:y mandatory;
+  -webkit-overflow-scrolling:touch;
+  scrollbar-width:none;
+  display:none;background:#000;}
+#feedScreen::-webkit-scrollbar{display:none;}
 #feedScreen.active{display:block;}
-/* 피드 내부 슬라이더 컨테이너 */
-#feedSlider{position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;overflow:hidden;}
-/* 피드 트랙: 세로로 카드들이 나열되는 실제 컨테이너 */
-#feedTrack{position:absolute;top:0;left:0;right:0;
-  transition:transform .35s cubic-bezier(.32,1,.23,1);will-change:transform;}
 #mapScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:var(--nav);
   display:none;}
 #mapScreen.active{display:block;}
@@ -562,42 +560,25 @@ html,body{height:100%;background:var(--bg);color:#fff;
 .tab.active{color:#fff}
 .tab.active i{color:var(--pink);transform:scale(1.1)}
 
-/* 피드 아이템 (모바일: 틱톡 풀스크린) */
-.fi{background:#000;display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;}
+/* 피드 카드 */
+.fi{
+  scroll-snap-align:start;
+  scroll-snap-stop:always;
+  height:calc(100dvh - var(--hd) - var(--cat) - var(--sb,0px) - var(--nav) - env(safe-area-inset-bottom,0px));
+  flex-shrink:0;
+  display:flex;flex-direction:column;overflow:hidden;background:#000;
+}
 .yt-area{flex:1;position:relative;overflow:hidden;background:#000;cursor:pointer}
-/* 썸네일 이미지 */
-.yt-thumb{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:1;pointer-events:none}
-/* 플레이 버튼 — 가운데 빨간 유튜브 스타일 */
+.yt-thumb{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none}
 .yt-play-btn{
   position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-  z-index:2;pointer-events:none;
-  background:linear-gradient(to top,rgba(0,0,0,.5) 0%,transparent 50%)}
+  pointer-events:none;
+  background:linear-gradient(to top,rgba(0,0,0,.55) 0%,transparent 55%)}
 .yt-play-btn::after{
-  content:'';
-  width:72px;height:72px;border-radius:50%;
-  background:rgba(255,0,0,.85);
-  box-shadow:0 4px 20px rgba(0,0,0,.6)}
+  content:'';width:68px;height:68px;border-radius:50%;
+  background:rgba(220,0,0,.88);box-shadow:0 4px 20px rgba(0,0,0,.5)}
 .yt-play-btn::before{
-  content:'▶';position:absolute;
-  font-size:26px;color:#fff;margin-left:6px;z-index:1}
-/* 임베드 불가 영상 안내 */
-.yt-error-overlay{
-  position:absolute;inset:0;z-index:10;
-  display:none;flex-direction:column;align-items:center;justify-content:center;
-  background:rgba(0,0,0,.72);gap:12px;padding:20px;text-align:center;
-}
-.yt-error-overlay.show{display:flex}
-.yt-error-overlay .yt-err-msg{
-  font-size:13px;color:rgba(255,255,255,.75);line-height:1.5;
-}
-.yt-error-overlay .yt-err-btn{
-  display:inline-flex;align-items:center;gap:7px;
-  background:#FF0000;color:#fff;border:none;
-  border-radius:999px;padding:10px 20px;
-  font-size:14px;font-weight:700;cursor:pointer;
-  font-family:-apple-system,sans-serif;
-}
-.yt-error-overlay .yt-err-btn i{font-size:16px;}
+  content:'▶';position:absolute;font-size:24px;color:#fff;margin-left:5px}
 
 /* 업체 정보 바 */
 .shop-bar{flex-shrink:0;padding:18px 14px 14px;
@@ -1127,10 +1108,6 @@ function switchTab(tab) {
   }
   if (tab==='feed') {
     closeMapPopup();
-    // 피드 탭 전환 시 레이아웃 재계산 (다른 탭에서 돌아올 때 크기 틀어짐 방지)
-    if (feedShops.length > 0) {
-      requestAnimationFrame(() => feedApplyLayout());
-    }
   }
 }
 
@@ -1160,33 +1137,28 @@ let feedCat = 'all';
 let searchQ = '';
 let searchTimer = null;
 
-/* ═══════════════════════════════════════════════════════
-   피드: JS 슬라이더 (scroll-snap 완전 제거, 터치/클릭 직접 처리)
-═══════════════════════════════════════════════════════ */
-let feedShops  = [];   // 현재 로드된 업체 목록
-let feedIdx    = 0;    // 현재 보이는 인덱스
-let feedSliderH = 0;   // 슬라이더 높이 (px)
+// ─────────────────────────────────────────────
+// 피드: CSS scroll-snap 방식 (JS 높이계산 없음)
+// ─────────────────────────────────────────────
 
 function feedCardHTML(s) {
   const thumb = s.youtubeId
     ? 'https://img.youtube.com/vi/' + s.youtubeId + '/hqdefault.jpg'
     : (s.thumbnail || '');
-  // 탭하면 유튜브 앱/브라우저로 바로 열기 — iframe 없음, 로딩 없음
   const ytArea = s.youtubeId
-    ? '<div class="yt-area" id="yta-' + s.id + '" data-ytid="' + s.youtubeId + '" data-sid="' + s.id + '">'
-        + '<img class="yt-thumb" src="' + thumb + '" loading="lazy" onerror="this.onerror=null;this.style.opacity=\'0.3\'">'
+    ? '<div class="yt-area" data-ytid="' + s.youtubeId + '">'
+        + '<img class="yt-thumb" src="' + thumb + '" loading="lazy" onerror="this.onerror=null;this.style.opacity=.2">'
         + '<div class="yt-play-btn"></div>'
       + '</div>'
     : '<div class="yt-area no-video">'
         + (thumb ? '<img class="yt-thumb" src="' + thumb + '" loading="lazy">' : '')
       + '</div>';
-  // curShop: JSON을 data 속성에 저장 → onclick 따옴표 충돌 회피
   const shopJson = JSON.stringify({id:s.id, name:s.name, smartPlaceUrl:s.smartPlaceUrl})
-                       .replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+                     .replace(/&/g,'&amp;').replace(/"/g,'&quot;');
   const bookBtn = s.smartPlaceUrl
     ? '<button class="btn-book" data-shop="' + shopJson + '" onclick="curShop=JSON.parse(this.dataset.shop);openInapp()"><i class="fas fa-calendar-check"></i><span>예약하기</span></button>'
-    : '<div style="flex-shrink:0;width:64px;text-align:center;font-size:10px;color:rgba(255,255,255,.3)">예약링크<br>없음</div>';
-  return '<div class="fi" id="fi-' + s.id + '">'
+    : '';
+  return '<div class="fi">'
     + ytArea
     + '<div class="shop-bar">'
       + '<div class="shop-bar-info">'
@@ -1201,256 +1173,40 @@ function feedCardHTML(s) {
   + '</div>';
 }
 
-function feedGoTo(idx, animate, skipPause?) { // eslint-disable-line
-  const track = document.getElementById('feedTrack');
-  if (!track) return;
-  const n = feedShops.length;
-  if (n === 0) return;
-  const prevIdx = feedIdx;
-  feedIdx = Math.max(0, Math.min(idx, n - 1));
-  track.style.transition = animate === false ? 'none' : 'transform .35s cubic-bezier(.32,1,.23,1)';
-  track.style.transform  = 'translateY(' + (-feedIdx * feedSliderH) + 'px)';
-  // 카드가 실제로 바뀔 때만 이전 iframe 정지 (src='' 방식)
-  // iframe 없으므로 스와이프 시 별도 정지 처리 불필요
-  if (skipPause || feedIdx === prevIdx) return;
-}
-
-function getFeedGeometry() {
-  // DOM 실측값으로 top/height 계산
-  // catBar가 display:none(맵 탭)일 때는 CSS 변수 폴백 사용
-  const style  = getComputedStyle(document.documentElement);
-  const hdPx   = parseFloat(style.getPropertyValue('--hd'))  || 50;
-  const catPx  = parseFloat(style.getPropertyValue('--cat')) || 44;
-  const sbPx   = parseFloat(style.getPropertyValue('--sb'))  || 0;
-  const navPx  = parseFloat(style.getPropertyValue('--nav')) || 60;
-
-  const catBar = document.getElementById('catBar');
-  const tabbar = document.querySelector('.tabbar');
-
-  // catBar가 보이면 실측, 숨겨져 있으면 CSS 변수로 계산
-  const catBarVisible = catBar && getComputedStyle(catBar).display !== 'none';
-  const catBottom = catBarVisible
-    ? catBar.getBoundingClientRect().bottom
-    : (hdPx + catPx + sbPx);
-
-  // tabbar 실측 (없으면 폴백)
-  const tabTop = tabbar
-    ? tabbar.getBoundingClientRect().top
-    : (window.innerHeight - navPx);
-
-  const top    = Math.round(catBottom);
-  const height = Math.round(tabTop - catBottom);
-  return { top, height: Math.max(height, 200) };
-}
-
-function getFeedHeight() {
-  return getFeedGeometry().height;
-}
-
-// 이벤트 리스너 중복 등록 방지용 플래그
-let feedSliderEventsAttached = false;
-
-function feedApplyLayout() {
-  // DOM 실측값으로 feedScreen top/height 강제 설정
-  const { top, height } = getFeedGeometry();
-  feedSliderH = height;
-  const screen = document.getElementById('feedScreen');
-  if (screen) {
-    screen.style.top    = top + 'px';
-    screen.style.height = height + 'px';
-  }
-  const track = document.getElementById('feedTrack');
-  if (!track) return;
-  track.style.height = (feedSliderH * feedShops.length) + 'px';
-  [...track.querySelectorAll('.fi')].forEach((fi, i) => {
-    fi.style.height   = feedSliderH + 'px';
-    fi.style.position = 'absolute';
-    fi.style.top      = (i * feedSliderH) + 'px';
-    fi.style.left = '0'; fi.style.right = '0';
-  });
-  feedGoTo(feedIdx, false);
-}
-
-function feedInitSlider() {
-  const slider = document.getElementById('feedSlider');
-  if (!slider) return;
-
-  // 항상 getFeedHeight() 우선 사용 (clientHeight는 보조 검증용)
-  feedSliderH = getFeedHeight();
-
-  // 혹시 계산값이 이상하면 최대 10회 재시도 (50ms 간격)
-  if (feedSliderH <= 100) {
-    if ((feedInitSlider._retry = (feedInitSlider._retry || 0) + 1) < 10) {
-      setTimeout(feedInitSlider, 50);
-      return;
-    }
-  }
-  feedInitSlider._retry = 0;
-
-  feedApplyLayout();
-
-  // 이벤트 리스너는 슬라이더가 새로 생성될 때만 등록 (중복 방지)
-  if (feedSliderEventsAttached) return;
-  feedSliderEventsAttached = true;
-
-  const screen = document.getElementById('feedScreen');
-
-  // ── 터치 상태 변수 ──
-  let tsX0 = 0, tsY0 = 0;   // touchstart 좌표
-  let tsDy = 0;              // 누적 Y 이동량
-  let tsTarget = null;       // touchstart 타겟 (탭 판단용)
-  let blockClick = false;    // 유령 click 차단 플래그
-
-  // ── touchstart ──
-  screen.addEventListener('touchstart', e => {
-    const t = e.touches[0];
-    tsX0 = t.clientX;
-    tsY0 = t.clientY;
-    tsDy = 0;
-    tsTarget = e.target;
-    blockClick = false;
-    feedTsDiff = 0;
-  }, {passive: true});
-
-  // ── touchmove: 세로 스와이프만 트랙 이동 ──
-  screen.addEventListener('touchmove', e => {
-    const dy = e.touches[0].clientY - tsY0;
-    const dx = e.touches[0].clientX - tsX0;
-    if (Math.abs(dy) >= Math.abs(dx)) {
-      tsDy = dy;
-      feedTsDiff = dy;
-      const track = document.getElementById('feedTrack');
-      if (track) {
-        track.style.transition = 'none';
-        track.style.transform  = 'translateY(' + (-feedIdx * feedSliderH + dy) + 'px)';
-      }
-    }
-  }, {passive: true});
-
-  // ── touchend: 탭 vs 스와이프 ──
-  screen.addEventListener('touchend', e => {
-    const movedY = Math.abs(tsDy);
-    const movedX = Math.abs(e.changedTouches[0].clientX - tsX0);
-    const isTap  = movedY < 15 && movedX < 15;
-
-    if (!isTap) {
-      // 스와이프
-      if (movedY > 40) feedGoTo(tsDy < 0 ? feedIdx + 1 : feedIdx - 1, true);
-      else              feedGoTo(feedIdx, true, true);
-      tsDy = 0; feedTsDiff = 0; tsTarget = null;
-      return;
-    }
-
-    // 탭: track snap
-    const track = document.getElementById('feedTrack');
-    if (track) {
-      track.style.transition = 'transform .35s cubic-bezier(.32,1,.23,1)';
-      track.style.transform  = 'translateY(' + (-feedIdx * feedSliderH) + 'px)';
-    }
-
-    if (tsTarget) {
-      if (tsTarget.closest('.btn-book')) {
-        tsDy = 0; feedTsDiff = 0; tsTarget = null; return;
-      }
-      const area = tsTarget.closest('.yt-area');
-      if (area && !area.classList.contains('no-video')) {
-        blockClick = true;
-        playYt(area);  // 유튜브 바로 열기
-        tsDy = 0; feedTsDiff = 0; tsTarget = null; return;
-      }
-    }
-    tsDy = 0; feedTsDiff = 0; tsTarget = null;
-  }, {passive: true});
-
-  // ── click: PC 마우스 처리 ──
-  screen.addEventListener('click', e => {
-    if (blockClick) { blockClick = false; e.stopPropagation(); return; }
-    const area = (e.target as HTMLElement).closest('.yt-area');
-    if (area && !area.classList.contains('no-video')) playYt(area);
-  });
-
-  // ── 마우스 휠 (PC) ──
-  let wheelTmr;
-  screen.addEventListener('wheel', e => {
-    e.preventDefault();
-    clearTimeout(wheelTmr);
-    wheelTmr = setTimeout(() => {
-      feedGoTo(e.deltaY > 0 ? feedIdx + 1 : feedIdx - 1, true);
-    }, 80);
-  }, {passive: false});
-
-  // ── 화면 크기 변경 ──
-  window.addEventListener('resize', () => {
-    if (document.getElementById('feedScreen').classList.contains('active')) {
-      feedApplyLayout();
-    }
-  });
-}
-
-// 클릭/드래그 구분용 전역 변수 (feedInitSlider 밖에서도 접근 가능하게)
-let feedTsDiff = 0;
-
 async function loadFeed(cat='all', q='') {
   feedCat = cat;
-  feedIdx = 0;
-  const screen = document.getElementById('feedScreen');
-  screen.style.cssText = '';
+  const scr = document.getElementById('feedScreen');
 
-  // 기존 pc-wrapper 제거
-  document.getElementById('feed-pc-wrapper')?.remove();
+  scr.innerHTML = '<div class="feed-spin"><div class="spinner"></div></div>';
 
-  // 카테고리 필터가 바뀔 때 → 트랙/카드만 교체하므로
-  // 이벤트 리스너는 최초 1회만 등록 (feedSliderEventsAttached 플래그 유지)
-  // 단, feedScreen 자체가 재생성되지 않으므로 플래그 유지 OK
-
-  // 로딩 표시
-  screen.innerHTML = '<div id="feedSlider"><div class="feed-spin"><div class="spinner"></div></div></div>';
-
-  let url = '/api/shops?category=' + encodeURIComponent(cat === 'all' ? '' : cat) + '&shuffle=1';
+  let url = '/api/shops?category=' + encodeURIComponent(cat==='all'?'':cat) + '&shuffle=1';
   if (q) url += '&q=' + encodeURIComponent(q);
-  const res   = await fetch(url);
-  const shops = await res.json();
-  feedShops   = shops;
+  const shops = await fetch(url).then(r=>r.json());
 
   if (!shops.length) {
-    screen.innerHTML = '<div id="feedSlider"><div class="feed-empty"><i class="fas fa-search"></i><p>'
-      + (q ? '"' + q + '" 검색 결과가 없어요' : '등록된 샵이 없어요') + '</p></div></div>';
+    scr.innerHTML = '<div class="feed-empty"><i class="fas fa-search"></i><p>'
+      + (q ? '"'+q+'" 검색 결과가 없어요' : '등록된 샵이 없어요') + '</p></div>';
     return;
   }
 
-  screen.innerHTML =
-    '<div id="feedSlider">'
-    + '<div id="feedTrack">'
-    + shops.map(feedCardHTML).join('')
-    + '</div>'
-    + '</div>';
+  // 카드 렌더 — scroll-snap이 자동으로 스냅 처리
+  scr.innerHTML = shops.map(feedCardHTML).join('');
+  scr.scrollTop = 0;
 
-  // DOM 삽입 후 레이아웃 계산: rAF 2회 + 추가 100ms 보험
-  // (모바일에서 position:fixed 높이가 첫 프레임에 0을 반환하는 경우 대응)
-  feedInitSlider._retry = 0;
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      feedInitSlider();
-      // 추가 보험: 150ms 후 한 번 더 레이아웃 재적용
-      setTimeout(() => {
-        if (feedShops.length > 0 && document.getElementById('feedTrack')) {
-          feedApplyLayout();
-        }
-      }, 150);
+  // 클릭 이벤트 (최초 1회만 등록)
+  if (!scr._feedEvt) {
+    scr._feedEvt = true;
+    scr.addEventListener('click', (e: any) => {
+      const area = e.target.closest('.yt-area');
+      if (area && !area.classList.contains('no-video') && area.dataset.ytid) {
+        window.open('https://www.youtube.com/watch?v=' + area.dataset.ytid, '_blank');
+      }
     });
-  });
-}
-
-// 탭 → 유튜브 앱/브라우저로 바로 열기 (iframe 없음, 로딩 없음)
-function playYt(area) {
-  if (!area || area.classList.contains('no-video')) return;
-  const ytId = area.dataset.ytid;
-  if (!ytId) return;
-  window.open('https://www.youtube.com/watch?v=' + ytId, '_blank');
+  }
 }
 
 function filterFeed(btn, cat) {
-  document.querySelectorAll('.cp').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.cp').forEach((b:any)=>b.classList.remove('active'));
   btn.classList.add('active');
   loadFeed(cat, searchQ);
 }
