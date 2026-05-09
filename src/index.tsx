@@ -1916,6 +1916,52 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0a;
   font-family:inherit;letter-spacing:-.2px;transition:opacity .15s;
 }
 .btn-reserve:hover{opacity:.88}
+
+/* ── 지도 인앱 브라우저 시트 ── */
+.map-inapp-bg{
+  display:none;position:fixed;inset:0;z-index:900;
+  background:rgba(0,0,0,.55);backdrop-filter:blur(2px);
+}
+.map-inapp-bg.show{display:block}
+.map-inapp-sheet{
+  position:fixed;left:0;right:0;bottom:0;z-index:901;
+  height:92vh;
+  background:#1a1a1a;border-radius:20px 20px 0 0;
+  display:flex;flex-direction:column;
+  transform:translateY(100%);transition:transform .32s cubic-bezier(.22,.68,0,1.2);
+}
+.map-inapp-sheet.show{transform:translateY(0)}
+.map-inapp-handle{
+  width:36px;height:4px;border-radius:2px;
+  background:rgba(255,255,255,.2);margin:10px auto 0;flex-shrink:0;
+}
+.map-inapp-bar{
+  display:flex;align-items:center;padding:10px 14px;
+  border-bottom:1px solid rgba(255,255,255,.08);flex-shrink:0;gap:6px;
+}
+.map-inapp-title{
+  flex:1;font-size:14px;font-weight:700;color:#fff;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.map-inapp-btn{
+  width:34px;height:34px;border-radius:10px;border:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  color:#fff;flex-shrink:0;
+}
+.map-inapp-btn-ext{background:rgba(255,255,255,.1)}
+.map-inapp-btn-ext:active{background:rgba(255,255,255,.2)}
+.map-inapp-btn-close{background:rgba(255,77,125,.25)}
+.map-inapp-btn-close:active{background:rgba(255,77,125,.45)}
+.map-inapp-loader{
+  flex-shrink:0;height:3px;background:rgba(255,255,255,.06);overflow:hidden;
+}
+.map-inapp-loader::after{
+  content:'';display:block;height:100%;width:40%;
+  background:#03C75A;animation:mload 1s ease-in-out infinite alternate;
+}
+@keyframes mload{from{transform:translateX(-100%)}to{transform:translateX(350%)}}
+.map-inapp-loader.done{display:none}
+.map-inapp-iframe{flex:1;border:none;background:#fff;width:100%;}
 </style>
 </head>
 <body>
@@ -1963,6 +2009,23 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0a;
   </div>
 </div>
 
+<!-- 인앱 브라우저 시트 (예약하기) -->
+<div class="map-inapp-bg" id="mapInappBg" onclick="closeMapInapp()"></div>
+<div class="map-inapp-sheet" id="mapInappSheet">
+  <div class="map-inapp-handle"></div>
+  <div class="map-inapp-bar">
+    <span class="map-inapp-title" id="mapInappTitle">예약하기</span>
+    <button class="map-inapp-btn map-inapp-btn-ext" onclick="openMapInappExternal()" title="외부 브라우저로 열기">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+    </button>
+    <button class="map-inapp-btn map-inapp-btn-close" onclick="closeMapInapp()" title="닫기">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <div class="map-inapp-loader" id="mapInappLoader"></div>
+  <iframe class="map-inapp-iframe" id="mapInappFrame" src="" allowfullscreen></iframe>
+</div>
+
 <script src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=xjjg4490h8"></script>
 <script>
 const CAT_COLOR = {
@@ -2007,11 +2070,29 @@ function playVideo() {
 }
 
 /* ── 예약 (지도 트래킹 포함) ── */
+/* ── 지도 인앱 브라우저 ── */
+let mapInappUrl = '';
 function openReserve() {
   if (!curShop?.smartPlaceUrl) return;
-  // 지도 예약 트래킹
   fetch('/api/track/mapsp/' + curShop.id, { method: 'POST' }).catch(()=>{});
-  window.open(curShop.smartPlaceUrl, '_blank');
+  mapInappUrl = curShop.smartPlaceUrl;
+  document.getElementById('mapInappTitle').textContent = (curShop.name || '') + ' 예약하기';
+  const frame  = document.getElementById('mapInappFrame');
+  const loader = document.getElementById('mapInappLoader');
+  loader.classList.remove('done');
+  frame.src = '';
+  setTimeout(() => { frame.src = mapInappUrl; }, 30);
+  frame.onload = () => loader.classList.add('done');
+  document.getElementById('mapInappBg').classList.add('show');
+  document.getElementById('mapInappSheet').classList.add('show');
+}
+function closeMapInapp() {
+  document.getElementById('mapInappBg').classList.remove('show');
+  document.getElementById('mapInappSheet').classList.remove('show');
+  setTimeout(() => { document.getElementById('mapInappFrame').src = ''; }, 400);
+}
+function openMapInappExternal() {
+  if (mapInappUrl) window.open(mapInappUrl, '_blank', 'noopener');
 }
 
 /* ── 카드 열기 ── */
