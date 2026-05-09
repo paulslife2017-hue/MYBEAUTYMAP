@@ -381,8 +381,8 @@ html,body{height:100%;background:var(--bg);color:#fff;
 #feedScreen.active{display:block}
 #feedScreen::-webkit-scrollbar{display:none}
 #mapScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:var(--nav);
-  display:none;}
-#mapScreen.active{display:block}
+  display:none;flex-direction:column;}
+#mapScreen.active{display:flex}
 
 /* 하단탭 */
 .tabbar{position:fixed;bottom:0;left:0;right:0;z-index:300;height:var(--nav);
