@@ -40,6 +40,7 @@ function rowToShop(r: any) {
     phone:         r.phone ?? '',
     desc:          r.description ?? '',
     active:        r.active ?? true,
+    displayMode:   r.display_mode ?? 'both',
     views:         parseInt(r.view_cnt) || 0,
     feedSP:        parseInt(r.feed_sp)  || 0,
     mapSP:         parseInt(r.map_sp)   || 0,
@@ -172,15 +173,15 @@ app.post('/api/admin/shops', async (c) => {
   const rows = await sql`
     INSERT INTO shops
       (name, category, tags, price, address, district, lat, lng,
-       smart_place_url, youtube_id, featured, thumbnail, phone, description, active)
+       smart_place_url, youtube_id, featured, thumbnail, phone, description, active, display_mode)
     VALUES
       (${body.name ?? '새 업체'}, ${body.category ?? '피부관리'}, ${tags},
        ${body.price ?? ''}, ${body.address ?? ''}, ${body.district ?? ''},
        ${parseFloat(body.lat) || 37.5326}, ${parseFloat(body.lng) || 127.0246},
        ${body.smartPlaceUrl ?? ''}, ${extractYoutubeId(body.youtubeId ?? '')},
        ${body.featured ?? false},
-       ${body.thumbnail ?? 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=600&q=80'},
-       ${body.phone ?? ''}, ${body.desc ?? ''}, true)
+       ${body.thumbnail ?? ''},
+       ${body.phone ?? ''}, ${body.desc ?? ''}, true, ${body.displayMode ?? 'both'})
     RETURNING *
   `
   const shop = rows[0]
@@ -211,7 +212,8 @@ app.put('/api/admin/shops/:id', async (c) => {
       thumbnail       = ${body.thumbnail ?? ''},
       phone           = ${body.phone ?? ''},
       description     = ${body.desc ?? ''},
-      active          = ${body.active ?? true}
+      active          = ${body.active ?? true},
+      display_mode    = ${body.displayMode ?? 'both'}
     WHERE id = ${id}
     RETURNING *
   `
@@ -330,8 +332,17 @@ function favicon(c: any) {
   )
 }
 
+// 썸네일 파일 업로드 API (base64 → Data URL 저장)
+app.post('/api/admin/upload-thumbnail', async (c) => {
+  const body = await c.req.json()
+  const { shopId, dataUrl } = body
+  if (!dataUrl || !shopId) return c.json({ error: 'required' }, 400)
+  await sql`UPDATE shops SET thumbnail = ${dataUrl} WHERE id = ${shopId}`
+  return c.json({ ok: true, url: dataUrl })
+})
+
 app.get('/admin', (c) => c.html(adminPage()))
-app.get('/map-admin', (c) => c.html(mapAdminPage()))
+app.get('/map-admin', (c) => c.redirect('/admin'))
 app.get('/map', (c) => c.html(mapPage()))
 app.get('/', (c) => c.html(mainPage()))
 
@@ -2063,109 +2074,180 @@ function adminPage() { return `<!DOCTYPE html>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css"/>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{--pink:#FF4D7D;--green:#03C75A;--bg:#0a0a0a}
+:root{--pink:#FF4D7D;--green:#03C75A;--bg:#0a0a0a;--card:#141414;--border:rgba(255,255,255,.08)}
 body{font-family:'Pretendard',sans-serif;background:var(--bg);color:#fff;min-height:100vh}
 
-/* 상단바 */
-.top{background:rgba(16,16,16,.98);border-bottom:1px solid rgba(255,255,255,.07);
-  padding:0 16px;height:56px;display:flex;align-items:center;gap:12px;
+/* ── 상단바 ── */
+.top{background:rgba(16,16,16,.98);border-bottom:1px solid var(--border);
+  padding:0 16px;height:54px;display:flex;align-items:center;gap:12px;
   position:sticky;top:0;z-index:50;backdrop-filter:blur(10px)}
-.back{font-size:20px;color:rgba(255,255,255,.6);text-decoration:none}
+.back{font-size:20px;color:rgba(255,255,255,.5);text-decoration:none}
 .back:hover{color:#fff}
 .ttl{font-size:17px;font-weight:800;flex:1}
 .add-btn{background:var(--pink);color:#fff;border:none;border-radius:10px;
   padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;
-  display:flex;align-items:center;gap:6px;font-family:inherit}
+  display:flex;align-items:center;gap:6px;font-family:inherit;white-space:nowrap}
 
-/* 통계 */
-.wrap{max-width:600px;margin:0 auto;padding:16px}
-.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:20px}
-.sc{background:rgba(255,255,255,.04);border:1.5px solid rgba(255,255,255,.07);
-  border-radius:14px;padding:14px;text-align:center}
-.sn{font-size:26px;font-weight:800;color:#FF8FA3}
-.sl{font-size:11px;color:rgba(255,255,255,.3);margin-top:4px;font-weight:600}
+/* ── 탭바 ── */
+.tabbar{display:flex;border-bottom:1px solid var(--border);background:rgba(16,16,16,.9);
+  position:sticky;top:54px;z-index:40}
+.tabbtn{flex:1;padding:13px 4px;text-align:center;font-size:12px;font-weight:700;
+  color:rgba(255,255,255,.35);background:none;border:none;cursor:pointer;
+  font-family:inherit;border-bottom:2px solid transparent;transition:all .2s}
+.tabbtn.on{color:var(--pink);border-bottom-color:var(--pink)}
+.tabbtn i{display:block;font-size:16px;margin-bottom:3px}
 
-/* 탭 */
-.tabs{display:flex;gap:0;margin-bottom:16px;border:1.5px solid rgba(255,255,255,.1);
-  border-radius:12px;overflow:hidden}
-.atab{flex:1;padding:10px;text-align:center;font-size:13px;font-weight:700;
-  cursor:pointer;background:transparent;color:rgba(255,255,255,.4);
-  border:none;font-family:inherit;transition:all .2s}
-.atab.active{background:var(--pink);color:#fff}
+/* ── 내용 공통 ── */
+.wrap{max-width:640px;margin:0 auto;padding:14px 14px 80px}
 
-/* 샵 카드 */
-.shop-card{background:rgba(255,255,255,.04);border:1.5px solid rgba(255,255,255,.07);
-  border-radius:16px;padding:14px;margin-bottom:10px;position:relative}
-.sc-top{display:flex;align-items:center;gap:10px;margin-bottom:10px}
-.sc-thumb{width:52px;height:52px;border-radius:10px;object-fit:cover;flex-shrink:0}
+/* ── 요약 카드 ── */
+.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
+.sv{background:var(--card);border:1px solid var(--border);border-radius:14px;
+  padding:14px 8px;text-align:center}
+.sv-n{font-size:24px;font-weight:800;color:#FF8FA3}
+.sv-l{font-size:10px;color:rgba(255,255,255,.3);margin-top:3px;font-weight:600}
+
+/* ── 업체 카드 ── */
+.shop-card{background:var(--card);border:1px solid var(--border);
+  border-radius:16px;padding:14px;margin-bottom:10px}
+.sc-top{display:flex;gap:10px;align-items:flex-start}
+.sc-thumb{width:60px;height:60px;border-radius:10px;object-fit:cover;flex-shrink:0;
+  background:rgba(255,255,255,.06)}
 .sc-info{flex:1;min-width:0}
-.sc-name{font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sc-cat{font-size:11px;color:var(--pink);font-weight:600;margin-top:2px}
-.sc-addr{font-size:11px;color:rgba(255,255,255,.35);margin-top:2px;
+.sc-name{font-size:15px;font-weight:700;display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.sc-cat{font-size:11px;color:var(--pink);font-weight:600;margin-top:3px}
+.sc-addr{font-size:11px;color:rgba(255,255,255,.3);margin-top:2px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sc-btns{display:flex;gap:6px}
+.sc-mode{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;
+  padding:2px 7px;border-radius:6px;margin-top:4px}
+.mode-both{background:rgba(3,199,90,.12);color:var(--green)}
+.mode-feed{background:rgba(255,77,125,.12);color:var(--pink)}
+.mode-map{background:rgba(100,149,237,.15);color:#6495ed}
+.sc-fields{display:grid;grid-template-columns:1fr 1fr;gap:5px;
+  border-top:1px solid var(--border);margin-top:10px;padding-top:10px}
+.sc-f{font-size:10px;color:rgba(255,255,255,.3)}
+.sc-f strong{display:block;color:rgba(255,255,255,.65);font-size:11px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.sc-btns{display:flex;gap:6px;margin-top:10px}
 .btn-edit{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);
-  color:#fff;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;
-  cursor:pointer;font-family:inherit}
+  color:#fff;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;
+  cursor:pointer;font-family:inherit;flex:1}
 .btn-del{background:rgba(255,77,125,.1);border:1px solid rgba(255,77,125,.2);
-  color:var(--pink);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;
-  cursor:pointer;font-family:inherit}
-.sc-detail{border-top:1px solid rgba(255,255,255,.06);margin-top:10px;padding-top:10px;
-  display:grid;grid-template-columns:1fr 1fr;gap:6px}
-.sc-field{font-size:11px;color:rgba(255,255,255,.35)}
-.sc-field strong{display:block;color:rgba(255,255,255,.7);font-size:12px;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.badge-feat{background:rgba(255,77,125,.15);color:var(--pink);
-  font-size:10px;font-weight:700;padding:2px 6px;border-radius:5px;margin-left:6px}
-.badge-hide{background:rgba(255,255,255,.07);color:rgba(255,255,255,.3);
-  font-size:10px;font-weight:700;padding:2px 6px;border-radius:5px;margin-left:6px}
+  color:var(--pink);border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;
+  cursor:pointer;font-family:inherit;flex:1}
+.badge{font-size:10px;font-weight:700;padding:2px 6px;border-radius:5px}
+.b-feat{background:rgba(255,77,125,.15);color:var(--pink)}
+.b-hide{background:rgba(255,255,255,.07);color:rgba(255,255,255,.3)}
 
-/* 통계 탭 */
-.stat-row{background:rgba(255,255,255,.04);border:1.5px solid rgba(255,255,255,.07);
-  border-radius:14px;padding:12px;margin-bottom:8px}
-.sr-top{display:flex;align-items:center;gap:8px;margin-bottom:8px}
-.sr-name{font-size:14px;font-weight:700;flex:1}
-.sr-cat{font-size:10px;background:rgba(255,77,125,.12);color:#FF8FA3;
-  padding:2px 7px;border-radius:8px;font-weight:700}
-.sr-nums{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.sr-num{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);
-  border-radius:10px;padding:10px;text-align:center}
-.sr-n{font-size:20px;font-weight:800}
-.sr-l{font-size:10px;color:rgba(255,255,255,.3);margin-top:2px;font-weight:600}
+/* ── 통계 ── */
+.stat-card{background:var(--card);border:1px solid var(--border);
+  border-radius:16px;padding:12px;margin-bottom:10px;display:flex;gap:12px;align-items:center}
+.stat-thumb{width:56px;height:56px;border-radius:10px;object-fit:cover;flex-shrink:0}
+.stat-body{flex:1;min-width:0}
+.stat-top{display:flex;align-items:center;gap:6px;margin-bottom:8px}
+.stat-rank{width:22px;height:22px;border-radius:50%;font-size:11px;font-weight:800;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.rank1{background:#FFD700;color:#000}
+.rank2{background:#C0C0C0;color:#000}
+.rank3{background:#CD7F32;color:#fff}
+.rankN{background:rgba(255,255,255,.1);color:rgba(255,255,255,.5)}
+.stat-name{font-size:14px;font-weight:700;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stat-nums{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.stat-num{background:rgba(255,255,255,.04);border:1px solid var(--border);
+  border-radius:8px;padding:7px 4px;text-align:center}
+.sn-n{font-size:16px;font-weight:800}
+.sn-l{font-size:9px;color:rgba(255,255,255,.3);margin-top:1px;font-weight:600}
+.c-view .sn-n{color:#FF8FA3}
+.c-feed .sn-n{color:var(--green)}
+.c-map  .sn-n{color:#6495ed}
 
-/* 모달 */
-.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;
+/* ── 입점문의 ── */
+.inq-card{background:var(--card);border:1px solid var(--border);
+  border-radius:14px;padding:14px;margin-bottom:10px}
+.inq-top{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.inq-name{font-size:14px;font-weight:700}
+.inq-badge{font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;
+  background:rgba(255,77,125,.12);color:var(--pink)}
+.inq-time{font-size:10px;color:rgba(255,255,255,.25);margin-left:auto}
+.inq-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.inq-kv{font-size:11px;color:rgba(255,255,255,.35)}
+.inq-kv strong{color:rgba(255,255,255,.7);font-weight:600}
+.inq-msg{font-size:12px;color:rgba(255,255,255,.45);line-height:1.6;
+  border-top:1px solid var(--border);margin-top:8px;padding-top:8px}
+
+/* ── 모달 ── */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;
   display:flex;align-items:flex-end;justify-content:center}
 .modal-bg.hidden{display:none}
-.modal{background:#1a1a1a;border-radius:22px 22px 0 0;width:100%;max-width:600px;
-  max-height:90vh;overflow-y:auto;padding:20px 18px 40px}
+.modal{background:#1c1c1c;border-radius:22px 22px 0 0;width:100%;max-width:640px;
+  max-height:92vh;overflow-y:auto;padding:18px 16px 48px}
 .modal-handle{width:36px;height:4px;background:rgba(255,255,255,.1);
   border-radius:4px;margin:0 auto 16px}
 .modal-ttl{font-size:18px;font-weight:800;margin-bottom:16px}
 .field{margin-bottom:12px}
 .field label{display:block;font-size:11px;font-weight:700;
-  color:rgba(255,255,255,.4);margin-bottom:5px;text-transform:uppercase}
+  color:rgba(255,255,255,.4);margin-bottom:5px;letter-spacing:.3px}
 .field input,.field select,.field textarea{
   width:100%;background:rgba(255,255,255,.07);border:1.5px solid rgba(255,255,255,.1);
-  border-radius:10px;padding:10px 12px;color:#fff;font-size:14px;font-family:inherit;outline:none}
-.field input:focus,.field select,.field textarea:focus{border-color:var(--pink)}
+  border-radius:10px;padding:10px 12px;color:#fff;font-size:14px;
+  font-family:inherit;outline:none;transition:border-color .2s}
+.field input:focus,.field textarea:focus{border-color:var(--pink)}
+.field select option{background:#1c1c1c}
 .field textarea{resize:vertical;min-height:70px}
-.field select option{background:#1a1a1a}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .modal-actions{display:flex;gap:10px;margin-top:18px}
 .btn-save{flex:1;background:var(--pink);color:#fff;border:none;border-radius:12px;
   padding:14px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit}
 .btn-cancel{background:rgba(255,255,255,.07);color:rgba(255,255,255,.6);
   border:1.5px solid rgba(255,255,255,.1);border-radius:12px;
-  padding:14px 18px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit}
-.yt-preview{margin-top:6px;border-radius:8px;overflow:hidden;
+  padding:14px 18px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
+
+/* ── 썸네일 업로드 ── */
+.thumb-wrap{display:flex;gap:10px;align-items:flex-start}
+.thumb-preview{width:70px;height:70px;border-radius:10px;object-fit:cover;
+  background:rgba(255,255,255,.06);border:1.5px solid var(--border);flex-shrink:0}
+.thumb-right{flex:1;display:flex;flex-direction:column;gap:6px}
+.upload-btn{background:rgba(255,255,255,.08);border:1.5px solid rgba(255,255,255,.12);
+  color:#fff;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:600;
+  cursor:pointer;font-family:inherit;text-align:center}
+.upload-btn:hover{background:rgba(255,255,255,.13)}
+.thumb-url-inp{width:100%;background:rgba(255,255,255,.07);border:1.5px solid rgba(255,255,255,.1);
+  border-radius:8px;padding:8px 10px;color:#fff;font-size:12px;font-family:inherit;outline:none}
+.thumb-url-inp::placeholder{color:rgba(255,255,255,.25)}
+
+/* ── 유튜브 미리보기 ── */
+.yt-preview{margin-top:6px;border-radius:10px;overflow:hidden;
   background:#000;aspect-ratio:16/9;display:none}
 .yt-preview iframe{width:100%;height:100%;border:none}
-.url-preview{margin-top:6px;font-size:11px;color:var(--green);word-break:break-all}
+
+/* ── 지오코딩 ── */
+.geo-row{display:flex;gap:8px}
+.geo-btn{flex-shrink:0;background:var(--pink);color:#fff;border:none;border-radius:10px;
+  padding:0 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;
+  height:42px;display:flex;align-items:center;gap:5px;white-space:nowrap}
+.geo-status{margin-top:6px;font-size:11px;display:none}
+
+/* ── 노출방식 선택 ── */
+.mode-select{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.mode-opt{border:1.5px solid var(--border);border-radius:10px;padding:10px 6px;
+  text-align:center;cursor:pointer;transition:all .2s;font-size:11px;font-weight:700;
+  color:rgba(255,255,255,.4)}
+.mode-opt .mo-icon{font-size:20px;margin-bottom:4px}
+.mode-opt.sel-both{border-color:var(--green);background:rgba(3,199,90,.08);color:var(--green)}
+.mode-opt.sel-feed{border-color:var(--pink);background:rgba(255,77,125,.08);color:var(--pink)}
+.mode-opt.sel-map {border-color:#6495ed;background:rgba(100,149,237,.08);color:#6495ed}
+
+/* ── 빈 상태 ── */
+.empty{text-align:center;padding:48px 16px;color:rgba(255,255,255,.2);font-size:14px}
+
+/* ── 섹션 라벨 ── */
+.sec-label{font-size:11px;font-weight:700;color:rgba(255,255,255,.25);
+  letter-spacing:.5px;margin-bottom:10px;padding-left:2px}
 </style>
 </head>
 <body>
 
+<!-- 상단바 -->
 <div class="top">
   <a class="back" href="/"><i class="fas fa-arrow-left"></i></a>
   <span class="ttl">관리자 대시보드</span>
@@ -2174,221 +2256,319 @@ body{font-family:'Pretendard',sans-serif;background:var(--bg);color:#fff;min-hei
   </button>
 </div>
 
-<div class="wrap">
-  <!-- 통계 요약 -->
-  <div class="stats">
-    <div class="sc"><div class="sn" id="tv">-</div><div class="sl">👁 총 조회</div></div>
-    <div class="sc"><div class="sn" id="ts">-</div><div class="sl">📍 예약클릭</div></div>
-    <div class="sc"><div class="sn" id="tc">-</div><div class="sl">💄 등록 샵</div></div>
-  </div>
-
-  <!-- 탭 -->
-  <div class="tabs">
-    <button class="atab active" id="tab-shops" onclick="showTab('shops')">
-      <i class="fas fa-store"></i> 업체 관리
-    </button>
-    <button class="atab" id="tab-stats" onclick="showTab('stats')">
-      <i class="fas fa-chart-bar"></i> 통계
-    </button>
-  </div>
-
-  <!-- 업체 목록 -->
-  <div id="panel-shops"></div>
-  <!-- 통계 목록 -->
-  <div id="panel-stats" style="display:none"></div>
+<!-- 탭바 -->
+<div class="tabbar">
+  <button class="tabbtn on" id="tab-shops" onclick="switchTab('shops')">
+    <i class="fas fa-store"></i>업체 관리
+  </button>
+  <button class="tabbtn" id="tab-stats" onclick="switchTab('stats')">
+    <i class="fas fa-chart-bar"></i>통계
+  </button>
+  <button class="tabbtn" id="tab-inq" onclick="switchTab('inq')">
+    <i class="fas fa-envelope"></i>입점문의
+  </button>
 </div>
 
-<!-- 추가/수정 모달 -->
-<div class="modal-bg hidden" id="modalBg" onclick="closeModal(event)">
-  <div class="modal" id="modal">
-    <div class="modal-handle"></div>
-    <div class="modal-ttl" id="modalTtl">업체 추가</div>
+<!-- 내용 -->
+<div class="wrap">
+  <!-- 요약 (업체/통계 탭 공통) -->
+  <div class="summary" id="summaryBox">
+    <div class="sv"><div class="sv-n" id="sv-shops">-</div><div class="sv-l">💄 등록 샵</div></div>
+    <div class="sv"><div class="sv-n" id="sv-views">-</div><div class="sv-l">👁 영상조회</div></div>
+    <div class="sv"><div class="sv-n" id="sv-clicks">-</div><div class="sv-l">📍 예약클릭</div></div>
+  </div>
 
+  <!-- 패널들 -->
+  <div id="panel-shops"></div>
+  <div id="panel-stats" style="display:none"></div>
+  <div id="panel-inq"   style="display:none"></div>
+</div>
+
+<!-- 업체 추가/수정 모달 -->
+<div class="modal-bg hidden" id="modalBg" onclick="bgClick(event)">
+<div class="modal" id="modal">
+  <div class="modal-handle"></div>
+  <div class="modal-ttl" id="modalTtl">업체 추가</div>
+
+  <!-- 노출 방식 -->
+  <div class="field">
+    <label>📡 노출 방식</label>
+    <div class="mode-select">
+      <div class="mode-opt sel-both" id="mo-both" onclick="setMode('both')">
+        <div class="mo-icon">🎬🗺️</div>영상 + 지도
+      </div>
+      <div class="mode-opt" id="mo-feed" onclick="setMode('feed')">
+        <div class="mo-icon">🎬</div>영상만
+      </div>
+      <div class="mode-opt" id="mo-map" onclick="setMode('map')">
+        <div class="mo-icon">🗺️</div>지도만
+      </div>
+    </div>
+    <input type="hidden" id="f-mode" value="both"/>
+  </div>
+
+  <!-- 기본 정보 -->
+  <div class="field">
+    <label>업체명 *</label>
+    <input id="f-name" type="text" placeholder="예: 밸런스 엘 스트레칭"/>
+  </div>
+  <div class="row2">
     <div class="field">
-      <label>업체명 *</label>
-      <input id="f-name" type="text" placeholder="예: 글로우 스킨 강남"/>
-    </div>
-    <div class="row2">
-      <div class="field">
-        <label>카테고리 *</label>
-        <select id="f-cat">
-          <option>마사지</option><option>헤드스파</option><option>피부관리</option>
-          <option>헤어</option><option>왁싱</option><option>반영구</option><option>병원</option><option>그외</option>
-        </select>
-      </div>
-      <div class="field">
-        <label>가격대</label>
-        <input id="f-price" type="text" placeholder="예: 5만원~"/>
-      </div>
-    </div>
-    <div class="field">
-      <label>주소 *</label>
-      <div style="display:flex;gap:8px">
-        <input id="f-addr" type="text" placeholder="예: 서울 강남구 논현로 123" style="flex:1"
-          onkeydown="if(event.key==='Enter'){event.preventDefault();geocodeAddr()}"/>
-        <button type="button" onclick="geocodeAddr()" id="geocodeBtn"
-          style="flex-shrink:0;background:var(--pink);color:#fff;border:none;border-radius:10px;
-                 padding:0 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;
-                 white-space:nowrap;display:flex;align-items:center;gap:5px;height:42px">
-          <i class="fas fa-map-marker-alt"></i> 좌표찾기
-        </button>
-      </div>
-      <div id="geocodeStatus" style="margin-top:6px;font-size:11px;display:none"></div>
-    </div>
-    <div class="row2">
-      <div class="field">
-        <label>구/지역 <span style="color:rgba(255,255,255,.3);font-weight:400">(자동입력)</span></label>
-        <input id="f-dist" type="text" placeholder="강남구"/>
-      </div>
-      <div class="field">
-        <label>전화번호</label>
-        <input id="f-phone" type="text" placeholder="02-1234-5678"/>
-      </div>
-    </div>
-    <div class="row2">
-      <div class="field">
-        <label>위도 (lat) <span style="color:rgba(255,255,255,.3);font-weight:400">(자동입력)</span></label>
-        <input id="f-lat" type="number" step="0.000001" placeholder="자동입력"
-          style="color:rgba(255,255,255,.5)"/>
-      </div>
-      <div class="field">
-        <label>경도 (lng) <span style="color:rgba(255,255,255,.3);font-weight:400">(자동입력)</span></label>
-        <input id="f-lng" type="number" step="0.000001" placeholder="자동입력"
-          style="color:rgba(255,255,255,.5)"/>
-      </div>
+      <label>카테고리 *</label>
+      <select id="f-cat">
+        <option>마사지</option><option>헤드스파</option><option>피부관리</option>
+        <option>헤어</option><option>왁싱</option><option>반영구</option>
+        <option>병원</option><option>그외</option>
+      </select>
     </div>
     <div class="field">
-      <label>🎬 유튜브 영상 ID</label>
-      <input id="f-yt" type="text" placeholder="예: mldig2ZiRwA (URL 마지막 부분)"
-        oninput="previewYt(this.value)"/>
-      <div class="yt-preview" id="ytPreview">
-        <iframe id="ytFrame" src="" allow="autoplay;encrypted-media" allowfullscreen></iframe>
-      </div>
-    </div>
-    <div class="field">
-      <label>📅 네이버 예약 URL</label>
-      <input id="f-url" type="text" placeholder="https://naver.me/xxxxx"
-        oninput="previewUrl(this.value)"/>
-      <div class="url-preview" id="urlPreview"></div>
-    </div>
-    <div class="field">
-      <label>썸네일 이미지 URL</label>
-      <input id="f-thumb" type="text" placeholder="https://..."/>
-    </div>
-    <div class="field">
-      <label>태그 (쉼표로 구분)</label>
-      <input id="f-tags" type="text" placeholder="리프팅, 보습, 트러블케어"/>
-    </div>
-    <div class="field">
-      <label>업체 소개</label>
-      <textarea id="f-desc" placeholder="업체 간단 소개"></textarea>
-    </div>
-    <div class="row2">
-      <div class="field">
-        <label>상단 노출 (추천)</label>
-        <select id="f-feat"><option value="false">일반</option><option value="true">상단 추천</option></select>
-      </div>
-      <div class="field">
-        <label>공개 여부</label>
-        <select id="f-active"><option value="true">공개</option><option value="false">비공개</option></select>
-      </div>
-    </div>
-    <div class="modal-actions">
-      <button class="btn-cancel" onclick="closeModal()">취소</button>
-      <button class="btn-save" onclick="saveShop()">저장하기</button>
+      <label>가격대</label>
+      <input id="f-price" type="text" placeholder="예: 5만원~"/>
     </div>
   </div>
+
+  <!-- 썸네일 -->
+  <div class="field">
+    <label>🖼️ 썸네일 이미지</label>
+    <div class="thumb-wrap">
+      <img id="thumbPreview" class="thumb-preview"
+        src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 60'%3E%3Crect width='60' height='60' fill='%23222'/%3E%3Ctext x='30' y='38' font-size='24' text-anchor='middle'%3E📷%3C/text%3E%3C/svg%3E"/>
+      <div class="thumb-right">
+        <label class="upload-btn" for="thumbFile">
+          <i class="fas fa-upload"></i> 파일 선택
+        </label>
+        <input type="file" id="thumbFile" accept="image/*" style="display:none" onchange="handleThumbFile(event)"/>
+        <input class="thumb-url-inp" id="f-thumb" type="text" placeholder="또는 이미지 URL 직접 입력"
+          oninput="updateThumbPreview(this.value)"/>
+      </div>
+    </div>
+  </div>
+
+  <!-- 유튜브 -->
+  <div class="field" id="ytField">
+    <label>🎬 유튜브 URL (또는 영상 ID)</label>
+    <input id="f-yt" type="text" placeholder="https://youtu.be/xxxxx 또는 영상ID"
+      oninput="previewYt(this.value)"/>
+    <div class="yt-preview" id="ytPreview">
+      <iframe id="ytFrame" src="" allow="autoplay;encrypted-media" allowfullscreen></iframe>
+    </div>
+  </div>
+
+  <!-- 주소 -->
+  <div class="field" id="addrField">
+    <label>📍 주소 *</label>
+    <div class="geo-row">
+      <input id="f-addr" type="text" placeholder="예: 서울 강남구 논현로 123" style="flex:1"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();geocodeAddr()}"/>
+      <button class="geo-btn" onclick="geocodeAddr()" id="geoBtn">
+        <i class="fas fa-crosshairs"></i> 좌표찾기
+      </button>
+    </div>
+    <div class="geo-status" id="geoStatus"></div>
+  </div>
+  <div class="row2" id="distRow">
+    <div class="field">
+      <label>구/지역 <small style="color:rgba(255,255,255,.25)">(자동)</small></label>
+      <input id="f-dist" type="text" placeholder="강남구"/>
+    </div>
+    <div class="field">
+      <label>전화번호</label>
+      <input id="f-phone" type="text" placeholder="02-1234-5678"/>
+    </div>
+  </div>
+  <div class="row2" id="latRow">
+    <div class="field">
+      <label>위도 <small style="color:rgba(255,255,255,.25)">(자동)</small></label>
+      <input id="f-lat" type="number" step="0.000001" placeholder="자동입력"/>
+    </div>
+    <div class="field">
+      <label>경도 <small style="color:rgba(255,255,255,.25)">(자동)</small></label>
+      <input id="f-lng" type="number" step="0.000001" placeholder="자동입력"/>
+    </div>
+  </div>
+
+  <!-- 스마트플레이스 -->
+  <div class="field">
+    <label>📅 네이버 예약 URL</label>
+    <input id="f-url" type="text" placeholder="https://naver.me/xxxxx"/>
+  </div>
+
+  <!-- 기타 -->
+  <div class="field">
+    <label>태그 (쉼표로 구분)</label>
+    <input id="f-tags" type="text" placeholder="리프팅, 보습, 트러블케어"/>
+  </div>
+  <div class="field">
+    <label>업체 소개</label>
+    <textarea id="f-desc" placeholder="업체 간단 소개"></textarea>
+  </div>
+  <div class="row2">
+    <div class="field">
+      <label>상단 노출</label>
+      <select id="f-feat">
+        <option value="false">일반</option>
+        <option value="true">⭐ 추천 상단</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>공개 여부</label>
+      <select id="f-active">
+        <option value="true">공개</option>
+        <option value="false">비공개</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="modal-actions">
+    <button class="btn-cancel" onclick="closeModal()">취소</button>
+    <button class="btn-save"   onclick="saveShop()"><i class="fas fa-save"></i> 저장하기</button>
+  </div>
+</div>
 </div>
 
 <script>
-let editId  = null;
-let curTab  = 'shops';
-let shopList = [];
+/* ═══════════════════════════════════════════════════════
+   상태
+═══════════════════════════════════════════════════════ */
+let editId   = null;
+let curTab   = 'shops';
+let shopData = [];
+let thumbDataUrl = ''; // 파일 업로드 시 base64
 
+/* ═══════════════════════════════════════════════════════
+   탭 전환
+═══════════════════════════════════════════════════════ */
+function switchTab(t) {
+  curTab = t;
+  ['shops','stats','inq'].forEach(x => {
+    document.getElementById('tab-'+x).classList.toggle('on', x===t);
+    document.getElementById('panel-'+x).style.display = x===t ? 'block' : 'none';
+  });
+  document.getElementById('summaryBox').style.display =
+    (t==='shops'||t==='stats') ? 'grid' : 'none';
+  document.querySelector('.add-btn').style.display =
+    t==='shops' ? 'flex' : 'none';
+  if (t==='inq') loadInquiries();
+}
+
+/* ═══════════════════════════════════════════════════════
+   데이터 로드
+═══════════════════════════════════════════════════════ */
 async function loadAll() {
   const d = await (await fetch('/api/admin/stats')).json();
-  document.getElementById('tv').textContent = d.totalViews.toLocaleString();
-  document.getElementById('ts').textContent = (d.totalFeedSP+d.totalMapSP).toLocaleString();
-  document.getElementById('tc').textContent = d.totalShops;
-  shopList = d.stats;
+  document.getElementById('sv-shops').textContent  = d.totalShops;
+  document.getElementById('sv-views').textContent  = (d.totalViews||0).toLocaleString();
+  document.getElementById('sv-clicks').textContent = ((d.totalFeedSP||0)+(d.totalMapSP||0)).toLocaleString();
+  shopData = d.stats;
   renderShops(d.stats);
   renderStats(d.stats);
 }
 
-function showTab(t) {
-  curTab = t;
-  ['shops','stats'].forEach(x=>{
-    document.getElementById('tab-'+x).classList.toggle('active', x===t);
-    document.getElementById('panel-'+x).style.display = x===t?'block':'none';
-  });
+async function loadInquiries() {
+  const panel = document.getElementById('panel-inq');
+  panel.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i></div>';
+  const rows = await (await fetch('/api/admin/inquiries')).json();
+  if (!rows.length) {
+    panel.innerHTML = '<div class="empty">📭 접수된 입점문의가 없어요</div>';
+    return;
+  }
+  panel.innerHTML = rows.map(r => {
+    const d = new Date(r.created_at);
+    const dt = d.toLocaleDateString('ko-KR',{month:'2-digit',day:'2-digit'})
+             + ' ' + d.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+    return \`
+    <div class="inq-card">
+      <div class="inq-top">
+        <span class="inq-name">\${r.owner||r.name||'이름없음'}</span>
+        \${r.category ? \`<span class="inq-badge">\${r.category}</span>\` : ''}
+        <span class="inq-time">\${dt}</span>
+      </div>
+      <div class="inq-row">
+        <span class="inq-kv">🏪 샵명 <strong>\${r.name||'-'}</strong></span>
+        <span class="inq-kv">📍 지역 <strong>\${r.area||'-'}</strong></span>
+        <span class="inq-kv">📞 연락처 <strong>\${r.phone||'-'}</strong></span>
+      </div>
+      \${r.url ? \`<div class="inq-row"><span class="inq-kv">🔗 URL <strong style="color:#6495ed">\${r.url}</strong></span></div>\` : ''}
+      \${r.message ? \`<div class="inq-msg">💬 \${r.message}</div>\` : ''}
+    </div>\`;
+  }).join('');
 }
 
-function renderShops(stats) {
-  const panel = document.getElementById('panel-shops');
-  if (!stats.length) { panel.innerHTML='<div style="text-align:center;color:rgba(255,255,255,.2);padding:40px">등록된 업체가 없어요</div>'; return; }
-  panel.innerHTML = stats.map(s=>\`
+/* ═══════════════════════════════════════════════════════
+   업체 렌더
+═══════════════════════════════════════════════════════ */
+function modeLabel(m) {
+  if (m==='feed') return '<span class="sc-mode mode-feed">🎬 영상전용</span>';
+  if (m==='map')  return '<span class="sc-mode mode-map">🗺️ 지도전용</span>';
+  return '<span class="sc-mode mode-both">🎬🗺️ 영상+지도</span>';
+}
+
+function renderShops(list) {
+  const p = document.getElementById('panel-shops');
+  if (!list.length) { p.innerHTML='<div class="empty">등록된 업체가 없어요</div>'; return; }
+  const fallback = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 60'%3E%3Crect width='60' height='60' fill='%23222'/%3E%3Ctext x='30' y='38' font-size='24' text-anchor='middle'%3E💄%3C/text%3E%3C/svg%3E";
+  const thumb = s => s.thumbnail || (s.youtubeId ? 'https://img.youtube.com/vi/'+s.youtubeId+'/mqdefault.jpg' : fallback);
+  p.innerHTML = list.map(s => \`
     <div class="shop-card" id="card-\${s.id}">
       <div class="sc-top">
-        <img class="sc-thumb" src="\${s.thumbnail||'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=120&q=60'}" onerror="this.src='https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=120&q=60'"/>
+        <img class="sc-thumb" src="\${thumb(s)}" onerror="this.src='\${fallback}'"/>
         <div class="sc-info">
           <div class="sc-name">
             \${s.name}
-            \${s.featured?'<span class="badge-feat">추천</span>':''}
-            \${!s.active?'<span class="badge-hide">비공개</span>':''}
+            \${s.featured ? '<span class="badge b-feat">추천</span>' : ''}
+            \${!s.active  ? '<span class="badge b-hide">비공개</span>' : ''}
           </div>
           <div class="sc-cat">\${s.category}</div>
           <div class="sc-addr">\${s.address||''}</div>
+          \${modeLabel(s.displayMode||'both')}
         </div>
       </div>
-      <div class="sc-detail">
-        <div class="sc-field">🎬 유튜브<strong>\${s.youtubeId||'미등록'}</strong></div>
-        <div class="sc-field">📅 예약URL<strong>\${s.smartPlaceUrl?'등록됨':'미등록'}</strong></div>
-        <div class="sc-field">📍 위도<strong>\${s.lat}</strong></div>
-        <div class="sc-field">📍 경도<strong>\${s.lng}</strong></div>
+      <div class="sc-fields">
+        <div class="sc-f">🎬 유튜브<strong>\${s.youtubeId||'미등록'}</strong></div>
+        <div class="sc-f">📅 예약URL<strong>\${s.smartPlaceUrl?'등록됨':'미등록'}</strong></div>
+        <div class="sc-f">👁 조회<strong>\${(s.views||0).toLocaleString()}</strong></div>
+        <div class="sc-f">📍 예약클릭<strong>\${((s.feedSP||0)+(s.mapSP||0)).toLocaleString()}</strong></div>
       </div>
-      <div class="sc-btns" style="margin-top:10px">
+      <div class="sc-btns">
         <button class="btn-edit" onclick="openModal(\${s.id})"><i class="fas fa-edit"></i> 수정</button>
-        <button class="btn-del" onclick="delShop(\${s.id},'\${s.name.replace(/'/g,'\\\\'+'\\'')}')"><i class="fas fa-trash"></i> 삭제</button>
+        <button class="btn-del"  onclick="delShop(\${s.id},\`\${s.name}\`)"><i class="fas fa-trash"></i> 삭제</button>
       </div>
     </div>
   \`).join('');
 }
 
-function renderStats(stats) {
-  if (!stats.length) {
-    document.getElementById('panel-stats').innerHTML =
-      '<div style="text-align:center;color:rgba(255,255,255,.2);padding:40px">데이터가 없어요</div>';
-    return;
-  }
-  const sorted = [...stats].sort((a,b)=>
+/* ═══════════════════════════════════════════════════════
+   통계 렌더
+═══════════════════════════════════════════════════════ */
+function renderStats(list) {
+  const p = document.getElementById('panel-stats');
+  if (!list.length) { p.innerHTML='<div class="empty">데이터가 없어요</div>'; return; }
+  const sorted = [...list].sort((a,b)=>
     (b.views+b.feedSP+b.mapSP)-(a.views+a.feedSP+a.mapSP));
-  const thumb0 = 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=400&q=60';
-  document.getElementById('panel-stats').innerHTML = sorted.map((s,i)=>{
-    const rankClass = i===0?'r1':i===1?'r2':i===2?'r3':'';
-    const img = s.youtubeId
-      ? 'https://img.youtube.com/vi/'+s.youtubeId+'/hqdefault.jpg'
-      : (s.thumbnail||thumb0);
+  const fallback = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 60'%3E%3Crect width='60' height='60' fill='%23222'/%3E%3Ctext x='30' y='38' font-size='24' text-anchor='middle'%3E💄%3C/text%3E%3C/svg%3E";
+  p.innerHTML = sorted.map((s,i) => {
+    const rc = i===0?'rank1':i===1?'rank2':i===2?'rank3':'rankN';
+    const img = s.thumbnail || (s.youtubeId?'https://img.youtube.com/vi/'+s.youtubeId+'/mqdefault.jpg':fallback);
     return \`
-    <div class="stat-row">
-      <img class="sr-media" src="\${img}" onerror="this.src='\${thumb0}'" alt="">
-      <div class="sr-body">
-        <div class="sr-top">
-          <div class="sr-rank \${rankClass}">\${i+1}</div>
-          <div class="sr-name">\${s.name}</div>
-          <span class="sr-cat">\${s.category}</span>
+    <div class="stat-card">
+      <img class="stat-thumb" src="\${img}" onerror="this.src='\${fallback}'"/>
+      <div class="stat-body">
+        <div class="stat-top">
+          <div class="stat-rank \${rc}">\${i+1}</div>
+          <div class="stat-name">\${s.name}</div>
         </div>
-        <div class="sr-nums">
-          <div class="sr-num c-view">
-            <div class="sr-n">\${s.views.toLocaleString()}</div>
-            <div class="sr-l">👁 영상조회</div>
+        <div class="stat-nums">
+          <div class="stat-num c-view">
+            <div class="sn-n">\${(s.views||0).toLocaleString()}</div>
+            <div class="sn-l">👁 영상조회</div>
           </div>
-          <div class="sr-num c-feed">
-            <div class="sr-n">\${s.feedSP.toLocaleString()}</div>
-            <div class="sr-l">📹 피드예약</div>
+          <div class="stat-num c-feed">
+            <div class="sn-n">\${(s.feedSP||0).toLocaleString()}</div>
+            <div class="sn-l">📹 피드예약</div>
           </div>
-          <div class="sr-num c-map">
-            <div class="sr-n">\${s.mapSP.toLocaleString()}</div>
-            <div class="sr-l">🗺 지도예약</div>
+          <div class="stat-num c-map">
+            <div class="sn-n">\${(s.mapSP||0).toLocaleString()}</div>
+            <div class="sn-l">🗺 지도예약</div>
           </div>
         </div>
       </div>
@@ -2396,26 +2576,121 @@ function renderStats(stats) {
   }).join('');
 }
 
-// ── 모달 열기/닫기 ────────────────────────────────────────────────────────
+/* ═══════════════════════════════════════════════════════
+   노출 방식 선택
+═══════════════════════════════════════════════════════ */
+function setMode(m) {
+  document.getElementById('f-mode').value = m;
+  ['both','feed','map'].forEach(x => {
+    const el = document.getElementById('mo-'+x);
+    el.className = 'mode-opt' + (x===m ? ' sel-'+x : '');
+  });
+}
+
+/* ═══════════════════════════════════════════════════════
+   썸네일
+═══════════════════════════════════════════════════════ */
+function handleThumbFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    thumbDataUrl = ev.target.result;
+    document.getElementById('f-thumb').value = '';
+    document.getElementById('thumbPreview').src = thumbDataUrl;
+  };
+  reader.readAsDataURL(file);
+}
+
+function updateThumbPreview(url) {
+  thumbDataUrl = '';
+  if (url.trim()) {
+    document.getElementById('thumbPreview').src = url.trim();
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   유튜브
+═══════════════════════════════════════════════════════ */
+function extractYoutubeId(input) {
+  const s = (input||'').trim();
+  if (!s) return '';
+  if (/^[A-Za-z0-9_-]{11}$/.test(s)) return s;
+  const m = s.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|v\/))([A-Za-z0-9_-]{11})/);
+  return m ? m[1] : s;
+}
+
+function previewYt(input) {
+  const id  = extractYoutubeId(input);
+  const box = document.getElementById('ytPreview');
+  if (!id) { box.style.display='none'; return; }
+  box.style.display='block';
+  document.getElementById('ytFrame').src =
+    'https://www.youtube.com/embed/'+id+'?mute=1&controls=1';
+}
+
+/* ═══════════════════════════════════════════════════════
+   지오코딩
+═══════════════════════════════════════════════════════ */
+async function geocodeAddr() {
+  const addr = document.getElementById('f-addr').value.trim();
+  if (!addr) { alert('주소를 먼저 입력하세요'); return; }
+  const btn = document.getElementById('geoBtn');
+  const st  = document.getElementById('geoStatus');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 검색중...';
+  st.style.display = 'block';
+  st.style.color   = 'rgba(255,255,255,.4)';
+  st.textContent   = '주소를 검색하고 있어요...';
+  try {
+    const res  = await fetch('/api/geocode?query='+encodeURIComponent(addr));
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error||'찾을 수 없어요');
+    document.getElementById('f-lat').value  = data.lat;
+    document.getElementById('f-lng').value  = data.lng;
+    document.getElementById('f-addr').value = data.address;
+    if (data.district && !document.getElementById('f-dist').value)
+      document.getElementById('f-dist').value = data.district;
+    st.style.color = '#03C75A';
+    st.textContent = '✅ 좌표 입력 완료! 위도 '+data.lat.toFixed(6)+' / 경도 '+data.lng.toFixed(6);
+  } catch(err) {
+    st.style.color = '#FF4D7D';
+    st.textContent = '❌ '+err.message;
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fas fa-crosshairs"></i> 좌표찾기';
+}
+
+/* ═══════════════════════════════════════════════════════
+   모달 열기/닫기
+═══════════════════════════════════════════════════════ */
+const FALLBACK_SVG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 60'%3E%3Crect width='60' height='60' fill='%23222'/%3E%3Ctext x='30' y='38' font-size='24' text-anchor='middle'%3E📷%3C/text%3E%3C/svg%3E";
+
 async function openModal(id=null) {
   editId = id;
+  thumbDataUrl = '';
   document.getElementById('modalTtl').textContent = id ? '업체 수정' : '업체 추가';
-  // 필드 초기화
-  ['name','addr','dist','phone','yt','url','thumb','tags','desc'].forEach(k=>
-    document.getElementById('f-'+k).value='');
-  document.getElementById('f-price').value='';
-  document.getElementById('f-lat').value='';
-  document.getElementById('f-lng').value='';
-  document.getElementById('f-feat').value='false';
-  document.getElementById('f-active').value='true';
-  document.getElementById('f-cat').value='피부관리';
-  document.getElementById('ytPreview').style.display='none';
-  document.getElementById('urlPreview').textContent='';
+
+  // 초기화
+  ['name','addr','dist','phone','yt','url','tags','desc'].forEach(k =>
+    document.getElementById('f-'+k).value = '');
+  document.getElementById('f-price').value  = '';
+  document.getElementById('f-lat').value    = '';
+  document.getElementById('f-lng').value    = '';
+  document.getElementById('f-feat').value   = 'false';
+  document.getElementById('f-active').value = 'true';
+  document.getElementById('f-thumb').value  = '';
+  document.getElementById('f-cat').value    = '마사지';
+  document.getElementById('thumbPreview').src = FALLBACK_SVG;
+  document.getElementById('ytPreview').style.display = 'none';
+  document.getElementById('geoStatus').style.display = 'none';
+  document.getElementById('thumbFile').value = '';
+  setMode('both');
 
   if (id) {
     const s = await (await fetch('/api/shops/'+id)).json();
     document.getElementById('f-name').value  = s.name||'';
-    document.getElementById('f-cat').value   = s.category||'피부관리';
+    document.getElementById('f-cat').value   = s.category||'마사지';
     document.getElementById('f-price').value = s.price||'';
     document.getElementById('f-addr').value  = s.address||'';
     document.getElementById('f-dist').value  = s.district||'';
@@ -2427,82 +2702,34 @@ async function openModal(id=null) {
     document.getElementById('f-thumb').value = s.thumbnail||'';
     document.getElementById('f-tags').value  = (s.tags||[]).join(', ');
     document.getElementById('f-desc').value  = s.desc||'';
-    document.getElementById('f-feat').value  = String(s.featured);
-    document.getElementById('f-active').value= String(s.active);
+    document.getElementById('f-feat').value  = String(s.featured||false);
+    document.getElementById('f-active').value= String(s.active!==false);
+    setMode(s.displayMode||'both');
+    // 썸네일 미리보기
+    const th = s.thumbnail || (s.youtubeId ? 'https://img.youtube.com/vi/'+s.youtubeId+'/mqdefault.jpg' : FALLBACK_SVG);
+    document.getElementById('thumbPreview').src = th;
     if (s.youtubeId) previewYt(s.youtubeId);
-    if (s.smartPlaceUrl) previewUrl(s.smartPlaceUrl);
   }
+
   document.getElementById('modalBg').classList.remove('hidden');
-  document.getElementById('modal').scrollTop=0;
+  document.getElementById('modal').scrollTop = 0;
 }
 
-function closeModal(e) {
-  if (e && e.target !== document.getElementById('modalBg')) return;
-  document.getElementById('modalBg').classList.add('hidden');
-}
+function closeModal() { document.getElementById('modalBg').classList.add('hidden'); }
+function bgClick(e)   { if (e.target===document.getElementById('modalBg')) closeModal(); }
 
-// ── 주소 → 좌표 자동변환 ──────────────────────────────────────────────────
-async function geocodeAddr() {
-  const addr = document.getElementById('f-addr').value.trim();
-  if (!addr) { alert('주소를 먼저 입력하세요'); return; }
-  const btn    = document.getElementById('geocodeBtn');
-  const status = document.getElementById('geocodeStatus');
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 검색중...';
-  status.style.display = 'block';
-  status.style.color   = 'rgba(255,255,255,.4)';
-  status.textContent   = '주소를 검색하고 있어요...';
-  try {
-    const res  = await fetch('/api/geocode?query='+encodeURIComponent(addr));
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || '찾을 수 없어요');
-    document.getElementById('f-lat').value  = data.lat;
-    document.getElementById('f-lng').value  = data.lng;
-    document.getElementById('f-addr').value = data.address;
-    if (data.district && !document.getElementById('f-dist').value)
-      document.getElementById('f-dist').value = data.district;
-    status.style.color = '#03C75A';
-    status.textContent = '✅ 좌표 자동입력 완료! 위도 '+data.lat.toFixed(6)+' / 경도 '+data.lng.toFixed(6);
-  } catch(e) {
-    status.style.color = '#FF4D7D';
-    status.textContent = '❌ '+e.message+' — 주소를 더 정확히 입력하거나 위도/경도를 직접 입력해주세요';
-  }
-  btn.disabled = false;
-  btn.innerHTML = '<i class="fas fa-map-marker-alt"></i> 좌표찾기';
-}
-
-
-// 유튜브 URL → ID 추출 (클라이언트 공통)
-function extractYoutubeId(input) {
-  const s = (input || '').trim();
-  if (!s) return '';
-  if (/^[A-Za-z0-9_-]{11}$/.test(s)) return s;
-  const m = s.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|v\/))([A-Za-z0-9_-]{11})/);
-  return m ? m[1] : s;
-}
-// 유튜브 미리보기
-function previewYt(input) {
-  const clean = extractYoutubeId(input);
-  const box   = document.getElementById('ytPreview');
-  if (!clean) { box.style.display='none'; return; }
-  box.style.display='block';
-  document.getElementById('ytFrame').src =
-    'https://www.youtube.com/embed/'+clean+'?mute=1&controls=1';
-}
-
-// URL 미리보기
-function previewUrl(url) {
-  const el = document.getElementById('urlPreview');
-  el.textContent = url.trim() ? '✅ '+url.trim() : '';
-}
-
-// ── 저장 ─────────────────────────────────────────────────────────────────
+/* ═══════════════════════════════════════════════════════
+   저장
+═══════════════════════════════════════════════════════ */
 async function saveShop() {
   const name = document.getElementById('f-name').value.trim();
   const lat  = document.getElementById('f-lat').value.trim();
   const lng  = document.getElementById('f-lng').value.trim();
-  if (!name) { alert('업체명을 입력하세요'); return; }
-  if (!lat || !lng) { alert('주소를 입력하고 [좌표찾기] 버튼을 눌러주세요'); return; }
+  if (!name)      { alert('업체명을 입력하세요'); return; }
+  if (!lat||!lng) { alert('주소를 입력하고 [좌표찾기]를 눌러주세요'); return; }
+
+  // 썸네일: 파일 업로드 우선, 없으면 URL
+  let thumbnail = thumbDataUrl || document.getElementById('f-thumb').value.trim();
 
   const body = {
     name,
@@ -2515,30 +2742,44 @@ async function saveShop() {
     lng:          parseFloat(lng),
     youtubeId:    extractYoutubeId(document.getElementById('f-yt').value),
     smartPlaceUrl:document.getElementById('f-url').value.trim(),
-    thumbnail:    document.getElementById('f-thumb').value.trim(),
+    thumbnail,
     tags:         document.getElementById('f-tags').value.split(',').map(t=>t.trim()).filter(Boolean),
     desc:         document.getElementById('f-desc').value.trim(),
-    featured:     document.getElementById('f-feat').value === 'true',
-    active:       document.getElementById('f-active').value === 'true',
+    featured:     document.getElementById('f-feat').value==='true',
+    active:       document.getElementById('f-active').value==='true',
+    displayMode:  document.getElementById('f-mode').value,
   };
 
   const url    = editId ? '/api/admin/shops/'+editId : '/api/admin/shops';
   const method = editId ? 'PUT' : 'POST';
-  const r = await fetch(url, {method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  const r = await fetch(url, {
+    method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
+  });
   if (r.ok) {
-    document.getElementById('modalBg').classList.add('hidden');
+    // 파일 업로드한 경우 별도 API 호출
+    if (thumbDataUrl && editId) {
+      const saved = await r.json();
+      await fetch('/api/admin/upload-thumbnail', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ shopId: saved.id||editId, dataUrl: thumbDataUrl })
+      });
+    }
+    closeModal();
     loadAll();
   } else { alert('저장 실패: '+r.status); }
 }
 
-// ── 삭제 ─────────────────────────────────────────────────────────────────
+/* ═══════════════════════════════════════════════════════
+   삭제
+═══════════════════════════════════════════════════════ */
 async function delShop(id, name) {
-  if (!confirm(\`[삔\${name}]\\ 업체를 삭제할까요?\`)) return;
+  if (!confirm(\`[\${name}] 업체를 삭제할까요?\`)) return;
   const r = await fetch('/api/admin/shops/'+id, {method:'DELETE'});
   if (r.ok) loadAll();
   else alert('삭제 실패');
 }
 
+/* 시작 */
 loadAll();
 setInterval(loadAll, 30000);
 </script>
@@ -2546,516 +2787,5 @@ setInterval(loadAll, 30000);
 </html>`
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-// 지도 전용 관리자 페이지  /map-admin
-// ══════════════════════════════════════════════════════════════════════════
-function mapAdminPage() { return `<!DOCTYPE html>
-<html lang="ko">
-<head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>지도 관리자 – 마이뷰티맵</title>
-<link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css"/>
-<style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{--pink:#FF4D7D;--green:#03C75A;--bg:#0a0a0a;--card:#141414;--border:rgba(255,255,255,.08)}
-body{font-family:'Pretendard',sans-serif;background:var(--bg);color:#fff;min-height:100vh}
-
-/* 상단바 */
-.top{background:rgba(16,16,16,.98);border-bottom:1px solid var(--border);
-  padding:0 16px;height:56px;display:flex;align-items:center;gap:12px;
-  position:sticky;top:0;z-index:50;backdrop-filter:blur(12px)}
-.back{font-size:20px;color:rgba(255,255,255,.5);text-decoration:none;transition:color .15s}
-.back:hover{color:#fff}
-.ttl{font-size:17px;font-weight:800;flex:1}
-.ttl span{font-size:11px;font-weight:600;color:rgba(255,255,255,.35);
-  background:rgba(255,255,255,.07);padding:2px 8px;border-radius:6px;margin-left:8px}
-.add-btn{background:var(--pink);color:#fff;border:none;border-radius:10px;
-  padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;
-  display:flex;align-items:center;gap:6px;font-family:inherit;transition:opacity .15s}
-.add-btn:hover{opacity:.88}
-
-/* 통계 바 */
-.stat-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:14px 16px}
-.sb{background:var(--card);border:1px solid var(--border);border-radius:14px;
-  padding:12px;text-align:center}
-.sb-n{font-size:22px;font-weight:800;color:#FF8FA3}
-.sb-l{font-size:10px;color:rgba(255,255,255,.3);margin-top:3px;font-weight:600;letter-spacing:.3px}
-
-/* 필터 바 */
-.filter-bar{padding:0 16px 12px;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
-.filter-bar::-webkit-scrollbar{display:none}
-.fb{border:1.5px solid var(--border);border-radius:999px;padding:6px 14px;
-  font-size:12px;font-weight:700;color:rgba(255,255,255,.45);
-  background:transparent;cursor:pointer;white-space:nowrap;font-family:inherit;transition:all .2s}
-.fb.on{background:var(--pink);border-color:var(--pink);color:#fff}
-
-/* 업체 리스트 */
-.list{padding:0 16px 100px}
-.shop-item{background:var(--card);border:1px solid var(--border);border-radius:16px;
-  margin-bottom:10px;overflow:hidden;transition:border-color .2s}
-.shop-item:hover{border-color:rgba(255,255,255,.15)}
-
-/* 미디어 영역 */
-.si-media{position:relative;width:100%;aspect-ratio:16/9;background:#000;overflow:hidden}
-.si-media img{width:100%;height:100%;object-fit:cover;display:block}
-.si-media-badge{position:absolute;top:8px;left:8px;
-  font-size:9px;font-weight:800;padding:3px 8px;border-radius:999px;
-  color:#fff;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);
-  border:1px solid rgba(255,255,255,.15)}
-.si-yt-badge{position:absolute;top:8px;right:8px;
-  background:rgba(255,0,0,.85);color:#fff;
-  font-size:9px;font-weight:800;padding:3px 8px;border-radius:999px;
-  display:flex;align-items:center;gap:4px}
-.si-feat{position:absolute;bottom:8px;left:8px;
-  background:var(--pink);color:#fff;
-  font-size:9px;font-weight:800;padding:3px 8px;border-radius:999px}
-
-/* 바디 */
-.si-body{padding:12px 14px 14px}
-.si-row1{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px}
-.si-name{font-size:15px;font-weight:800;flex:1;letter-spacing:-.3px}
-.si-status{display:flex;gap:4px}
-.badge-on{font-size:9px;font-weight:700;padding:2px 7px;border-radius:5px;
-  background:rgba(3,199,90,.12);color:var(--green);border:1px solid rgba(3,199,90,.2)}
-.badge-off{font-size:9px;font-weight:700;padding:2px 7px;border-radius:5px;
-  background:rgba(255,255,255,.07);color:rgba(255,255,255,.3);border:1px solid var(--border)}
-.si-meta{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
-.si-cat{font-size:11px;font-weight:700;color:var(--pink)}
-.si-price{font-size:11px;color:rgba(255,255,255,.4)}
-.si-addr{font-size:11px;color:rgba(255,255,255,.35);margin-bottom:10px;
-  display:flex;align-items:center;gap:4px}
-.si-desc{font-size:11px;color:rgba(255,255,255,.35);line-height:1.45;margin-bottom:10px}
-.si-tags{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px}
-.si-tag{font-size:10px;color:rgba(255,255,255,.35);
-  background:rgba(255,255,255,.05);padding:2px 7px;border-radius:999px;
-  border:1px solid var(--border)}
-.si-btns{display:flex;gap:6px}
-.btn-edit{flex:1;background:rgba(255,255,255,.07);border:1px solid var(--border);
-  color:#fff;border-radius:10px;padding:9px;font-size:12px;font-weight:700;
-  cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:5px;
-  transition:background .15s}
-.btn-edit:hover{background:rgba(255,255,255,.13)}
-.btn-del{background:rgba(255,77,125,.08);border:1px solid rgba(255,77,125,.2);
-  color:var(--pink);border-radius:10px;padding:9px 14px;font-size:12px;font-weight:700;
-  cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:5px;
-  transition:background .15s}
-.btn-del:hover{background:rgba(255,77,125,.15)}
-
-/* 빈 상태 */
-.empty{text-align:center;padding:60px 20px;color:rgba(255,255,255,.2)}
-.empty i{font-size:40px;margin-bottom:12px;display:block}
-
-/* 모달 */
-.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;
-  display:flex;align-items:flex-end;justify-content:center}
-.modal-bg.hidden{display:none}
-.modal{background:#1a1a1a;border-radius:22px 22px 0 0;width:100%;max-width:640px;
-  max-height:92vh;overflow-y:auto;padding:0 18px 48px}
-.modal-handle{width:36px;height:4px;background:rgba(255,255,255,.12);
-  border-radius:4px;margin:12px auto 0}
-.modal-head{display:flex;align-items:center;justify-content:space-between;
-  padding:16px 0 14px;border-bottom:1px solid var(--border);margin-bottom:16px}
-.modal-ttl{font-size:18px;font-weight:800}
-.modal-close{background:rgba(255,255,255,.07);border:1px solid var(--border);
-  color:rgba(255,255,255,.6);border-radius:8px;padding:6px 12px;
-  font-size:12px;cursor:pointer;font-family:inherit}
-.field{margin-bottom:12px}
-.field label{display:block;font-size:10px;font-weight:700;letter-spacing:.5px;
-  color:rgba(255,255,255,.35);margin-bottom:5px;text-transform:uppercase}
-.field input,.field select,.field textarea{
-  width:100%;background:rgba(255,255,255,.06);
-  border:1.5px solid rgba(255,255,255,.09);
-  border-radius:10px;padding:10px 12px;color:#fff;
-  font-size:14px;font-family:inherit;outline:none;transition:border-color .15s}
-.field input:focus,.field textarea:focus{border-color:var(--pink)}
-.field select option{background:#1a1a1a}
-.field textarea{resize:vertical;min-height:72px;line-height:1.5}
-.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-/* 지오코딩 버튼 */
-.geo-wrap{display:flex;gap:8px}
-.geo-btn{flex-shrink:0;background:var(--pink);color:#fff;border:none;border-radius:10px;
-  padding:0 16px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;
-  white-space:nowrap;height:42px;display:flex;align-items:center;gap:5px;transition:opacity .15s}
-.geo-btn:hover{opacity:.88}
-.geo-status{margin-top:5px;font-size:11px;display:none}
-/* 유튜브 미리보기 */
-.yt-preview{margin-top:8px;border-radius:10px;overflow:hidden;
-  background:#000;aspect-ratio:16/9;display:none}
-.yt-preview iframe{width:100%;height:100%;border:none}
-/* 저장 */
-.modal-foot{display:flex;gap:10px;margin-top:20px}
-.btn-cancel{background:rgba(255,255,255,.07);color:rgba(255,255,255,.5);
-  border:1.5px solid var(--border);border-radius:12px;
-  padding:14px 20px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
-.btn-save{flex:1;background:var(--pink);color:#fff;border:none;border-radius:12px;
-  padding:14px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit;transition:opacity .15s}
-.btn-save:hover{opacity:.88}
-/* 섹션 구분 */
-.section-label{font-size:10px;font-weight:700;letter-spacing:.8px;
-  color:rgba(255,255,255,.25);text-transform:uppercase;
-  margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
-</style>
-</head>
-<body>
-
-<div class="top">
-  <a class="back" href="/"><i class="fas fa-arrow-left"></i></a>
-  <div class="ttl">지도 관리자 <span>MAP ADMIN</span></div>
-  <button class="add-btn" onclick="openModal()">
-    <i class="fas fa-plus"></i> 업체 추가
-  </button>
-</div>
-
-<!-- 통계 바 -->
-<div class="stat-bar">
-  <div class="sb"><div class="sb-n" id="stTotal">-</div><div class="sb-l">📍 전체 업체</div></div>
-  <div class="sb"><div class="sb-n" id="stActive">-</div><div class="sb-l">✅ 공개중</div></div>
-  <div class="sb"><div class="sb-n" id="stFeat">-</div><div class="sb-l">⭐ 추천</div></div>
-</div>
-
-<!-- 카테고리 필터 -->
-<div class="filter-bar" id="filterBar">
-  <button class="fb on" onclick="setFilter('all',this)">전체</button>
-  <button class="fb" onclick="setFilter('피부관리',this)">피부관리</button>
-  <button class="fb" onclick="setFilter('마사지',this)">마사지</button>
-  <button class="fb" onclick="setFilter('헤드스파',this)">헤드스파</button>
-  <button class="fb" onclick="setFilter('헤어',this)">헤어</button>
-  <button class="fb" onclick="setFilter('왁싱',this)">왁싱</button>
-  <button class="fb" onclick="setFilter('반영구',this)">반영구</button>
-  <button class="fb" onclick="setFilter('병원',this)">병원</button>
-  <button class="fb" onclick="setFilter('그외',this)">그외</button>
-</div>
-
-<!-- 업체 목록 -->
-<div class="list" id="shopList"></div>
-
-<!-- 추가/수정 모달 -->
-<div class="modal-bg hidden" id="modalBg" onclick="bgClick(event)">
-  <div class="modal" id="modal">
-    <div class="modal-handle"></div>
-    <div class="modal-head">
-      <div class="modal-ttl" id="modalTtl">업체 추가</div>
-      <button class="modal-close" onclick="closeModal()">닫기</button>
-    </div>
-
-    <div class="section-label">기본 정보</div>
-    <div class="field">
-      <label>업체명 *</label>
-      <input id="f-name" type="text" placeholder="예: 글로우 스킨 강남"/>
-    </div>
-    <div class="row2">
-      <div class="field">
-        <label>카테고리 *</label>
-        <select id="f-cat">
-          <option>피부관리</option><option>마사지</option><option>헤드스파</option>
-          <option>헤어</option><option>왁싱</option><option>반영구</option><option>병원</option><option>그외</option>
-        </select>
-      </div>
-      <div class="field">
-        <label>가격대</label>
-        <input id="f-price" type="text" placeholder="예: 5만원~"/>
-      </div>
-    </div>
-    <div class="field">
-      <label>업체 소개</label>
-      <textarea id="f-desc" placeholder="업체 간단 소개 (지도 카드에 표시됩니다)"></textarea>
-    </div>
-    <div class="field">
-      <label>태그 (쉼표로 구분)</label>
-      <input id="f-tags" type="text" placeholder="리프팅, 보습, 트러블케어"/>
-    </div>
-
-    <div class="section-label">위치 정보</div>
-    <div class="field">
-      <label>주소 *</label>
-      <div class="geo-wrap">
-        <input id="f-addr" type="text" placeholder="예: 서울 강남구 논현로 123"
-          onkeydown="if(event.key==='Enter'){event.preventDefault();geocodeAddr()}"/>
-        <button class="geo-btn" onclick="geocodeAddr()" id="geoBtn">
-          <i class="fas fa-crosshairs"></i> 좌표찾기
-        </button>
-      </div>
-      <div class="geo-status" id="geoStatus"></div>
-    </div>
-    <div class="row2">
-      <div class="field">
-        <label>구/지역 <span style="color:rgba(255,255,255,.2)">(자동)</span></label>
-        <input id="f-dist" type="text" placeholder="강남구"/>
-      </div>
-      <div class="field">
-        <label>전화번호</label>
-        <input id="f-phone" type="tel" placeholder="02-1234-5678"/>
-      </div>
-    </div>
-    <div class="row2">
-      <div class="field">
-        <label>위도 (lat) <span style="color:rgba(255,255,255,.2)">(자동)</span></label>
-        <input id="f-lat" type="number" step="0.000001" placeholder="자동입력"/>
-      </div>
-      <div class="field">
-        <label>경도 (lng) <span style="color:rgba(255,255,255,.2)">(자동)</span></label>
-        <input id="f-lng" type="number" step="0.000001" placeholder="자동입력"/>
-      </div>
-    </div>
-
-    <div class="section-label">미디어</div>
-    <div class="field">
-      <label>🎬 유튜브 영상 ID <span style="color:rgba(255,255,255,.2)">URL 마지막 부분</span></label>
-      <input id="f-yt" type="text" placeholder="예: mldig2ZiRwA" oninput="previewYt(this.value)"/>
-      <div class="yt-preview" id="ytPreview">
-        <iframe id="ytFrame" src="" allow="autoplay;encrypted-media" allowfullscreen></iframe>
-      </div>
-    </div>
-    <div class="field">
-      <label>썸네일 이미지 URL <span style="color:rgba(255,255,255,.2)">(유튜브 없을 때 표시)</span></label>
-      <input id="f-thumb" type="text" placeholder="https://...jpg"/>
-    </div>
-
-    <div class="section-label">예약 & 노출</div>
-    <div class="field">
-      <label>📅 네이버 예약 URL</label>
-      <input id="f-url" type="text" placeholder="https://naver.me/xxxxx"/>
-    </div>
-    <div class="row2">
-      <div class="field">
-        <label>상단 추천 노출</label>
-        <select id="f-feat">
-          <option value="false">일반</option>
-          <option value="true">⭐ 추천 (상단)</option>
-        </select>
-      </div>
-      <div class="field">
-        <label>공개 여부</label>
-        <select id="f-active">
-          <option value="true">✅ 공개</option>
-          <option value="false">🔒 비공개</option>
-        </select>
-      </div>
-    </div>
-
-    <div class="modal-foot">
-      <button class="btn-cancel" onclick="closeModal()">취소</button>
-      <button class="btn-save" onclick="saveShop()">저장하기</button>
-    </div>
-  </div>
-</div>
-
-<script>
-const CAT_COLOR = {
-  '마사지':'#10B981','헤드스파':'#6366F1','피부관리':'#FF4D7D',
-  '헤어':'#F59E0B','왁싱':'#EC4899','반영구':'#06B6D4','병원':'#3B82F6','그외':'#8B5CF6'
-};
-let allShops = [], curFilter = 'all', editId = null;
-
-/* ── 로드 ── */
-async function loadShops() {
-  const res  = await fetch('/api/shops/all');
-  allShops   = await res.json();
-  updateStats();
-  renderList();
-}
-
-function updateStats() {
-  document.getElementById('stTotal').textContent  = allShops.length;
-  document.getElementById('stActive').textContent = allShops.filter(s=>s.active).length;
-  document.getElementById('stFeat').textContent   = allShops.filter(s=>s.featured).length;
-}
-
-/* ── 필터 ── */
-function setFilter(cat, btn) {
-  curFilter = cat;
-  document.querySelectorAll('.fb').forEach(b=>b.classList.remove('on'));
-  btn.classList.add('on');
-  renderList();
-}
-
-/* ── 렌더링 ── */
-function renderList() {
-  const list = curFilter === 'all'
-    ? allShops : allShops.filter(s => s.category === curFilter);
-  const el = document.getElementById('shopList');
-  if (!list.length) {
-    el.innerHTML = \`<div class="empty"><i class="fas fa-store-slash"></i>업체가 없어요</div>\`;
-    return;
-  }
-  el.innerHTML = list.map(s => {
-    const color = CAT_COLOR[s.category] || '#FF4D7D';
-    const thumb = s.thumbnail || 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=600&q=80';
-    return \`
-    <div class="shop-item">
-      <div class="si-media">
-        <img src="\${s.youtubeId
-          ? 'https://img.youtube.com/vi/'+s.youtubeId+'/hqdefault.jpg'
-          : thumb}" onerror="this.src='\${thumb}'" alt="">
-        <span class="si-media-badge" style="background:\${color}99">\${s.category}</span>
-        \${s.youtubeId ? '<span class="si-yt-badge"><i class="fab fa-youtube"></i> 영상있음</span>' : ''}
-        \${s.featured  ? '<span class="si-feat">⭐ 추천</span>' : ''}
-      </div>
-      <div class="si-body">
-        <div class="si-row1">
-          <div class="si-name">\${s.name}</div>
-          <div class="si-status">
-            \${s.active
-              ? '<span class="badge-on">공개</span>'
-              : '<span class="badge-off">비공개</span>'}
-          </div>
-        </div>
-        <div class="si-meta">
-          <span class="si-cat">\${s.category}</span>
-          <span class="si-price">\${s.price||''}</span>
-        </div>
-        \${s.address ? \`<div class="si-addr"><i class="fas fa-map-marker-alt" style="font-size:9px;color:rgba(255,255,255,.25)"></i> \${s.address}</div>\` : ''}
-        \${s.desc ? \`<div class="si-desc">\${s.desc}</div>\` : ''}
-        \${(s.tags||[]).length ? \`<div class="si-tags">\${s.tags.map(t=>'<span class="si-tag">#'+t+'</span>').join('')}</div>\` : ''}
-        <div class="si-btns">
-          <button class="btn-edit" onclick="openModal(\${s.id})">
-            <i class="fas fa-edit"></i> 수정
-          </button>
-          <button class="btn-del" onclick="delShop(\${s.id},'\${s.name.replace(/'/g,"\\\\'")}')">
-            <i class="fas fa-trash"></i>
-          </button>
-        </div>
-      </div>
-    </div>\`;
-  }).join('');
-}
-
-/* ── 모달 ── */
-async function openModal(id=null) {
-  editId = id;
-  document.getElementById('modalTtl').textContent = id ? '업체 수정' : '업체 추가';
-  // 초기화
-  ['name','addr','dist','phone','yt','url','thumb','tags','desc'].forEach(k=>
-    document.getElementById('f-'+k).value='');
-  document.getElementById('f-price').value='';
-  document.getElementById('f-lat').value='';
-  document.getElementById('f-lng').value='';
-  document.getElementById('f-feat').value='false';
-  document.getElementById('f-active').value='true';
-  document.getElementById('f-cat').value='피부관리';
-  document.getElementById('ytPreview').style.display='none';
-  document.getElementById('geoStatus').style.display='none';
-
-  if (id) {
-    const s = await (await fetch('/api/shops/'+id)).json();
-    document.getElementById('f-name').value  = s.name||'';
-    document.getElementById('f-cat').value   = s.category||'피부관리';
-    document.getElementById('f-price').value = s.price||'';
-    document.getElementById('f-addr').value  = s.address||'';
-    document.getElementById('f-dist').value  = s.district||'';
-    document.getElementById('f-phone').value = s.phone||'';
-    document.getElementById('f-lat').value   = s.lat||'';
-    document.getElementById('f-lng').value   = s.lng||'';
-    document.getElementById('f-yt').value    = s.youtubeId||'';
-    document.getElementById('f-url').value   = s.smartPlaceUrl||'';
-    document.getElementById('f-thumb').value = s.thumbnail||'';
-    document.getElementById('f-tags').value  = (s.tags||[]).join(', ');
-    document.getElementById('f-desc').value  = s.desc||'';
-    document.getElementById('f-feat').value  = String(s.featured);
-    document.getElementById('f-active').value= String(s.active);
-    if (s.youtubeId) previewYt(s.youtubeId);
-  }
-  document.getElementById('modalBg').classList.remove('hidden');
-  document.getElementById('modal').scrollTop = 0;
-}
-
-function closeModal() {
-  document.getElementById('modalBg').classList.add('hidden');
-}
-function bgClick(e) {
-  if (e.target === document.getElementById('modalBg')) closeModal();
-}
-
-/* ── 지오코딩 ── */
-async function geocodeAddr() {
-  const addr = document.getElementById('f-addr').value.trim();
-  if (!addr) { alert('주소를 먼저 입력하세요'); return; }
-  const btn = document.getElementById('geoBtn');
-  const st  = document.getElementById('geoStatus');
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 검색중...';
-  st.style.display = 'block';
-  st.style.color = 'rgba(255,255,255,.4)';
-  st.textContent = '주소를 검색하고 있어요...';
-  try {
-    const res  = await fetch('/api/geocode?query='+encodeURIComponent(addr));
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error||'찾을 수 없어요');
-    document.getElementById('f-lat').value  = data.lat;
-    document.getElementById('f-lng').value  = data.lng;
-    document.getElementById('f-addr').value = data.address;
-    if (data.district && !document.getElementById('f-dist').value)
-      document.getElementById('f-dist').value = data.district;
-    st.style.color = '#03C75A';
-    st.textContent = '✅ 좌표 자동입력 완료! 위도 '+data.lat.toFixed(6)+' / 경도 '+data.lng.toFixed(6);
-  } catch(err) {
-    st.style.color = '#FF4D7D';
-    st.textContent = '❌ '+err.message;
-  }
-  btn.disabled = false;
-  btn.innerHTML = '<i class="fas fa-crosshairs"></i> 좌표찾기';
-}
-
-/* ── 유튜브 미리보기 ── */
-function extractYoutubeId(input) {
-  const s = (input || '').trim();
-  if (!s) return '';
-  if (/^[A-Za-z0-9_-]{11}$/.test(s)) return s;
-  const m = s.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|v\/))([A-Za-z0-9_-]{11})/);
-  return m ? m[1] : s;
-}
-function previewYt(input) {
-  const clean = extractYoutubeId(input);
-  const box = document.getElementById('ytPreview');
-  if (!clean) { box.style.display='none'; return; }
-  box.style.display = 'block';
-  document.getElementById('ytFrame').src =
-    'https://www.youtube.com/embed/'+clean+'?mute=1&controls=1';
-}
-
-/* ── 저장 ── */
-async function saveShop() {
-  const name = document.getElementById('f-name').value.trim();
-  const lat  = document.getElementById('f-lat').value.trim();
-  const lng  = document.getElementById('f-lng').value.trim();
-  if (!name) { alert('업체명을 입력하세요'); return; }
-  if (!lat || !lng) { alert('주소를 입력하고 [좌표찾기] 버튼을 눌러주세요'); return; }
-  const body = {
-    name, lat: parseFloat(lat), lng: parseFloat(lng),
-    category:     document.getElementById('f-cat').value,
-    price:        document.getElementById('f-price').value.trim(),
-    address:      document.getElementById('f-addr').value.trim(),
-    district:     document.getElementById('f-dist').value.trim(),
-    phone:        document.getElementById('f-phone').value.trim(),
-    youtubeId:    extractYoutubeId(document.getElementById('f-yt').value),
-    smartPlaceUrl:document.getElementById('f-url').value.trim(),
-    thumbnail:    document.getElementById('f-thumb').value.trim(),
-    tags:         document.getElementById('f-tags').value.split(',').map(t=>t.trim()).filter(Boolean),
-    desc:         document.getElementById('f-desc').value.trim(),
-    featured:     document.getElementById('f-feat').value==='true',
-    active:       document.getElementById('f-active').value==='true',
-  };
-  const url    = editId ? '/api/admin/shops/'+editId : '/api/admin/shops';
-  const method = editId ? 'PUT' : 'POST';
-  const r = await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  if (r.ok) { closeModal(); loadShops(); }
-  else alert('저장 실패: '+r.status);
-}
-
-/* ── 삭제 ── */
-async function delShop(id, name) {
-  if (!confirm(\`[\${name}] 업체를 삭제할까요?\`)) return;
-  const r = await fetch('/api/admin/shops/'+id,{method:'DELETE'});
-  if (r.ok) loadShops();
-  else alert('삭제 실패');
-}
-
-loadShops();
-</script>
-</body>
-</html>`
-}
 
 export default app
