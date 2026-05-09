@@ -2485,7 +2485,7 @@ function renderShops(list) {
       </div>
       <div class="sc-btns">
         <button class="btn-edit" onclick="openModal(\${s.id})"><i class="fas fa-edit"></i> 수정</button>
-        <button class="btn-del"  onclick="delShop(\${s.id},\`\${s.name}\`)"><i class="fas fa-trash"></i> 삭제</button>
+        <button class="btn-del"  onclick="delShop(\${s.id},'\${s.name.replace(/'/g,&quot;&quot;)}')"><i class="fas fa-trash"></i> 삭제</button>
       </div>
     </div>
   \`).join('');
