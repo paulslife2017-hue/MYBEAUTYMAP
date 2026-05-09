@@ -564,11 +564,18 @@ html,body{height:100%;background:var(--bg);color:#fff;
 
 /* 피드 아이템 (모바일: 틱톡 풀스크린) */
 .fi{background:#000;display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;}
-.yt-area{flex:1;position:relative;overflow:hidden;background:#000}
-/* 유튜브 iframe — 처음부터 직접 삽입, 유튜브 자체 플레이어 UI 사용 */
-.yt-iframe{position:absolute;inset:0;width:100%;height:100%;border:none;z-index:2}
-/* 유튜브 없는 카드 — 썸네일 이미지 */
-.yt-thumb-only{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none}
+.yt-area{flex:1;position:relative;overflow:hidden;background:#000;cursor:pointer}
+/* 썸네일 이미지 */
+.yt-thumb{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:1;pointer-events:none;transition:opacity .3s}
+/* 플레이 버튼 오버레이 — pointer-events:none 으로 터치를 JS가 받음 */
+.yt-play-btn{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:2;pointer-events:none}
+.yt-play-btn::after{content:'';width:64px;height:64px;border-radius:50%;background:rgba(0,0,0,.55);border:3px solid rgba(255,255,255,.9);box-shadow:0 2px 16px rgba(0,0,0,.5)}
+.yt-play-btn::before{content:'▶';position:absolute;font-size:22px;color:#fff;margin-left:5px;z-index:1}
+/* 재생 중 iframe */
+.yt-iframe{position:absolute;inset:0;width:100%;height:100%;border:none;z-index:3}
+/* 재생 시작하면 썸네일·버튼 숨김 */
+.yt-area.playing .yt-thumb{opacity:0}
+.yt-area.playing .yt-play-btn{opacity:0}
 /* 임베드 불가 영상 안내 */
 .yt-error-overlay{
   position:absolute;inset:0;z-index:10;
@@ -1157,18 +1164,24 @@ let feedIdx    = 0;    // 현재 보이는 인덱스
 let feedSliderH = 0;   // 슬라이더 높이 (px)
 
 function feedCardHTML(s) {
-  // 유튜브 ID 있으면 iframe 직접 삽입 (썸네일/플레이버튼 없음)
-  // autoplay=0 → 유튜브 자체 플레이어 UI로 재생 → 앱 전환 없음
+  // 썸네일 URL (유튜브 → maxresdefault, 없으면 hqdefault 폴백)
+  const thumb = s.youtubeId
+    ? 'https://img.youtube.com/vi/' + s.youtubeId + '/maxresdefault.jpg'
+    : (s.thumbnail || '');
+  const fb = s.youtubeId ? 'https://img.youtube.com/vi/' + s.youtubeId + '/hqdefault.jpg' : '';
+  const onerr = s.youtubeId
+    ? 'onerror="if(this.src!==this.dataset.fb){this.src=this.dataset.fb}else{this.onerror=null}"'
+    : '';
+  // yt-area: 썸네일 + 플레이버튼 오버레이 → 탭 시 JS가 iframe 동적 생성
+  // iframe은 DOM에 없으므로 모바일에서 앱 전환 없음
   const ytArea = s.youtubeId
     ? '<div class="yt-area" id="yta-' + s.id + '" data-ytid="' + s.youtubeId + '" data-sid="' + s.id + '">'
-        + '<iframe id="yti-' + s.id + '" class="yt-iframe"'
-        + ' src="https://www.youtube.com/embed/' + s.youtubeId
-        + '?autoplay=0&playsinline=1&rel=0&modestbranding=1&controls=1"'
-        + ' allow="autoplay; encrypted-media; picture-in-picture"'
-        + ' allowfullscreen playsinline></iframe>'
+        + '<img class="yt-thumb" src="' + thumb + '" data-fb="' + fb + '" ' + onerr + ' loading="lazy">'
+        + '<div class="yt-play-btn"></div>'
+        + '<div class="yt-iframe-wrap" id="yti-' + s.id + '"></div>'
       + '</div>'
     : '<div class="yt-area no-video">'
-        + (s.thumbnail ? '<img class="yt-thumb-only" src="' + s.thumbnail + '" loading="lazy">' : '')
+        + (thumb ? '<img class="yt-thumb" src="' + thumb + '" loading="lazy">' : '')
       + '</div>';
   // curShop: JSON을 data 속성에 저장 → onclick 따옴표 충돌 회피
   const shopJson = JSON.stringify({id:s.id, name:s.name, smartPlaceUrl:s.smartPlaceUrl})
@@ -1191,7 +1204,7 @@ function feedCardHTML(s) {
   + '</div>';
 }
 
-function feedGoTo(idx, animate, skipPause?) {
+function feedGoTo(idx, animate, skipPause?) { // eslint-disable-line
   const track = document.getElementById('feedTrack');
   if (!track) return;
   const n = feedShops.length;
@@ -1202,7 +1215,7 @@ function feedGoTo(idx, animate, skipPause?) {
   track.style.transform  = 'translateY(' + (-feedIdx * feedSliderH) + 'px)';
   // 카드가 실제로 바뀔 때만 이전 iframe 정지 (src='' 방식)
   if (skipPause || feedIdx === prevIdx) return;
-  setTimeout(() => { stopAllYt(prevIdx); }, 380);
+  setTimeout(() => { stopAllYt(); }, 380);
 }
 
 function getFeedGeometry() {
@@ -1342,10 +1355,17 @@ function feedInitSlider() {
       track.style.transform  = 'translateY(' + (-feedIdx * feedSliderH) + 'px)';
     }
 
-    // 탭 대상 처리 (iframe이 직접 처리하므로 yt-area 탭 로직 불필요)
+    // 탭 대상 처리
     if (tsTarget) {
       // btn-book: 기존 onclick 그대로 통과
       if (tsTarget.closest('.btn-book')) {
+        tsDy = 0; feedTsDiff = 0; tsTarget = null; return;
+      }
+      // yt-area 탭 → playYt 호출
+      const area = tsTarget.closest('.yt-area');
+      if (area && !area.classList.contains('no-video')) {
+        blockClick = true;
+        playYt(area);
         tsDy = 0; feedTsDiff = 0; tsTarget = null; return;
       }
     }
@@ -1353,9 +1373,11 @@ function feedInitSlider() {
     tsDy = 0; feedTsDiff = 0; tsTarget = null;
   }, {passive: true});
 
-  // ── click: PC 마우스 처리 (iframe이 직접 재생 처리) ──
+  // ── click: 유령 click 차단 + PC 마우스 처리 ──
   screen.addEventListener('click', e => {
     if (blockClick) { blockClick = false; e.stopPropagation(); return; }
+    const area = (e.target as HTMLElement).closest('.yt-area');
+    if (area && !area.classList.contains('no-video')) playYt(area);
   });
 
   // ── 마우스 휠 (PC) ──
@@ -1431,21 +1453,38 @@ async function loadFeed(cat='all', q='') {
 }
 
 // ── 유튜브 재생: iframe 직접 삽입 방식 ──────────────────────────────────
-// 스와이프로 카드 이동 시 이전 카드 iframe 정지 (src='' 방식)
-function stopAllYt(prevIdx?) {
-  // prevIdx 지정 시 해당 카드만, 없으면 현재 카드 제외 전체 정지
-  feedShops.forEach((s, i) => {
-    if (prevIdx !== undefined && i !== prevIdx) return;
-    const fr = document.getElementById('yti-' + s.id) as HTMLIFrameElement | null;
-    if (fr && fr.tagName === 'IFRAME') {
-      // src를 빈 값으로 했다가 복원 → 재생 중단, iframe 유지
-      const orig = 'https://www.youtube.com/embed/' + s.youtubeId
-        + '?autoplay=0&playsinline=1&rel=0&modestbranding=1&controls=1';
-      fr.src = '';
-      // 500ms 후 원래 src 복원 (다시 카드로 돌아올 때 로드 가능하게)
-      setTimeout(() => { if (fr) fr.src = orig; }, 500);
-    }
+// 재생 중인 카드 전부 정지 + 썸네일 복원
+function stopAllYt() {
+  document.querySelectorAll('.yt-area.playing').forEach((a: any) => {
+    a.classList.remove('playing');
+    const sid = a.dataset.sid;
+    // iframe 완전 제거 → 다시 탭하기 전까지 DOM에 없음 (앱 전환 방지)
+    const wrap = document.getElementById('yti-' + sid);
+    if (wrap) wrap.innerHTML = '';
   });
+}
+
+// 플레이버튼 탭 → iframe 동적 생성 (autoplay=1, playsinline=1)
+// enablejsapi=0 으로 JS API 완전 차단 → 앱 전환 트리거 제거
+function playYt(area) {
+  if (!area || area.classList.contains('no-video')) return;
+  const ytId = area.dataset.ytid;
+  const sid  = area.dataset.sid;
+  if (!ytId) return;
+  if (area.classList.contains('playing')) return; // 이미 재생 중
+  stopAllYt();
+  area.classList.add('playing');
+  const wrap = document.getElementById('yti-' + sid);
+  if (!wrap) return;
+  const fr = document.createElement('iframe');
+  fr.className = 'yt-iframe';
+  fr.setAttribute('allow', 'autoplay; encrypted-media; picture-in-picture');
+  fr.setAttribute('allowfullscreen', '');
+  fr.setAttribute('playsinline', '');
+  // enablejsapi=0: YT JS API 비활성화 → cross-origin 앱 전환 차단
+  fr.src = 'https://www.youtube.com/embed/' + ytId
+         + '?autoplay=1&playsinline=1&rel=0&modestbranding=1&controls=1&enablejsapi=0';
+  wrap.appendChild(fr);
 }
 
 function filterFeed(btn, cat) {
