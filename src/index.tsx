@@ -1196,7 +1196,7 @@ async function loadFeed(cat='all', q='') {
   // 클릭 이벤트 (최초 1회만 등록)
   if (!scr._feedEvt) {
     scr._feedEvt = true;
-    scr.addEventListener('click', (e: any) => {
+    scr.addEventListener('click', (e) => {
       const area = e.target.closest('.yt-area');
       if (area && !area.classList.contains('no-video') && area.dataset.ytid) {
         window.open('https://www.youtube.com/watch?v=' + area.dataset.ytid, '_blank');
@@ -1206,7 +1206,7 @@ async function loadFeed(cat='all', q='') {
 }
 
 function filterFeed(btn, cat) {
-  document.querySelectorAll('.cp').forEach((b:any)=>b.classList.remove('active'));
+  document.querySelectorAll('.cp').forEach((b)=>b.classList.remove('active'));
   btn.classList.add('active');
   loadFeed(cat, searchQ);
 }
