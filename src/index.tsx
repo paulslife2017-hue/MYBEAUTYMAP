@@ -440,10 +440,35 @@ html,body{height:100%;background:var(--bg);color:#fff;
   display:none;}
 #feedScreen.active{display:block;}
 #feedScreen::-webkit-scrollbar{display:none}
-/* PC(hover 가능 장치)에서는 snap 해제 → 자유 스크롤 */
+/* PC(hover 가능 장치)에서는 카드형 레이아웃으로 전환 */
 @media(hover:hover){
-  #feedScreen{scroll-snap-type:none;overflow-y:scroll;}
-  .fi{scroll-snap-align:none;scroll-snap-stop:normal;}
+  #feedScreen{
+    scroll-snap-type:none;
+    overflow-y:scroll;
+    display:none;
+    padding:12px;
+    box-sizing:border-box;
+    background:#0a0a0a;
+  }
+  #feedScreen.active{display:block;}
+  .fi{
+    height:auto;
+    scroll-snap-align:none;
+    scroll-snap-stop:normal;
+    border-radius:16px;
+    overflow:hidden;
+    margin-bottom:16px;
+    flex-direction:column;
+  }
+  .yt-area{
+    height:56vw;
+    max-height:520px;
+    min-height:240px;
+    flex:none;
+  }
+  .shop-bar{
+    background:rgba(14,14,14,.98);
+  }
 }
 #mapScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:var(--nav);
   display:none;}
