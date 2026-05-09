@@ -1135,9 +1135,12 @@ let searchTimer = null;
 
 function feedCardHTML(s) {
   // iframe을 바로 박음. src는 비워두고 Observer가 보일 때 채움
+  // data-src에 URL 저장, src는 비워둠 → Observer가 보일 때 src로 이동
+  const ytSrc = 'https://www.youtube.com/embed/' + s.youtubeId
+    + '?playsinline=1&rel=0&modestbranding=1&color=white';
   const ytArea = s.youtubeId
     ? '<div class="yt-area">'
-        + '<iframe data-ytid="' + s.youtubeId + '" src=""'
+        + '<iframe data-src="' + ytSrc + '" src="about:blank"'
         + ' allow="autoplay; encrypted-media; picture-in-picture; fullscreen"'
         + ' allowfullscreen></iframe>'
       + '</div>'
@@ -1186,25 +1189,28 @@ async function loadFeed(cat='all', q='') {
   if (scr._obs) scr._obs.disconnect();
 
   // 화면에 보이는 카드 iframe만 src 활성화 → 로딩 집중, 메모리 절약
+  // root:null = 뷰포트 기준 (feedScreen이 fixed라 동일)
+  // root:scr 쓰면 display:none 상태에선 Observer 트리거 안됨 → 영상 미노출
   const obs = new IntersectionObserver((entries) => {
     entries.forEach((en) => {
-      const ifr = en.target.querySelector('iframe[data-ytid]');
+      const ifr = en.target.querySelector('iframe[data-src]');
       if (!ifr) return;
       if (en.isIntersecting) {
-        // 현재 카드: src 세팅
-        if (!ifr.src) {
-          ifr.src = 'https://www.youtube.com/embed/' + ifr.dataset.ytid
-            + '?playsinline=1&rel=0&modestbranding=1&color=white';
-        }
+        if (ifr.src !== ifr.dataset.src) ifr.src = ifr.dataset.src;
       } else {
-        // 화면 밖: src 비워서 리소스 해제
-        ifr.src = '';
+        if (ifr.src !== 'about:blank') ifr.src = 'about:blank';
       }
     });
-  }, { root: scr, threshold: 0.5 });
+  }, { root: null, threshold: 0.5 });
 
   scr._obs = obs;
   scr.querySelectorAll('.fi').forEach((card) => obs.observe(card));
+
+  // Observer가 첫 카드를 놓칠 경우 대비 — 첫 번째 iframe 즉시 강제 세팅
+  const firstIfr = scr.querySelector('iframe[data-src]');
+  if (firstIfr && firstIfr.src !== firstIfr.dataset.src) {
+    firstIfr.src = firstIfr.dataset.src;
+  }
 }
 
 function filterFeed(btn, cat) {
