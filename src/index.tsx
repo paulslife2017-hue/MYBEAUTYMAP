@@ -566,7 +566,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
 .fi{background:#000;display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;}
 .yt-area{flex:1;position:relative;overflow:hidden;background:#000;cursor:pointer}
 .yt-thumb{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
-  transition:opacity .35s;z-index:2}
+  transition:opacity .35s;z-index:2;pointer-events:none}
 .yt-play-btn{
   position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
   z-index:3;transition:opacity .2s}
@@ -1329,62 +1329,82 @@ function feedInitSlider() {
   if (feedSliderEventsAttached) return;
   feedSliderEventsAttached = true;
 
-  // 이벤트 위임: .yt-area 클릭 → playYt / .unmute-btn 클릭 → unmuteYt
-  // ※ #feedSlider 자체는 loadFeed마다 재생성되므로 document 레벨 위임
+  // PC 마우스 클릭 전용 (터치 기기는 touchend에서 직접 처리)
   document.getElementById('feedScreen').addEventListener('click', e => {
-    const unmuteBtn = e.target.closest('.unmute-btn');
-    if (unmuteBtn) {
-      e.stopPropagation();
-      unmuteYt(e, unmuteBtn.dataset.sid);
-      return;
-    }
-    const errBtn = e.target.closest('.yt-err-btn');
-    if (errBtn) {
-      e.stopPropagation();
-      const url = errBtn.dataset.yturl;
-      if (url) window.open(url, '_blank');
-      return;
-    }
-    // 스와이프(40px 이상)가 아닌 경우만 클릭으로 처리
-    if (Math.abs(feedTsDiff) > 40) return;
-    const area = e.target.closest('.yt-area');
-    if (area && !area.classList.contains('no-video')) {
-      playYt(area);
+    if (e.sourceCapabilities && !e.sourceCapabilities.firesTouchEvents) {
+      // 마우스 클릭만 처리
+      const unmuteBtn = e.target.closest('.unmute-btn');
+      if (unmuteBtn) { e.stopPropagation(); unmuteYt(e, unmuteBtn.dataset.sid); return; }
+      const errBtn = e.target.closest('.yt-err-btn');
+      if (errBtn) { e.stopPropagation(); const url = errBtn.dataset.yturl; if (url) window.open(url, '_blank'); return; }
+      const area = e.target.closest('.yt-area');
+      if (area && !area.classList.contains('no-video')) playYt(area);
     }
   });
 
-  // 터치 스와이프 — feedScreen 레벨로 위임
+  // 터치 스와이프 + 탭 — feedScreen 레벨로 위임
   const screen = document.getElementById('feedScreen');
-  let feedTsY = 0, feedTsDiffLocal = 0, feedDragging = false;
+  let feedTsX = 0, feedTsY = 0, feedTsDiffLocal = 0, feedDragging = false;
+  let feedTsTarget = null; // touchstart 시점의 타겟 기억
 
   screen.addEventListener('touchstart', e => {
+    feedTsX = e.touches[0].clientX;
     feedTsY = e.touches[0].clientY;
     feedTsDiffLocal = 0;
     feedDragging = true;
     feedTsDiff = 0;
+    feedTsTarget = e.target; // 탭 판단용 타겟 저장
   }, {passive: true});
 
   screen.addEventListener('touchmove', e => {
     if (!feedDragging) return;
-    feedTsDiffLocal = e.touches[0].clientY - feedTsY;
-    feedTsDiff = feedTsDiffLocal;
-    const track2 = document.getElementById('feedTrack');
-    if (track2) {
-      track2.style.transition = 'none';
-      track2.style.transform  = 'translateY(' + (-feedIdx * feedSliderH + feedTsDiffLocal) + 'px)';
+    const dy = e.touches[0].clientY - feedTsY;
+    const dx = e.touches[0].clientX - feedTsX;
+    // Y 이동이 X보다 클 때만 세로 스와이프로 처리
+    if (Math.abs(dy) > Math.abs(dx)) {
+      feedTsDiffLocal = dy;
+      feedTsDiff = dy;
+      const track2 = document.getElementById('feedTrack');
+      if (track2) {
+        track2.style.transition = 'none';
+        track2.style.transform  = 'translateY(' + (-feedIdx * feedSliderH + dy) + 'px)';
+      }
     }
   }, {passive: true});
 
-  screen.addEventListener('touchend', () => {
+  screen.addEventListener('touchend', e => {
     feedDragging = false;
+    const isTap = Math.abs(feedTsDiffLocal) < 10; // 10px 미만 = 탭
+
     if (Math.abs(feedTsDiffLocal) > 40) {
+      // 스와이프: 다음/이전 카드
       feedGoTo(feedTsDiffLocal < 0 ? feedIdx + 1 : feedIdx - 1, true);
     } else {
       feedGoTo(feedIdx, true);
     }
-    // click 이벤트가 touchend 직후 발생하므로 즉시 초기화
-    feedTsDiff = feedTsDiffLocal;
-    setTimeout(() => { feedTsDiff = 0; feedTsDiffLocal = 0; }, 300);
+
+    // ── 탭 처리: touchend에서 직접 (click 이벤트 지연/차단 우회) ──
+    if (isTap && feedTsTarget) {
+      const t = feedTsTarget;
+      // 음소거 해제 버튼
+      const unmuteBtn = t.closest('.unmute-btn');
+      if (unmuteBtn) { unmuteYt(e, unmuteBtn.dataset.sid); feedTsTarget = null; feedTsDiffLocal = 0; feedTsDiff = 0; return; }
+      // YouTube 외부 열기 버튼
+      const errBtn = t.closest('.yt-err-btn');
+      if (errBtn) { const url = errBtn.dataset.yturl; if (url) window.open(url, '_blank'); feedTsTarget = null; feedTsDiffLocal = 0; feedTsDiff = 0; return; }
+      // 예약 버튼 (btn-book) — 기존 onclick 유지, 여기선 건드리지 않음
+      if (t.closest('.btn-book')) { feedTsTarget = null; feedTsDiffLocal = 0; feedTsDiff = 0; return; }
+      // yt-area 탭 → 영상 재생
+      const area = t.closest('.yt-area');
+      if (area && !area.classList.contains('no-video')) {
+        playYt(area);
+        feedTsTarget = null; feedTsDiffLocal = 0; feedTsDiff = 0; return;
+      }
+    }
+
+    feedTsTarget = null;
+    feedTsDiff = 0;
+    feedTsDiffLocal = 0;
   }, {passive: true});
 
   // 마우스 휠 (PC)
