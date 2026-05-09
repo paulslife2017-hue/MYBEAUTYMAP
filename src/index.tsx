@@ -440,36 +440,6 @@ html,body{height:100%;background:var(--bg);color:#fff;
   display:none;}
 #feedScreen.active{display:block;}
 #feedScreen::-webkit-scrollbar{display:none}
-/* PC(hover 가능 장치)에서는 카드형 레이아웃으로 전환 */
-@media(hover:hover){
-  #feedScreen{
-    scroll-snap-type:none;
-    overflow-y:scroll;
-    display:none;
-    padding:12px;
-    box-sizing:border-box;
-    background:#0a0a0a;
-  }
-  #feedScreen.active{display:block;}
-  .fi{
-    height:auto;
-    scroll-snap-align:none;
-    scroll-snap-stop:normal;
-    border-radius:16px;
-    overflow:hidden;
-    margin-bottom:16px;
-    flex-direction:column;
-  }
-  .yt-area{
-    height:56vw;
-    max-height:520px;
-    min-height:240px;
-    flex:none;
-  }
-  .shop-bar{
-    background:rgba(14,14,14,.98);
-  }
-}
 #mapScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:var(--nav);
   display:none;}
 #mapScreen.active{display:block;}
@@ -560,11 +530,38 @@ html,body{height:100%;background:var(--bg);color:#fff;
 .tab.active{color:#fff}
 .tab.active i{color:var(--pink);transform:scale(1.1)}
 
-/* 피드 아이템 */
+/* 피드 아이템 (모바일: 틱톡 풀스크린) */
 .fi{height:calc(100dvh - var(--hd) - var(--cat) - var(--nav) - var(--sb,0px));
   scroll-snap-align:start;scroll-snap-stop:always;
   background:#000;display:flex;flex-direction:column;overflow:hidden}
 .yt-area{flex:1;position:relative;overflow:hidden;background:#000;cursor:pointer}
+/* PC(마우스 장치): 카드형으로 전환 — .fi 기본 CSS 뒤에 선언해야 덮어씀 */
+@media(hover:hover){
+  #feedScreen{
+    scroll-snap-type:none;
+    overflow-y:auto !important;
+    padding:12px;
+    box-sizing:border-box;
+    background:#0a0a0a;
+  }
+  .fi{
+    height:auto !important;
+    min-height:0 !important;
+    scroll-snap-align:none !important;
+    scroll-snap-stop:normal !important;
+    border-radius:16px;
+    margin-bottom:16px;
+  }
+  .yt-area{
+    flex:none !important;
+    height:52vw !important;
+    max-height:500px;
+    min-height:220px;
+  }
+  .shop-bar{
+    background:rgba(14,14,14,.98);
+  }
+}
 .yt-thumb{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
   transition:opacity .35s;z-index:2}
 .yt-play-btn{
@@ -1178,18 +1175,62 @@ async function loadFeed(cat='all', q='') {
   }).join('');
   screen.scrollTo(0, 0);
 
-  // 스크롤 멈추면 현재 화면 영상 자동재생
+  // PC(마우스 장치) 감지 → 인라인 스타일로 직접 강제 적용
+  const isPC = window.matchMedia('(hover:hover)').matches;
+  if (isPC) {
+    // feedScreen: snap 해제 + 자유 스크롤
+    screen.style.scrollSnapType = 'none';
+    screen.style.overflowY      = 'auto';
+    screen.style.padding        = '12px';
+    screen.style.boxSizing      = 'border-box';
+    screen.style.background     = '#0a0a0a';
+    // 각 .fi 아이템: 높이 auto + 카드형
+    screen.querySelectorAll('.fi').forEach(fi => {
+      fi.style.height         = 'auto';
+      fi.style.minHeight      = '0';
+      fi.style.scrollSnapAlign = 'none';
+      fi.style.borderRadius   = '16px';
+      fi.style.overflow       = 'hidden';
+      fi.style.marginBottom   = '16px';
+    });
+    // .yt-area: 고정 높이
+    screen.querySelectorAll('.yt-area').forEach(el => {
+      el.style.flex      = 'none';
+      el.style.height    = Math.min(window.innerWidth * 0.56, 500) + 'px';
+      el.style.minHeight = '220px';
+    });
+  }
+
+  // 스크롤 시 현재 보이는 영상 자동재생
   let scrollTmr;
   screen.onscroll = () => {
     clearTimeout(scrollTmr);
     scrollTmr = setTimeout(() => {
-      const itemH = screen.querySelector('.fi')?.offsetHeight || screen.clientHeight;
-      const idx   = Math.round(screen.scrollTop / itemH);
-      const fi    = screen.querySelectorAll('.fi')[idx];
-      if (!fi) return;
-      const area = fi.querySelector('.yt-area[data-ytid]');
-      if (!area || area.classList.contains('playing')) return;
-      playYt(area);
+      if (isPC) {
+        // PC: 화면 중앙에 가장 가까운 .fi 찾기
+        const fis = [...screen.querySelectorAll('.fi')];
+        const mid = screen.scrollTop + screen.clientHeight / 2;
+        let closest = null, minDist = Infinity;
+        fis.forEach(fi => {
+          const dist = Math.abs(fi.offsetTop + fi.offsetHeight / 2 - mid);
+          if (dist < minDist) { minDist = dist; closest = fi; }
+        });
+        if (!closest) return;
+        const area = closest.querySelector('.yt-area[data-ytid]');
+        if (!area || area.classList.contains('playing')) return;
+        Object.values(ytPlayers).forEach(p => { try { p.pauseVideo(); } catch(e){} });
+        document.querySelectorAll('.yt-area.playing').forEach(a => a.classList.remove('playing'));
+        playYt(area);
+      } else {
+        // 모바일: snap 기준
+        const itemH = screen.querySelector('.fi')?.offsetHeight || screen.clientHeight;
+        const idx   = Math.round(screen.scrollTop / itemH);
+        const fi    = screen.querySelectorAll('.fi')[idx];
+        if (!fi) return;
+        const area = fi.querySelector('.yt-area[data-ytid]');
+        if (!area || area.classList.contains('playing')) return;
+        playYt(area);
+      }
     }, 350);
   };
 }
