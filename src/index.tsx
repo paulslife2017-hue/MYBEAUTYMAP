@@ -461,10 +461,10 @@ html,body{height:100%;background:var(--bg);color:#fff;
 #feedScreen{position:fixed;
   top:calc(var(--hd)+var(--cat)+var(--sb,0px));
   left:0;right:0;
-  /* tabbar = height(--nav) + padding-bottom(safe-area) 이므로 bottom으로 지정 */
-  bottom:calc(var(--nav) + var(--safe));
+  /* height: 뷰포트 - 상단(헤더+카탈로그+검색바) - 하단(탭바+safe-area) */
+  height:calc(100dvh - var(--hd) - var(--cat) - var(--sb,0px) - var(--nav) - env(safe-area-inset-bottom,0px));
   overflow:hidden;
-  transition:top .3s cubic-bezier(.32,1,.23,1), bottom .3s cubic-bezier(.32,1,.23,1);
+  transition:top .3s cubic-bezier(.32,1,.23,1), height .3s cubic-bezier(.32,1,.23,1);
   display:none;}
 #feedScreen.active{display:block;}
 /* 피드 내부 슬라이더 컨테이너 */
@@ -1172,7 +1172,7 @@ function feedCardHTML(s) {
     ? '<div class="yt-area" id="yta-' + s.id + '" data-ytid="' + s.youtubeId + '" data-sid="' + s.id + '">'
         + '<img class="yt-thumb" id="ytt-' + s.id + '" src="' + thumb + '" loading="lazy"'
         + ' data-fb1="' + fb1 + '" data-fb2="' + fb2 + '"'
-        + ' onerror="var s=this.src;if(s.indexOf(\'maxresdefault\')>-1){this.src=this.dataset.fb1;}else if(s.indexOf(\'hqdefault\')>-1){this.src=this.dataset.fb2;}else{this.onerror=null;}">'
+        + ' onerror="this.onerror=null;this.src=(this.src===this.dataset.fb1)?this.dataset.fb2:this.dataset.fb1">'
         + '<div class="yt-play-btn" id="ypb-' + s.id + '"></div>'
         + '<div class="yt-player"  id="ytp-' + s.id + '"></div>'
         + '<button class="unmute-btn" id="unm-' + s.id + '" data-sid="' + s.id + '">🔇 탭하여 소리켜기</button>'
@@ -1225,15 +1225,20 @@ function feedGoTo(idx, animate) {
 }
 
 function getFeedHeight() {
-  // feedScreen이 bottom:calc(--nav + --safe) 방식이므로
-  // tabbar 실측 높이(env() safe-area 포함)를 직접 재서 계산
+  // CSS와 동일한 계산식: 100dvh - hd - cat - sb - nav - safe
   const style = getComputedStyle(document.documentElement);
   const hd  = parseFloat(style.getPropertyValue('--hd'))  || 50;
   const cat = parseFloat(style.getPropertyValue('--cat')) || 44;
+  const nav = parseFloat(style.getPropertyValue('--nav')) || 60;
   const sb  = parseFloat(style.getPropertyValue('--sb'))  || 0;
-  // tabbar.getBoundingClientRect().height = --nav(60) + safe-area padding
+  // safe-area: feedScreen의 실제 높이를 직접 읽는 것이 가장 정확
+  const screen = document.getElementById('feedScreen');
+  if (screen && screen.getBoundingClientRect().height > 50) {
+    return screen.getBoundingClientRect().height;
+  }
+  // fallback: tabbar 실측 높이로 계산
   const tabbar = document.querySelector('.tabbar');
-  const tabH = tabbar ? tabbar.getBoundingClientRect().height : 60;
+  const tabH = tabbar ? tabbar.getBoundingClientRect().height : nav;
   const h = window.innerHeight - hd - cat - sb - tabH;
   return Math.max(h, 200);
 }
