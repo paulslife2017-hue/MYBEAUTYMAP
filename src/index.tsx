@@ -611,6 +611,15 @@ html,body{height:100%;background:var(--bg);color:#fff;
 .spinner{width:36px;height:36px;border:3px solid rgba(255,255,255,.08);
   border-top-color:var(--pink);border-radius:50%;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+/* 스켈레톤 카드 */
+.skel-card{scroll-snap-align:start;flex-shrink:0;width:100%;height:100%;
+  display:flex;flex-direction:column;background:#0f0f0f;}
+.skel-video{width:100%;aspect-ratio:9/16;background:linear-gradient(90deg,#1a1a1a 25%,#242424 50%,#1a1a1a 75%);
+  background-size:200% 100%;animation:skel-shine 1.2s infinite;}
+.skel-bar{padding:14px 16px;display:flex;flex-direction:column;gap:10px;}
+.skel-line{border-radius:6px;background:linear-gradient(90deg,#1a1a1a 25%,#242424 50%,#1a1a1a 75%);
+  background-size:200% 100%;animation:skel-shine 1.2s infinite;}
+@keyframes skel-shine{to{background-position:-200% 0}}
 .feed-empty{height:100%;display:flex;flex-direction:column;align-items:center;
   justify-content:center;gap:12px;color:rgba(255,255,255,.25);
   scroll-snap-align:start;background:#0a0a0a}
@@ -1045,10 +1054,22 @@ html,body{height:100%;background:var(--bg);color:#fff;
 </div>
 <div class="toast" id="toast"></div>
 
-<!-- 인앱 브라우저 -->
-
-
-
+<!-- 인앱 브라우저 시트 -->
+<div class="inapp-bg" id="inappBg" onclick="closeInapp()"></div>
+<div class="inapp-sheet" id="inappSheet">
+  <div class="inapp-handle"></div>
+  <div class="inapp-bar">
+    <span class="inapp-title" id="inappTitle">예약하기</span>
+    <button class="inapp-btn inapp-btn-ext" onclick="openInappExternal()" title="외부 브라우저로 열기">
+      <i class="fas fa-external-link-alt"></i>
+    </button>
+    <button class="inapp-btn inapp-btn-close" onclick="closeInapp()" title="닫기">
+      <i class="fas fa-times"></i>
+    </button>
+  </div>
+  <div class="inapp-loader" id="inappLoader"></div>
+  <iframe class="inapp-iframe" id="inappFrame" src="" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-top-navigation" allowfullscreen></iframe>
+</div>
 
 <script>
 // ── 전역 ──────────────────────────────────────────────────────────────────
@@ -1174,7 +1195,14 @@ async function loadFeed(cat='all', q='') {
   feedCat = cat;
   const scr = document.getElementById('feedScreen');
 
-  scr.innerHTML = '<div class="feed-spin"><div class="spinner"></div></div>';
+  // 스켈레톤 카드 3장 즉시 표시 → 로딩 느낌 최소화
+  const sc = 'skel-card', sv = 'skel-video', sb = 'skel-bar', sl = 'skel-line';
+  const skelCard = '<div class="'+sc+'"><div class="'+sv+'"></div><div class="'+sb+'">'
+    +'<div class="'+sl+'" style="height:18px;width:55%"></div>'
+    +'<div class="'+sl+'" style="height:13px;width:75%"></div>'
+    +'<div class="'+sl+'" style="height:13px;width:40%"></div>'
+    +'</div></div>';
+  scr.innerHTML = skelCard + skelCard + skelCard;
 
   let url = '/api/shops?category=' + encodeURIComponent(cat==='all'?'':cat) + '&shuffle=1';
   if (q) url += '&q=' + encodeURIComponent(q);
@@ -1642,11 +1670,51 @@ function trackMapSP(id) { fetch('/api/track/mapsp/'+id,{method:'POST'}); }
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // 인앱 브라우저
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// 네이버 URL은 iframe 로드 불가 (map.naver.com 리다이렉트 차단) → window.open 직접 호출
+let _inappUrl = '';
 function openInapp() {
   if (!curShop || !curShop.smartPlaceUrl) { showToast('예약 링크가 없어요'); return; }
   trackSP();
-  window.open(curShop.smartPlaceUrl, '_blank', 'noopener');
+  _inappUrl = curShop.smartPlaceUrl;
+  const frame  = document.getElementById('inappFrame');
+  const loader = document.getElementById('inappLoader');
+  document.getElementById('inappTitle').textContent = (curShop.name||'') + ' 예약하기';
+  loader.classList.remove('done');
+  frame.src = '';
+  // iframe 로드 실패(차단) 감지 → 자동으로 새 탭 열기
+  let opened = false;
+  frame.onerror = () => { if(!opened){ opened=true; closeInapp(); window.open(_inappUrl,'_blank','noopener'); } };
+  // 3초 안에 onload 안 오면 차단으로 판단 → 새 탭 폴백
+  const fallbackTimer = setTimeout(() => {
+    if(!opened && loader && !loader.classList.contains('done')){
+      opened=true; closeInapp(); window.open(_inappUrl,'_blank','noopener');
+    }
+  }, 3000);
+  frame.onload = () => {
+    clearTimeout(fallbackTimer);
+    // about:blank 로드는 무시
+    if(frame.src === '' || frame.src === 'about:blank') return;
+    try {
+      // 차단된 경우 contentDocument 접근 불가 → 새 탭
+      const doc = frame.contentDocument || frame.contentWindow?.document;
+      if(!doc || doc.body.innerHTML === '') throw new Error('blocked');
+    } catch(e) {
+      if(!opened){ opened=true; closeInapp(); window.open(_inappUrl,'_blank','noopener'); return; }
+    }
+    loader.classList.add('done');
+  };
+  setTimeout(() => { frame.src = _inappUrl; }, 30);
+  document.getElementById('inappBg').classList.add('show');
+  document.getElementById('inappSheet').classList.add('show');
+  document.body.style.overflow = 'hidden';
+}
+function closeInapp() {
+  document.getElementById('inappBg').classList.remove('show');
+  document.getElementById('inappSheet').classList.remove('show');
+  document.body.style.overflow = '';
+  setTimeout(() => { document.getElementById('inappFrame').src = ''; }, 400);
+}
+function openInappExternal() {
+  if (_inappUrl) window.open(_inappUrl, '_blank', 'noopener');
 }
 
 // 인앱 시트 스와이프 다운 닫기
@@ -1654,7 +1722,6 @@ function openInapp() {
   const sheet = document.getElementById('inappSheet');
   let sy = 0, dragging = false;
   sheet.addEventListener('touchstart', e => {
-    // 아이프레임 위면 무시
     if (e.target.closest('iframe')) return;
     sy = e.touches[0].clientY; dragging = true;
   }, {passive:true});
