@@ -376,13 +376,14 @@ html,body{height:100%;background:var(--bg);color:#fff;
 /* 화면 */
 #feedScreen{position:fixed;top:calc(var(--hd)+var(--cat)+var(--sb,0px));left:0;right:0;
   bottom:var(--nav);overflow-y:scroll;scroll-snap-type:y mandatory;
-  -webkit-overflow-scrolling:touch;scrollbar-width:none;display:none;
-  transition:top .3s cubic-bezier(.32,1,.23,1)}
-#feedScreen.active{display:block}
+  -webkit-overflow-scrolling:touch;scrollbar-width:none;
+  transition:top .3s cubic-bezier(.32,1,.23,1);
+  z-index:2;}
+#feedScreen.active{z-index:10;pointer-events:auto;}
+#feedScreen:not(.active){pointer-events:none;}
 #feedScreen::-webkit-scrollbar{display:none}
-#mapScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:var(--nav);
-  opacity:0;pointer-events:none;z-index:-1;}
-#mapScreen.active{opacity:1;pointer-events:auto;z-index:1;}
+#mapScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:var(--nav);z-index:1;}
+#mapScreen.active{z-index:5;}
 
 /* 하단탭 */
 .tabbar{position:fixed;bottom:0;left:0;right:0;z-index:300;height:var(--nav);
@@ -828,7 +829,7 @@ function switchTab(tab) {
   document.getElementById('catBar').classList.toggle('show', tab==='feed');
   if (tab==='map') {
     closeMapPopup();
-    if (naverMap) { naverMap.autoResize(); loadMapShops(mapCat, nearbyOn, searchQ); }
+    setTimeout(()=>{ if(naverMap) naverMap.autoResize(); }, 50);
   }
   if (tab==='feed') closeMapPopup();
 }
@@ -1338,7 +1339,7 @@ function showToast(msg) {
 }
 
 loadFeed('all');
-// 페이지 로드 시 지도 미리 초기화 (opacity:0 상태라 크기는 정상)
+// 페이지 로드 즉시 지도 초기화 (항상 DOM에 존재하므로 크기 정상)
 initMap();
 </script>
 </body>
