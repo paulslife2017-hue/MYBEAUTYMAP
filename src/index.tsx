@@ -381,8 +381,8 @@ html,body{height:100%;background:var(--bg);color:#fff;
 #feedScreen.active{display:block}
 #feedScreen::-webkit-scrollbar{display:none}
 #mapScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:var(--nav);
-  display:none;flex-direction:column}
-#mapScreen.active{display:flex}
+  display:none;}
+#mapScreen.active{display:block}
 
 /* 하단탭 */
 .tabbar{position:fixed;bottom:0;left:0;right:0;z-index:300;height:var(--nav);
@@ -826,7 +826,7 @@ function switchTab(tab) {
     document.getElementById(t+'Screen').classList.toggle('active', t===tab);
   });
   document.getElementById('catBar').classList.toggle('show', tab==='feed');
-  if (tab==='map') { closeMapPopup(); setTimeout(initMap, 50); }
+  if (tab==='map') { closeMapPopup(); setTimeout(initMap, 300); }
   if (tab==='feed') closeMapPopup();
 }
 
@@ -1017,8 +1017,11 @@ function initMap() {
       mapDataControl: false,
     });
     naver.maps.Event.addListener(naverMap, 'click', ()=>closeMapPopup());
-    // 지도 크기 잡힌 후 마커 로드
-    setTimeout(()=>loadMapShops('all', false), 100);
+    // display:block 전환 후 실제 크기 인식 → autoResize → 마커 로드
+    setTimeout(()=>{
+      naverMap.autoResize();
+      loadMapShops('all', false);
+    }, 400);
   });
 }
 
