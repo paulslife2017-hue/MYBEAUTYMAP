@@ -1083,7 +1083,16 @@ function switchTab(tab) {
     pcWrapper.style.display = (tab === 'feed') ? '' : 'none';
   }
 
-  if (tab==='map') { closeMapPopup(); initMap(); }
+  if (tab==='map') {
+    closeMapPopup();
+    initMap();
+    // 지도가 display:none 상태에서 로드됐을 수 있어서
+    // 탭 전환 후 iframe에 fitBounds 재실행 요청
+    setTimeout(() => {
+      const frame = document.getElementById('mapFrame');
+      if (frame) frame.contentWindow.postMessage({ type: 'fitBounds' }, '*');
+    }, 300);
+  }
   if (tab==='feed') closeMapPopup();
 }
 
@@ -1640,8 +1649,9 @@ function renderNaverMarkers(shops) {
   shops.forEach(shop => {
     nvMarkers[shop.id] = createNaverMarker(shop, false);
   });
-  // 지도 완전히 준비된 뒤 범위 조정 (타이밍 보정)
-  setTimeout(() => fitMapToBounds(shops), 300);
+  // 지도 렌더 완료 후 fitBounds (타이밍 넉넉히)
+  setTimeout(() => fitMapToBounds(shops), 100);
+  setTimeout(() => fitMapToBounds(shops), 600);
 }
 
 function selectShopOnMap(id) {
@@ -2096,6 +2106,13 @@ let map = null, markers = [], curCat = 'all', curShop = null;
 
 window.addEventListener('message', e => {
   if (e.data?.type === 'filterCat') { curCat = e.data.cat; renderMarkers(); }
+  if (e.data?.type === 'fitBounds') {
+    // 지도 크기 재계산 후 fitBounds 재실행
+    if (map) {
+      map.autoResize();
+      setTimeout(() => fitToBounds(curCat === 'all' ? allShops : allShops.filter(s => s.category === curCat)), 200);
+    }
+  }
 });
 
 /* ── 카드 닫기 ── */
