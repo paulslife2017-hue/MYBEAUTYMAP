@@ -1465,14 +1465,8 @@ function createNaverMarker(shop, selected=false) {
   return overlay;
 }
 
-function renderNaverMarkers(shops) {
-  Object.values(nvMarkers).forEach(o => o.setMap(null));
-  nvMarkers = {};
-  if (!shops.length) return;
-  shops.forEach(shop => {
-    nvMarkers[shop.id] = createNaverMarker(shop, false);
-  });
-  // 업체 전체가 화면에 보이도록 자동 범위 조정
+function fitMapToBounds(shops) {
+  if (!shops.length || !naverMap) return;
   if (shops.length === 1) {
     naverMap.setCenter(new naver.maps.LatLng(shops[0].lat, shops[0].lng));
     naverMap.setZoom(15);
@@ -1482,8 +1476,19 @@ function renderNaverMarkers(shops) {
     const sw = new naver.maps.LatLng(Math.min(...lats), Math.min(...lngs));
     const ne = new naver.maps.LatLng(Math.max(...lats), Math.max(...lngs));
     const bounds = new naver.maps.LatLngBounds(sw, ne);
-    naverMap.fitBounds(bounds, { top: 80, right: 40, bottom: 80, left: 40 });
+    naverMap.fitBounds(bounds, { top: 80, right: 40, bottom: 100, left: 40 });
   }
+}
+
+function renderNaverMarkers(shops) {
+  Object.values(nvMarkers).forEach(o => o.setMap(null));
+  nvMarkers = {};
+  if (!shops.length) return;
+  shops.forEach(shop => {
+    nvMarkers[shop.id] = createNaverMarker(shop, false);
+  });
+  // 지도 완전히 준비된 뒤 범위 조정 (타이밍 보정)
+  setTimeout(() => fitMapToBounds(shops), 300);
 }
 
 function selectShopOnMap(id) {
@@ -1518,25 +1523,30 @@ function openMapPopup(shop) {
 
   // 유튜브 or 썸네일
   if (shop.youtubeId) {
+    const ytThumb = 'https://img.youtube.com/vi/' + shop.youtubeId + '/mqdefault.jpg';
     ytEl.innerHTML = \`
-      <div class="mp-yt-thumb-wrap" style="position:relative;width:100%;padding-top:52%;background:#000;overflow:hidden">
-        <img src="https://img.youtube.com/vi/\${shop.youtubeId}/hqdefault.jpg"
+      <div class="mp-yt-thumb-wrap" style="position:relative;width:100%;padding-top:52%;background:#111;overflow:hidden">
+        <img src="\${ytThumb}"
           style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;cursor:pointer"
+          onerror="this.style.display='none'"
           onclick="loadYtInPopup('\${shop.youtubeId}')" alt=""/>
         <div onclick="loadYtInPopup('\${shop.youtubeId}')"
           style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-                 background:rgba(0,0,0,.25);cursor:pointer">
-          <div style="width:54px;height:54px;border-radius:50%;background:rgba(255,255,255,.93);
+                 background:rgba(0,0,0,.3);cursor:pointer">
+          <div style="width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,.93);
                       display:flex;align-items:center;justify-content:center;
-                      box-shadow:0 4px 20px rgba(0,0,0,.4)">
+                      box-shadow:0 4px 20px rgba(0,0,0,.5)">
             <i class="fas fa-play" style="color:#111;font-size:20px;margin-left:4px"></i>
           </div>
         </div>
       </div>
     \`;
-  } else {
+  } else if (shop.thumbnail) {
     ytEl.innerHTML = \`<img src="\${shop.thumbnail}"
+      onerror="this.style.display='none'"
       style="width:100%;height:160px;object-fit:cover;display:block" alt=""/>\`;
+  } else {
+    ytEl.innerHTML = '';
   }
 
   // 텍스트 정보
