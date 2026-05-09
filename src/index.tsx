@@ -1771,9 +1771,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0a;
   border-top:1px solid rgba(255,255,255,.08);
   transform:translateY(100%);
   transition:transform .32s cubic-bezier(.22,.68,0,1.2);
-  overflow:hidden;
+  overflow-y:auto;   /* hidden 제거 → 스크롤 가능 */
   max-height:85vh;
-  overflow-y:auto;
 }
 #card.open{transform:translateY(0)}
 
@@ -1786,14 +1785,26 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0a;
     border-top:none;
     border-left:1px solid rgba(255,255,255,.08);
     box-shadow:-4px 0 40px rgba(0,0,0,.8);
-    max-height:100vh;
+    /* iframe 부모가 100vh보다 작을 수 있으므로 100% 사용 */
+    max-height:100%;
     transform:translateX(100%);
     transition:transform .32s cubic-bezier(.22,.68,0,1.2);
     overflow-y:auto;
+    /* 스크롤바 스타일 */
+    scrollbar-width:thin;
+    scrollbar-color:rgba(255,255,255,.15) transparent;
   }
   #card.open{transform:translateX(0)}
   .card-handle{display:none}
   .card-close{top:14px;right:14px}
+}
+
+/* PC에서 미디어 영역 높이 제한 (16:9 그대로면 너무 높음) */
+@media(min-width:768px){
+  .card-media{
+    aspect-ratio:unset;
+    height:200px;   /* 고정 높이로 변경 */
+  }
 }
 .card-handle{width:36px;height:4px;border-radius:2px;
   background:rgba(255,255,255,.18);margin:10px auto 0;flex-shrink:0}
