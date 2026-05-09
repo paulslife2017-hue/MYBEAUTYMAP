@@ -568,31 +568,9 @@ html,body{height:100%;background:var(--bg);color:#fff;
   flex-shrink:0;
   display:flex;flex-direction:column;overflow:hidden;background:#000;
 }
-.yt-area{flex:1;position:relative;overflow:hidden;background:#111;cursor:pointer}
-.yt-thumb{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.yt-play-btn{
-  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-  background:linear-gradient(to top,rgba(0,0,0,.5) 0%,transparent 50%)}
-.yt-play-btn::after{
-  content:'';width:64px;height:64px;border-radius:50%;
-  background:rgba(220,0,0,.9);box-shadow:0 4px 20px rgba(0,0,0,.5)}
-.yt-play-btn::before{
-  content:'▶';position:absolute;font-size:22px;color:#fff;margin-left:6px}
-
-/* 유튜브 전체화면 팝업 */
-#ytPopup{
-  display:none;position:fixed;inset:0;z-index:9999;
-  background:rgba(0,0,0,.95);flex-direction:column;
-  align-items:center;justify-content:center}
-#ytPopup.open{display:flex}
-#ytPopup iframe{
-  width:100%;max-width:640px;
-  aspect-ratio:16/9;
-  border:none;background:#000}
-#ytPopupClose{
-  position:absolute;top:env(safe-area-inset-top,0px);right:0;
-  padding:18px 20px;font-size:28px;color:#fff;
-  background:none;border:none;cursor:pointer;line-height:1}
+.yt-area{flex:1;position:relative;overflow:hidden;background:#000}
+.yt-area iframe{
+  position:absolute;inset:0;width:100%;height:100%;border:none;}
 
 /* 업체 정보 바 */
 .shop-bar{flex-shrink:0;padding:18px 14px 14px;
@@ -886,12 +864,6 @@ html,body{height:100%;background:var(--bg);color:#fff;
   <div class="feed-spin"><div class="spinner"></div></div>
 </main>
 
-<!-- 유튜브 전체화면 팝업 -->
-<div id="ytPopup">
-  <button id="ytPopupClose" onclick="closeYtPopup()">&times;</button>
-  <iframe id="ytPopupFrame" src="" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>
-</div>
-
 <!-- 지도 화면: iframe -->
 <section id="mapScreen">
   <!-- 카테고리 필터 -->
@@ -1161,27 +1133,15 @@ let searchTimer = null;
 // 피드: CSS scroll-snap 방식 (JS 높이계산 없음)
 // ─────────────────────────────────────────────
 
-function openYtPopup(ytId) {
-  const popup = document.getElementById('ytPopup');
-  const frame = document.getElementById('ytPopupFrame');
-  frame.src = 'https://www.youtube.com/embed/' + ytId + '?autoplay=1&playsinline=1&rel=0&modestbranding=1';
-  popup.classList.add('open');
-}
-function closeYtPopup() {
-  const popup = document.getElementById('ytPopup');
-  const frame = document.getElementById('ytPopupFrame');
-  frame.src = '';
-  popup.classList.remove('open');
-}
-
 function feedCardHTML(s) {
-  const thumb = 'https://img.youtube.com/vi/' + s.youtubeId + '/hqdefault.jpg';
+  // iframe을 바로 박음. src는 비워두고 Observer가 보일 때 채움
   const ytArea = s.youtubeId
-    ? '<div class="yt-area" data-ytid="' + s.youtubeId + '">'
-        + '<img class="yt-thumb" src="' + thumb + '" loading="lazy">'
-        + '<div class="yt-play-btn"></div>'
+    ? '<div class="yt-area">'
+        + '<iframe data-ytid="' + s.youtubeId + '" src=""'
+        + ' allow="autoplay; encrypted-media; picture-in-picture; fullscreen"'
+        + ' allowfullscreen></iframe>'
       + '</div>'
-    : '<div class="yt-area no-video"></div>';
+    : '<div class="yt-area"></div>';
   const shopJson = JSON.stringify({id:s.id, name:s.name, smartPlaceUrl:s.smartPlaceUrl})
                      .replace(/&/g,'&amp;').replace(/"/g,'&quot;');
   const bookBtn = s.smartPlaceUrl
@@ -1218,18 +1178,33 @@ async function loadFeed(cat='all', q='') {
     return;
   }
 
-  // 카드 렌더 — scroll-snap이 자동으로 스냅 처리
+  // 카드 렌더
   scr.innerHTML = shops.map(feedCardHTML).join('');
   scr.scrollTop = 0;
 
-  // 클릭 이벤트 (최초 1회만 등록)
-  if (!scr._feedEvt) {
-    scr._feedEvt = true;
-    scr.addEventListener('click', (e) => {
-      const area = e.target.closest('.yt-area[data-ytid]');
-      if (area) openYtPopup(area.dataset.ytid);
+  // 이전 Observer 해제
+  if (scr._obs) scr._obs.disconnect();
+
+  // 화면에 보이는 카드 iframe만 src 활성화 → 로딩 집중, 메모리 절약
+  const obs = new IntersectionObserver((entries) => {
+    entries.forEach((en) => {
+      const ifr = en.target.querySelector('iframe[data-ytid]');
+      if (!ifr) return;
+      if (en.isIntersecting) {
+        // 현재 카드: src 세팅
+        if (!ifr.src) {
+          ifr.src = 'https://www.youtube.com/embed/' + ifr.dataset.ytid
+            + '?playsinline=1&rel=0&modestbranding=1&color=white';
+        }
+      } else {
+        // 화면 밖: src 비워서 리소스 해제
+        ifr.src = '';
+      }
     });
-  }
+  }, { root: scr, threshold: 0.5 });
+
+  scr._obs = obs;
+  scr.querySelectorAll('.fi').forEach((card) => obs.observe(card));
 }
 
 function filterFeed(btn, cat) {
