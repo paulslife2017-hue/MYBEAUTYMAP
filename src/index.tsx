@@ -126,9 +126,13 @@ app.get('/api/geocode', async (c) => {
     const data = await res.json() as any
     if (!data.addresses?.length) return c.json({ error: '주소를 찾을 수 없어요' }, 404)
     const addr = data.addresses[0]
-    const district = addr.addressElements?.find((e: any) =>
-      e.types?.includes('LEGAL_CODE') || e.types?.includes('DISTRICT')
-    )?.longName || addr.roadAddress?.split(' ')[2] || ''
+    // 시/도 + 구 + 동 조합 (예: 서울시 강남구 논현동)
+    const elements = addr.addressElements || []
+    const sido   = elements.find((e:any) => e.types?.includes('SIDO'))?.longName || ''
+    const sigungu= elements.find((e:any) => e.types?.includes('SIGUGUN'))?.longName || ''
+    const dong   = elements.find((e:any) => e.types?.includes('DONGMYUN') || e.types?.includes('RI'))?.longName || ''
+    const district = [sido, sigungu, dong].filter(Boolean).join(' ')
+      || addr.roadAddress?.split(' ').slice(0,3).join(' ') || ''
     return c.json({
       lat:      parseFloat(addr.y),
       lng:      parseFloat(addr.x),
@@ -1110,8 +1114,8 @@ async function loadFeed(cat='all', q='') {
   feedCat = cat;
   const screen = document.getElementById('feedScreen');
 
-  // PC 감지 (마우스 있는 장치)
-  const isPC = window.matchMedia('(hover:hover)').matches;
+  // PC 감지: hover 지원 + 터치 없음 + 최소 너비 768px 모두 만족해야 PC
+  const isPC = window.matchMedia('(hover:hover) and (pointer:fine)').matches && window.innerWidth >= 768;
 
   // ── PC: 기존 wrapper 제거 후 로딩 스피너를 wrapper 안에 표시 ──
   if (isPC) {
