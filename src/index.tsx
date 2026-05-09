@@ -919,7 +919,11 @@ html,body{height:100%;background:var(--bg);color:#fff;
         <div class="plan-icon">🎬</div>
         <div class="plan-price">6개월 무료</div>
         <div class="plan-name">촬영 플랜</div>
-        <div class="plan-desc">영상 촬영 포함 시<br><b style="color:#03C75A">6개월 무료</b><br><span style="font-size:9px;opacity:.6">이후 월 10,000원</span></div>
+        <div class="plan-desc">
+          촬영비 <b style="color:#03C75A">3만원</b> 내시면<br>
+          <b style="color:#03C75A">6개월 무료</b> 게재<br>
+          <span style="font-size:9px;opacity:.6">이후 월 10,000원</span>
+        </div>
       </div>
       <div class="iq-plan paid">
         <div class="plan-tag">기본</div>
@@ -2353,6 +2357,80 @@ body{font-family:'Pretendard',sans-serif;background:var(--bg);color:#fff;min-hei
 /* ── 섹션 라벨 ── */
 .sec-label{font-size:11px;font-weight:700;color:rgba(255,255,255,.25);
   letter-spacing:.5px;margin-bottom:10px;padding-left:2px}
+
+/* ── 플랜/결제 뱃지 ── */
+.b-plan-shoot{background:rgba(3,199,90,.18);color:#03C75A;border:1px solid rgba(3,199,90,.3)}
+.b-plan-basic{background:rgba(255,77,125,.13);color:var(--pink);border:1px solid rgba(255,77,125,.25)}
+.b-paid{background:rgba(3,199,90,.15);color:#03C75A}
+.b-unpaid{background:rgba(255,165,0,.15);color:#FFA500}
+.b-expired{background:rgba(255,77,125,.15);color:var(--pink)}
+.b-free{background:rgba(99,149,237,.15);color:#6495ed}
+
+/* ── 구독관리 탭 ── */
+.pay-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:18px}
+.pay-sv{background:var(--card);border:1px solid var(--border);border-radius:12px;
+  padding:12px 8px;text-align:center}
+.pay-sv-n{font-size:20px;font-weight:800}
+.pay-sv-l{font-size:9px;color:rgba(255,255,255,.3);margin-top:3px;font-weight:600}
+.pay-card{background:var(--card);border:1px solid var(--border);
+  border-radius:16px;padding:14px;margin-bottom:10px}
+.pay-card.status-expired{border-color:rgba(255,77,125,.35);background:rgba(255,77,125,.04)}
+.pay-card.status-unpaid{border-color:rgba(255,165,0,.3);background:rgba(255,165,0,.03)}
+.pay-card.status-paid{border-color:rgba(3,199,90,.25);background:rgba(3,199,90,.03)}
+.pay-card.status-free{border-color:rgba(99,149,237,.3);background:rgba(99,149,237,.03)}
+.pay-top{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.pay-thumb{width:44px;height:44px;border-radius:10px;object-fit:cover;flex-shrink:0;
+  background:rgba(255,255,255,.06)}
+.pay-info{flex:1;min-width:0}
+.pay-name{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pay-sub{font-size:11px;color:rgba(255,255,255,.35);margin-top:2px}
+.pay-badges{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px}
+.pay-body{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
+.pay-kv{font-size:10px;color:rgba(255,255,255,.3);background:rgba(255,255,255,.04);
+  border-radius:8px;padding:7px 10px}
+.pay-kv strong{display:block;font-size:12px;color:#fff;font-weight:700;margin-top:2px}
+.pay-memo{font-size:11px;color:rgba(255,255,255,.4);background:rgba(255,255,255,.04);
+  border-radius:8px;padding:8px 10px;margin-bottom:10px;line-height:1.5;
+  display:flex;gap:6px;align-items:flex-start}
+.pay-btns{display:flex;gap:6px}
+.btn-pay-edit{flex:1;background:rgba(3,199,90,.12);border:1px solid rgba(3,199,90,.25);
+  color:#03C75A;border-radius:8px;padding:8px 10px;font-size:12px;font-weight:700;
+  cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:5px}
+.btn-pay-edit:hover{background:rgba(3,199,90,.2)}
+.pay-filter{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+.pf-btn{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);
+  color:rgba(255,255,255,.4);border-radius:8px;padding:6px 12px;font-size:11px;
+  font-weight:700;cursor:pointer;font-family:inherit;transition:all .2s}
+.pf-btn.on{background:rgba(255,77,125,.15);border-color:rgba(255,77,125,.35);color:var(--pink)}
+
+/* ── 결제 수정 모달 ── */
+.pay-modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:300;
+  display:flex;align-items:flex-end;justify-content:center}
+.pay-modal-bg.hidden{display:none}
+.pay-modal{background:#1c1c1c;border-radius:22px 22px 0 0;width:100%;max-width:640px;
+  max-height:88vh;overflow-y:auto;padding:20px 16px 48px}
+.pm-handle{width:36px;height:4px;background:rgba(255,255,255,.1);
+  border-radius:4px;margin:0 auto 18px}
+.pm-ttl{font-size:18px;font-weight:800;margin-bottom:6px}
+.pm-sub{font-size:12px;color:rgba(255,255,255,.35);margin-bottom:20px}
+.pm-plan-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.pm-plan-opt{border:2px solid var(--border);border-radius:12px;padding:14px 10px;
+  text-align:center;cursor:pointer;transition:all .2s}
+.pm-plan-opt .po-icon{font-size:24px;margin-bottom:6px}
+.pm-plan-opt .po-name{font-size:13px;font-weight:800;margin-bottom:3px}
+.pm-plan-opt .po-price{font-size:11px;color:rgba(255,255,255,.4)}
+.pm-plan-opt.sel-shoot{border-color:#03C75A;background:rgba(3,199,90,.1)}
+.pm-plan-opt.sel-shoot .po-name{color:#03C75A}
+.pm-plan-opt.sel-basic{border-color:var(--pink);background:rgba(255,77,125,.1)}
+.pm-plan-opt.sel-basic .po-name{color:var(--pink)}
+.pm-status-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
+.pm-status-opt{border:1.5px solid var(--border);border-radius:10px;padding:10px 6px;
+  text-align:center;cursor:pointer;font-size:11px;font-weight:700;
+  color:rgba(255,255,255,.35);transition:all .2s}
+.pm-status-opt.sel-paid{border-color:#03C75A;background:rgba(3,199,90,.1);color:#03C75A}
+.pm-status-opt.sel-unpaid{border-color:#FFA500;background:rgba(255,165,0,.1);color:#FFA500}
+.pm-status-opt.sel-expired{border-color:var(--pink);background:rgba(255,77,125,.1);color:var(--pink)}
+.pm-status-opt.sel-free{border-color:#6495ed;background:rgba(100,149,237,.1);color:#6495ed}
 </style>
 </head>
 <body>
@@ -2540,14 +2618,76 @@ body{font-family:'Pretendard',sans-serif;background:var(--bg);color:#fff;min-hei
 </div>
 </div>
 
+<!-- ───── 결제 수정 모달 ───── -->
+<div class="pay-modal-bg hidden" id="payModalBg" onclick="if(event.target===this)closePayModal()">
+<div class="pay-modal" id="payModal">
+  <div class="pm-handle"></div>
+  <div class="pm-ttl">💳 결제 / 구독 관리</div>
+  <div class="pm-sub" id="pmShopName">업체명</div>
+
+  <!-- 플랜 선택 -->
+  <div class="field"><label>📦 플랜 선택</label></div>
+  <div class="pm-plan-grid">
+    <div class="pm-plan-opt sel-shoot" id="pm-plan-shoot" onclick="setPmPlan('shoot')">
+      <div class="po-icon">🎬</div>
+      <div class="po-name">촬영 플랜</div>
+      <div class="po-price">촬영비 3만원 · 6개월 무료<br>이후 월 10,000원</div>
+    </div>
+    <div class="pm-plan-opt" id="pm-plan-basic" onclick="setPmPlan('basic')">
+      <div class="po-icon">📍</div>
+      <div class="po-name">기본 플랜</div>
+      <div class="po-price">영상 없이 맵만<br>월 10,000원</div>
+    </div>
+  </div>
+
+  <!-- 결제 상태 -->
+  <div class="field"><label>📊 결제 상태</label></div>
+  <div class="pm-status-grid">
+    <div class="pm-status-opt" id="pm-st-paid"    onclick="setPmStatus('paid')">✅<br>결제완료</div>
+    <div class="pm-status-opt" id="pm-st-free"    onclick="setPmStatus('free')">🎁<br>무료기간</div>
+    <div class="pm-status-opt" id="pm-st-unpaid"  onclick="setPmStatus('unpaid')">💳<br>미결제</div>
+    <div class="pm-status-opt" id="pm-st-expired" onclick="setPmStatus('expired')" style="grid-column:span 1">⚠️<br>만료</div>
+    <div></div><div></div>
+  </div>
+
+  <!-- 만료일 -->
+  <div class="field">
+    <label>📆 구독 만료일 <small style="color:rgba(255,255,255,.25)">(빈칸 = 미설정)</small></label>
+    <input id="pm-until" type="date" style="width:100%;background:rgba(255,255,255,.07);border:1.5px solid rgba(255,255,255,.1);border-radius:10px;padding:10px 12px;color:#fff;font-size:14px;font-family:inherit;outline:none"/>
+  </div>
+
+  <!-- 빠른 만료일 설정 -->
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:-6px;margin-bottom:14px">
+    <button onclick="addMonths(1)"  style="flex:1;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.6);border-radius:8px;padding:7px 6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">+1개월</button>
+    <button onclick="addMonths(3)"  style="flex:1;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.6);border-radius:8px;padding:7px 6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">+3개월</button>
+    <button onclick="addMonths(6)"  style="flex:1;background:rgba(3,199,90,.12);border:1px solid rgba(3,199,90,.25);color:#03C75A;border-radius:8px;padding:7px 6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">+6개월</button>
+    <button onclick="addMonths(12)" style="flex:1;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.6);border-radius:8px;padding:7px 6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">+12개월</button>
+  </div>
+
+  <!-- 메모 -->
+  <div class="field">
+    <label>📝 메모 <small style="color:rgba(255,255,255,.25)">(입금자명, 결제방식 등)</small></label>
+    <textarea id="pm-memo" placeholder="예) 홍길동 계좌이체 30,000원 24.01.15" style="width:100%;background:rgba(255,255,255,.07);border:1.5px solid rgba(255,255,255,.1);border-radius:10px;padding:10px 12px;color:#fff;font-size:13px;font-family:inherit;outline:none;resize:vertical;min-height:60px"></textarea>
+  </div>
+
+  <div class="modal-actions">
+    <button class="btn-cancel" onclick="closePayModal()">취소</button>
+    <button class="btn-save"   onclick="savePayment()"><i class="fas fa-save"></i> 저장하기</button>
+  </div>
+</div>
+</div>
+
 <script>
 /* ═══════════════════════════════════════════════════════
    상태
 ═══════════════════════════════════════════════════════ */
 let editId   = null;
+let payEditId = null;
+let pmPlan   = 'shoot';
+let pmStatus = 'unpaid';
 let curTab   = 'shops';
 let shopData = [];
-let thumbDataUrl = ''; // 파일 업로드 시 base64
+let thumbDataUrl = '';
 
 /* ═══════════════════════════════════════════════════════
    탭 전환
@@ -2564,6 +2704,205 @@ function switchTab(t) {
     t==='shops' ? 'flex' : 'none';
   if (t==='inq') loadInquiries();
   if (t==='pay') renderPayments();
+}
+
+/* ═══════════════════════════════════════════════════════
+   구독관리 탭 렌더
+═══════════════════════════════════════════════════════ */
+let payFilter = 'all';
+
+function renderPayments(filter) {
+  if (filter !== undefined) payFilter = filter;
+  const p = document.getElementById('panel-pay');
+  const list = shopData;
+  if (!list.length) { p.innerHTML = '<div class="empty">등록된 업체가 없어요</div>'; return; }
+  const fallback = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 60'%3E%3Crect width='60' height='60' fill='%23222'/%3E%3Ctext x='30' y='38' font-size='24' text-anchor='middle'%3E💄%3C/text%3E%3C/svg%3E";
+
+  // 요약 집계
+  const total   = list.length;
+  const paid    = list.filter(s => s.paymentStatus==='paid').length;
+  const free    = list.filter(s => s.paymentStatus==='free').length;
+  const unpaid  = list.filter(s => s.paymentStatus==='unpaid').length;
+  const expired = list.filter(s => s.paymentStatus==='expired').length;
+
+  // 만료 임박(30일 이내) 계산
+  const soon = list.filter(s => {
+    if (!s.paidUntil) return false;
+    const diff = Math.ceil((new Date(s.paidUntil) - new Date()) / 86400000);
+    return diff >= 0 && diff <= 30;
+  }).length;
+
+  // 필터링
+  let filtered = list;
+  if (payFilter === 'paid')    filtered = list.filter(s => s.paymentStatus==='paid');
+  else if (payFilter === 'free')    filtered = list.filter(s => s.paymentStatus==='free');
+  else if (payFilter === 'unpaid')  filtered = list.filter(s => s.paymentStatus==='unpaid');
+  else if (payFilter === 'expired') filtered = list.filter(s => s.paymentStatus==='expired');
+  else if (payFilter === 'soon')    filtered = list.filter(s => {
+    if (!s.paidUntil) return false;
+    const diff = Math.ceil((new Date(s.paidUntil) - new Date()) / 86400000);
+    return diff >= 0 && diff <= 30;
+  });
+
+  // 정렬: 만료임박 → 만료 → 미결제 → 무료 → 결제완료
+  const order = {expired:0, unpaid:1, soon:2, free:3, paid:4};
+  filtered = [...filtered].sort((a,b) => {
+    const ao = order[a.paymentStatus]??9;
+    const bo = order[b.paymentStatus]??9;
+    if (ao !== bo) return ao - bo;
+    if (a.paidUntil && b.paidUntil)
+      return new Date(a.paidUntil) - new Date(b.paidUntil);
+    return 0;
+  });
+
+  const filterBtns = [
+    {k:'all',   label:\`전체 \${total}\`},
+    {k:'paid',  label:\`✅ 결제 \${paid}\`},
+    {k:'free',  label:\`🎁 무료 \${free}\`},
+    {k:'unpaid',label:\`💳 미결제 \${unpaid}\`},
+    {k:'expired',label:\`⚠️ 만료 \${expired}\`},
+    {k:'soon',  label:\`🔔 임박 \${soon}\`},
+  ].map(b => \`<button class="pf-btn\${payFilter===b.k?' on':''}" onclick="renderPayments('\${b.k}')">\${b.label}</button>\`).join('');
+
+  const cards = filtered.map(s => {
+    const img = s.thumbnail || (s.youtubeId ? 'https://img.youtube.com/vi/'+s.youtubeId+'/maxresdefault.jpg' : fallback);
+    const plan = s.plan || 'basic';
+    const st   = s.paymentStatus || 'unpaid';
+    const statusClass = \`status-\${st}\`;
+
+    // 만료일 표시
+    let expiryHtml = '<strong>미설정</strong>';
+    if (s.paidUntil) {
+      const d    = new Date(s.paidUntil);
+      const diff = Math.ceil((d - new Date()) / 86400000);
+      const dateStr = d.toLocaleDateString('ko-KR',{year:'2-digit',month:'2-digit',day:'2-digit'});
+      if (diff > 30)       expiryHtml = \`<strong style="color:#03C75A">\${dateStr}</strong>\`;
+      else if (diff > 0)   expiryHtml = \`<strong style="color:#FFA500">\${dateStr} (\${diff}일 남음)</strong>\`;
+      else                 expiryHtml = \`<strong style="color:var(--pink)">\${dateStr} (\${Math.abs(diff)}일 경과)</strong>\`;
+    }
+
+    // 결제상태 텍스트
+    const stMap = {paid:'✅ 결제완료', free:'🎁 무료기간', unpaid:'💳 미결제', expired:'⚠️ 만료'};
+    const stColor = {paid:'#03C75A', free:'#6495ed', unpaid:'#FFA500', expired:'var(--pink)'};
+
+    return \`
+    <div class="pay-card \${statusClass}">
+      <div class="pay-top">
+        <img class="pay-thumb" src="\${img}" onerror="this.src='\${fallback}'"/>
+        <div class="pay-info">
+          <div class="pay-name">\${s.name}</div>
+          <div class="pay-sub">\${s.category} · \${s.district||''}</div>
+          <div class="pay-badges">
+            \${plan==='shoot'
+              ? '<span class="badge b-plan-shoot">🎬 촬영플랜</span>'
+              : '<span class="badge b-plan-basic">📍 기본플랜</span>'}
+            <span class="badge" style="background:rgba(255,255,255,.07);color:\${stColor[st]||'#fff'}">\${stMap[st]||st}</span>
+          </div>
+        </div>
+      </div>
+      <div class="pay-body">
+        <div class="pay-kv">📆 만료일\${expiryHtml}</div>
+        <div class="pay-kv">📋 플랜<strong>\${plan==='shoot'?'촬영 (3만+월1만)':'기본 (월1만)'}</strong></div>
+      </div>
+      \${s.paymentMemo ? \`<div class="pay-memo"><i class="fas fa-sticky-note" style="color:rgba(255,255,255,.25);flex-shrink:0;margin-top:1px"></i><span>\${s.paymentMemo}</span></div>\` : ''}
+      <div class="pay-btns">
+        <button class="btn-pay-edit" data-id="\${s.id}" onclick="openPayModal(+this.dataset.id)">
+          <i class="fas fa-edit"></i> 결제 정보 수정
+        </button>
+      </div>
+    </div>\`;
+  }).join('') || '<div class="empty">해당 항목이 없어요</div>';
+
+  p.innerHTML = \`
+    <div class="pay-summary">
+      <div class="pay-sv"><div class="pay-sv-n" style="color:#03C75A">\${paid}</div><div class="pay-sv-l">✅ 결제완료</div></div>
+      <div class="pay-sv"><div class="pay-sv-n" style="color:#6495ed">\${free}</div><div class="pay-sv-l">🎁 무료기간</div></div>
+      <div class="pay-sv"><div class="pay-sv-n" style="color:#FFA500">\${unpaid}</div><div class="pay-sv-l">💳 미결제</div></div>
+      <div class="pay-sv"><div class="pay-sv-n" style="color:var(--pink)">\${expired}</div><div class="pay-sv-l">⚠️ 만료</div></div>
+    </div>
+    <div class="pay-filter">\${filterBtns}</div>
+    \${cards}
+  \`;
+}
+
+/* ═══════════════════════════════════════════════════════
+   결제 모달
+═══════════════════════════════════════════════════════ */
+function openPayModal(id) {
+  const s = shopData.find(x => x.id === id);
+  if (!s) return;
+  payEditId = id;
+  document.getElementById('pmShopName').textContent = s.name + ' · ' + (s.category||'');
+  setPmPlan(s.plan || 'basic');
+  setPmStatus(s.paymentStatus || 'unpaid');
+  // 만료일
+  const until = s.paidUntil ? s.paidUntil.slice(0,10) : '';
+  document.getElementById('pm-until').value = until;
+  document.getElementById('pm-memo').value  = s.paymentMemo || '';
+  document.getElementById('payModalBg').classList.remove('hidden');
+}
+
+function closePayModal() {
+  document.getElementById('payModalBg').classList.add('hidden');
+}
+
+function setPmPlan(plan) {
+  pmPlan = plan;
+  ['shoot','basic'].forEach(k => {
+    document.getElementById('pm-plan-'+k).className =
+      'pm-plan-opt' + (k===plan ? ' sel-'+k : '');
+  });
+}
+
+function setPmStatus(st) {
+  pmStatus = st;
+  ['paid','free','unpaid','expired'].forEach(k => {
+    document.getElementById('pm-st-'+k).className =
+      'pm-status-opt' + (k===st ? ' sel-'+k : '');
+  });
+}
+
+function addMonths(n) {
+  const base = document.getElementById('pm-until').value
+    ? new Date(document.getElementById('pm-until').value)
+    : new Date();
+  base.setMonth(base.getMonth() + n);
+  document.getElementById('pm-until').value = base.toISOString().slice(0,10);
+}
+
+async function savePayment() {
+  if (!payEditId) return;
+  const body = {
+    plan:          pmPlan,
+    paymentStatus: pmStatus,
+    paidUntil:     document.getElementById('pm-until').value || null,
+    paymentMemo:   document.getElementById('pm-memo').value.trim(),
+  };
+  const r = await fetch('/api/admin/shops/'+payEditId+'/payment', {
+    method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
+  });
+  if (r.ok) {
+    closePayModal();
+    await loadAll();
+    if (curTab === 'pay') renderPayments();
+    showPayToast('✅ 결제 정보가 저장됐어요');
+  } else {
+    alert('저장 실패: ' + r.status);
+  }
+}
+
+let payToastTmr;
+function showPayToast(msg) {
+  let t = document.getElementById('payToast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'payToast';
+    t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:10px 20px;border-radius:999px;font-size:13px;font-weight:700;z-index:9999;transition:opacity .3s;pointer-events:none;white-space:nowrap;box-shadow:0 4px 20px rgba(0,0,0,.5)';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg; t.style.opacity = '1';
+  clearTimeout(payToastTmr);
+  payToastTmr = setTimeout(() => { t.style.opacity = '0'; }, 2500);
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -2618,6 +2957,33 @@ function modeLabel(m) {
   return '<span class="sc-mode mode-both">🎬🗺️ 영상+지도</span>';
 }
 
+function planLabel(s) {
+  const plan = s.plan || 'basic';
+  const st   = s.paymentStatus || 'unpaid';
+  // 플랜 뱃지
+  const planBadge = plan === 'shoot'
+    ? '<span class="badge b-plan-shoot">🎬 촬영플랜</span>'
+    : '<span class="badge b-plan-basic">📍 기본플랜</span>';
+  // 결제 상태 뱃지
+  let stBadge = '';
+  if (st === 'paid')    stBadge = '<span class="badge b-paid">✅ 결제완료</span>';
+  else if (st === 'free') stBadge = '<span class="badge b-free">🎁 무료기간</span>';
+  else if (st === 'expired') stBadge = '<span class="badge b-expired">⚠️ 만료</span>';
+  else                  stBadge = '<span class="badge b-unpaid">💳 미결제</span>';
+  // 만료일
+  let expiry = '';
+  if (s.paidUntil) {
+    const d   = new Date(s.paidUntil);
+    const now = new Date();
+    const diff = Math.ceil((d - now) / 86400000);
+    const dateStr = d.toLocaleDateString('ko-KR',{month:'2-digit',day:'2-digit'});
+    expiry = diff > 0
+      ? \`<span class="badge" style="background:rgba(255,255,255,.08);color:rgba(255,255,255,.45)">📆 \${dateStr} (\${diff}일)</span>\`
+      : \`<span class="badge b-expired">📆 만료 (\${Math.abs(diff)}일 경과)</span>\`;
+  }
+  return planBadge + stBadge + expiry;
+}
+
 function renderShops(list) {
   const p = document.getElementById('panel-shops');
   if (!list.length) { p.innerHTML='<div class="empty">등록된 업체가 없어요</div>'; return; }
@@ -2638,6 +3004,11 @@ function renderShops(list) {
           \${modeLabel(s.displayMode||'both')}
         </div>
       </div>
+      <!-- 플랜 + 결제상태 뱃지 -->
+      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+        \${planLabel(s)}
+        \${s.paymentMemo ? \`<span class="badge" style="background:rgba(255,255,255,.06);color:rgba(255,255,255,.4);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="\${s.paymentMemo}">📝 \${s.paymentMemo}</span>\` : ''}
+      </div>
       <div class="sc-fields">
         <div class="sc-f">🎬 유튜브<strong>\${s.youtubeId||'미등록'}</strong></div>
         <div class="sc-f">📅 예약URL<strong>\${s.smartPlaceUrl?'등록됨':'미등록'}</strong></div>
@@ -2646,7 +3017,8 @@ function renderShops(list) {
       </div>
       <div class="sc-btns">
         <button class="btn-edit" data-id="\${s.id}" onclick="openModal(+this.dataset.id)"><i class="fas fa-edit"></i> 수정</button>
-        <button class="btn-del"  data-id="\${s.id}" data-name="\${s.name.replace(/"/g,'&quot;')}" onclick="delShop(+this.dataset.id,this.dataset.name)"><i class="fas fa-trash"></i> 삭제</button>
+        <button class="btn-pay-edit" data-id="\${s.id}" onclick="openPayModal(+this.dataset.id)"><i class="fas fa-credit-card"></i> 결제</button>
+        <button class="btn-del"  data-id="\${s.id}" data-name="\${s.name.replace(/"/g,'&quot;')}" onclick="delShop(+this.dataset.id,this.dataset.name)"><i class="fas fa-trash"></i></button>
       </div>
     </div>
   \`).join('');
