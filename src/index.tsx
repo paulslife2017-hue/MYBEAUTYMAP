@@ -2484,8 +2484,8 @@ function renderShops(list) {
         <div class="sc-f">📍 예약클릭<strong>\${((s.feedSP||0)+(s.mapSP||0)).toLocaleString()}</strong></div>
       </div>
       <div class="sc-btns">
-        <button class="btn-edit" onclick="openModal(\${s.id})"><i class="fas fa-edit"></i> 수정</button>
-        <button class="btn-del"  onclick="delShop(\${s.id},'\${s.name.replace(/'/g,&quot;&quot;)}')"><i class="fas fa-trash"></i> 삭제</button>
+        <button class="btn-edit" data-id="\${s.id}" onclick="openModal(+this.dataset.id)"><i class="fas fa-edit"></i> 수정</button>
+        <button class="btn-del"  data-id="\${s.id}" data-name="\${s.name.replace(/"/g,'&quot;')}" onclick="delShop(+this.dataset.id,this.dataset.name)"><i class="fas fa-trash"></i> 삭제</button>
       </div>
     </div>
   \`).join('');
@@ -2570,7 +2570,8 @@ function extractYoutubeId(input) {
   const s = (input||'').trim();
   if (!s) return '';
   if (/^[A-Za-z0-9_-]{11}$/.test(s)) return s;
-  const m = s.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|v\/))([A-Za-z0-9_-]{11})/);
+  const re = new RegExp('(?:youtu\\.be/|youtube\\.com/(?:watch\\?(?:.*&)?v=|embed/|shorts/|v/))([A-Za-z0-9_-]{11})');
+  const m = s.match(re);
   return m ? m[1] : s;
 }
 
