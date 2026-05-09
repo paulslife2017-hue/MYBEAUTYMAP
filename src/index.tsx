@@ -1152,10 +1152,18 @@ function feedCardHTML(s) {
         + ' allowfullscreen></iframe>'
       + '</div>'
     : '<div class="yt-area"></div>';
-  const shopJson = JSON.stringify({id:s.id, name:s.name, smartPlaceUrl:s.smartPlaceUrl})
-                     .replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+  // data-shop JSON 이스케이프 버그 → data-id/url/name 개별 속성으로 분리
+  const safeUrl  = (s.smartPlaceUrl||'').replace(/"/g,'&quot;');
+  const safeName = (s.name||'').replace(/"/g,'&quot;');
   const bookBtn = s.smartPlaceUrl
-    ? '<button class="btn-book" data-shop="' + shopJson + '" onclick="curShop=JSON.parse(this.dataset.shop);openInapp()"><i class="fas fa-calendar-check"></i><span>예약하기</span></button>'
+    ? '<button class="btn-book"'
+        + ' data-id="' + s.id + '"'
+        + ' data-url="' + safeUrl + '"'
+        + ' data-name="' + safeName + '"'
+        + ' onclick="'
+            + 'curShop={id:+this.dataset.id,name:this.dataset.name,smartPlaceUrl:this.dataset.url};'
+            + 'openInapp()">'
+        + '<i class="fas fa-calendar-check"></i><span>예약하기</span></button>'
     : '';
   return '<div class="fi">'
     + ytArea
@@ -1900,15 +1908,17 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0a;
   <div class="card-handle"></div>
   <!-- 미디어 -->
   <div class="card-media" id="cardMedia">
-    <img id="cardThumb" src="" alt="">
-    <!-- 유튜브 있을 때 플레이 버튼 -->
-    <div class="play-btn" id="playBtn" style="display:none" onclick="playVideo()">
-      <div class="play-icon">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><polygon points="5,3 19,12 5,21"/></svg>
+    <!-- 썸네일+플레이버튼 래퍼: 전체 클릭 시 재생 -->
+    <div id="thumbWrap" style="position:absolute;inset:0;cursor:pointer" onclick="playVideo()">
+      <img id="cardThumb" src="about:blank" alt="" style="width:100%;height:100%;object-fit:cover;display:block">
+      <div class="play-btn" id="playBtn" style="display:none">
+        <div class="play-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><polygon points="5,3 19,12 5,21"/></svg>
+        </div>
       </div>
     </div>
     <!-- 실제 유튜브 iframe (클릭 후 로드) -->
-    <iframe id="cardIframe" src="" allow="autoplay;encrypted-media;picture-in-picture" allowfullscreen style="display:none"></iframe>
+    <iframe id="cardIframe" src="about:blank" allow="autoplay;encrypted-media;picture-in-picture" allowfullscreen style="display:none;position:absolute;inset:0;width:100%;height:100%;border:none"></iframe>
     <!-- 오버레이 뱃지 -->
     <div class="card-overlay">
       <span id="cardCatBadge" class="card-cat-badge"></span>
@@ -1958,10 +1968,10 @@ window.addEventListener('message', e => {
 /* ── 카드 닫기 ── */
 function closeCard() {
   document.getElementById('card').classList.remove('open');
-  // iframe 정지
-  document.getElementById('cardIframe').src = '';
+  // iframe 정지 (src='' 하면 브라우저가 현재URL로 변환 → about:blank 사용)
+  document.getElementById('cardIframe').src = 'about:blank';
   document.getElementById('cardIframe').style.display = 'none';
-  document.getElementById('cardThumb').style.display = 'block';
+  document.getElementById('thumbWrap').style.display = 'block';
   document.getElementById('playBtn').style.display = 'none';
   curShop = null;
 }
@@ -1970,10 +1980,10 @@ function closeCard() {
 function playVideo() {
   if (!curShop?.youtubeId) return;
   const iframe = document.getElementById('cardIframe');
-  iframe.src = \`https://www.youtube.com/embed/\${curShop.youtubeId}?autoplay=1&playsinline=1&rel=0&modestbranding=1\`;
+  iframe.src = \`https://www.youtube.com/embed/\${curShop.youtubeId}?autoplay=1&mute=0&playsinline=1&rel=0&modestbranding=1&color=white\`;
   iframe.style.display = 'block';
-  document.getElementById('playBtn').style.display = 'none';
-  document.getElementById('cardThumb').style.display = 'none';
+  // thumbWrap 전체 숨김 (썸네일+플레이버튼 래퍼)
+  document.getElementById('thumbWrap').style.display = 'none';
 }
 
 /* ── 예약 (지도 트래킹 포함) ── */
@@ -1989,24 +1999,25 @@ function openCard(shop) {
   curShop = shop;
   const color = CAT_COLOR[shop.category] || '#FF4D7D';
 
-  // 미디어: iframe 초기화
+  // iframe 초기화 (about:blank로 정지)
   const iframe = document.getElementById('cardIframe');
-  iframe.src = '';
+  iframe.src = 'about:blank';
   iframe.style.display = 'none';
 
+  // thumbWrap 복원
+  document.getElementById('thumbWrap').style.display = 'block';
+
   // 썸네일: 유튜브 우선 → 등록 썸네일 → 숨김
-  // onerror를 src 할당 전에 등록해야 캐시된 broken 이미지도 정상 처리됨
   const thumb = document.getElementById('cardThumb');
   const thumbSrc = shop.youtubeId
     ? 'https://img.youtube.com/vi/' + shop.youtubeId + '/maxresdefault.jpg'
     : (shop.thumbnail || '');
-  thumb.onerror = null;          // 기존 핸들러 먼저 초기화
-  thumb.src = '';                // src 초기화 (캐시 리셋)
+  thumb.onerror = null;
+  thumb.src = 'about:blank';
   if (thumbSrc) {
     thumb.style.display = 'block';
-    thumb.onerror = function() { // src 할당 전에 onerror 등록
+    thumb.onerror = function() {
       if (shop.youtubeId && this.src.includes('maxresdefault')) {
-        // maxresdefault 없으면 hqdefault 시도
         this.onerror = function() {
           if (shop.thumbnail) {
             this.onerror = function() { this.style.display = 'none'; };
@@ -2021,12 +2032,12 @@ function openCard(shop) {
         this.style.display = 'none';
       }
     };
-    thumb.src = thumbSrc;        // onerror 등록 후 src 할당
+    thumb.src = thumbSrc;
   } else {
     thumb.style.display = 'none';
   }
 
-  // 유튜브 있으면 플레이 버튼 표시
+  // 유튜브 있으면 플레이 버튼 오버레이 표시 (thumbWrap 클릭 전체가 재생 트리거)
   const playBtn = document.getElementById('playBtn');
   playBtn.style.display = shop.youtubeId ? 'flex' : 'none';
 
