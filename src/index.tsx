@@ -1984,10 +1984,31 @@ function openCard(shop) {
   iframe.src = '';
   iframe.style.display = 'none';
 
-  // 썸네일
+  // 썸네일: 유튜브 우선 → 등록 썸네일 → 숨김
+  // onerror를 src 할당 전에 등록해야 캐시된 broken 이미지도 정상 처리됨
   const thumb = document.getElementById('cardThumb');
-  thumb.src = shop.thumbnail || 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=600&q=80';
-  thumb.style.display = 'block';
+  const thumbSrc = shop.youtubeId
+    ? 'https://img.youtube.com/vi/' + shop.youtubeId + '/mqdefault.jpg'
+    : (shop.thumbnail || '');
+  thumb.onerror = null;          // 기존 핸들러 먼저 초기화
+  thumb.src = '';                // src 초기화 (캐시 리셋)
+  if (thumbSrc) {
+    thumb.style.display = 'block';
+    thumb.onerror = function() { // src 할당 전에 onerror 등록
+      if (shop.youtubeId && this.src.includes('mqdefault')) {
+        this.onerror = function() { this.style.display = 'none'; };
+        this.src = 'https://img.youtube.com/vi/' + shop.youtubeId + '/hqdefault.jpg';
+      } else if (shop.thumbnail && this.src !== shop.thumbnail) {
+        this.onerror = function() { this.style.display = 'none'; };
+        this.src = shop.thumbnail;
+      } else {
+        this.style.display = 'none';
+      }
+    };
+    thumb.src = thumbSrc;        // onerror 등록 후 src 할당
+  } else {
+    thumb.style.display = 'none';
+  }
 
   // 유튜브 있으면 플레이 버튼 표시
   const playBtn = document.getElementById('playBtn');
@@ -2065,25 +2086,49 @@ function renderMarkers() {
   markers = [];
   const list = curCat === 'all' ? allShops : allShops.filter(s => s.category === curCat);
   list.forEach(s => markers.push(makeMarker(s)));
+  // 업체 전체가 보이도록 자동 범위 조정
+  fitToBounds(list);
 }
 
-/* 지도 초기화 */
-window.onload = async () => {
+/* 전체 업체가 화면에 들어오도록 범위 조정 */
+function fitToBounds(list) {
+  if (!list.length || !map) return;
+  if (list.length === 1) {
+    map.setCenter(new naver.maps.LatLng(list[0].lat, list[0].lng));
+    map.setZoom(15);
+  } else {
+    const lats = list.map(s => s.lat);
+    const lngs = list.map(s => s.lng);
+    const sw = new naver.maps.LatLng(Math.min(...lats), Math.min(...lngs));
+    const ne = new naver.maps.LatLng(Math.max(...lats), Math.max(...lngs));
+    map.fitBounds(new naver.maps.LatLngBounds(sw, ne), { top:60, right:40, bottom:120, left:40 });
+  }
+}
+
+/* 지도 초기화 — 네이버 지도 스크립트 완전 로드 후 실행 */
+function waitNaver(cb, t=0) {
+  if (window.naver && window.naver.maps && window.naver.maps.Map) { cb(); return; }
+  if (t > 50) return; // 10초 초과 포기
+  setTimeout(() => waitNaver(cb, t+1), 200);
+}
+
+async function initMap() {
   map = new naver.maps.Map('naverMap', {
-    center: new naver.maps.LatLng(37.5172, 127.0246),
-    zoom: 12,
+    center: new naver.maps.LatLng(36.5, 127.5),
+    zoom: 7,
     mapTypeControl:  false,
     scaleControl:    false,
     logoControl:     false,
     mapDataControl:  false,
   });
-  // 지도 클릭 시 카드 닫기
   map.addListener('click', closeCard);
 
-  const res = await fetch('/api/shops/all');
+  const res = await fetch('/api/shops');
   allShops  = await res.json();
   renderMarkers();
-};
+}
+
+window.onload = () => waitNaver(initMap);
 </script>
 </body>
 </html>`
