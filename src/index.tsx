@@ -10,6 +10,17 @@ const DATABASE_URL = process.env.DATABASE_URL ||
   'postgresql://neondb_owner:npg_1PBkOmAWRcf2@ep-round-recipe-aqdgkjfj-pooler.c-8.us-east-1.aws.neon.tech/neondb?sslmode=require'
 const sql = neon(DATABASE_URL)
 
+// 유튜브 URL → ID 추출 (서버단 공통 유틸)
+function extractYoutubeId(input: string): string {
+  const s = (input ?? '').trim()
+  if (!s) return ''
+  // 이미 ID만 있는 경우 (11자 영숫자+하이픈+언더바)
+  if (/^[A-Za-z0-9_-]{11}$/.test(s)) return s
+  // youtu.be/ID 또는 youtube.com?v=ID 등 다양한 형식
+  const m = s.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|v\/))([A-Za-z0-9_-]{11})/)
+  return m ? m[1] : s
+}
+
 // DB 행 → 앱 객체 변환
 function rowToShop(r: any) {
   return {
@@ -166,7 +177,7 @@ app.post('/api/admin/shops', async (c) => {
       (${body.name ?? '새 업체'}, ${body.category ?? '피부관리'}, ${tags},
        ${body.price ?? ''}, ${body.address ?? ''}, ${body.district ?? ''},
        ${parseFloat(body.lat) || 37.5326}, ${parseFloat(body.lng) || 127.0246},
-       ${body.smartPlaceUrl ?? ''}, ${body.youtubeId ?? ''},
+       ${body.smartPlaceUrl ?? ''}, ${extractYoutubeId(body.youtubeId ?? '')},
        ${body.featured ?? false},
        ${body.thumbnail ?? 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=600&q=80'},
        ${body.phone ?? ''}, ${body.desc ?? ''}, true)
@@ -195,7 +206,7 @@ app.put('/api/admin/shops/:id', async (c) => {
       lat             = ${parseFloat(body.lat) || 37.5326},
       lng             = ${parseFloat(body.lng) || 127.0246},
       smart_place_url = ${body.smartPlaceUrl ?? ''},
-      youtube_id      = ${body.youtubeId ?? ''},
+      youtube_id      = ${extractYoutubeId(body.youtubeId ?? '')},
       featured        = ${body.featured ?? false},
       thumbnail       = ${body.thumbnail ?? ''},
       phone           = ${body.phone ?? ''},
@@ -2457,9 +2468,18 @@ async function geocodeAddr() {
   btn.innerHTML = '<i class="fas fa-map-marker-alt"></i> 좌표찾기';
 }
 
+
+// 유튜브 URL → ID 추출 (클라이언트 공통)
+function extractYoutubeId(input) {
+  const s = (input || '').trim();
+  if (!s) return '';
+  if (/^[A-Za-z0-9_-]{11}$/.test(s)) return s;
+  const m = s.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|v\/))([A-Za-z0-9_-]{11})/);
+  return m ? m[1] : s;
+}
 // 유튜브 미리보기
-function previewYt(id) {
-  const clean = id.trim();
+function previewYt(input) {
+  const clean = extractYoutubeId(input);
   const box   = document.getElementById('ytPreview');
   if (!clean) { box.style.display='none'; return; }
   box.style.display='block';
@@ -2490,7 +2510,7 @@ async function saveShop() {
     phone:        document.getElementById('f-phone').value.trim(),
     lat:          parseFloat(lat),
     lng:          parseFloat(lng),
-    youtubeId:    document.getElementById('f-yt').value.trim(),
+    youtubeId:    extractYoutubeId(document.getElementById('f-yt').value),
     smartPlaceUrl:document.getElementById('f-url').value.trim(),
     thumbnail:    document.getElementById('f-thumb').value.trim(),
     tags:         document.getElementById('f-tags').value.split(',').map(t=>t.trim()).filter(Boolean),
@@ -2976,8 +2996,15 @@ async function geocodeAddr() {
 }
 
 /* ── 유튜브 미리보기 ── */
-function previewYt(id) {
-  const clean = id.trim();
+function extractYoutubeId(input) {
+  const s = (input || '').trim();
+  if (!s) return '';
+  if (/^[A-Za-z0-9_-]{11}$/.test(s)) return s;
+  const m = s.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|v\/))([A-Za-z0-9_-]{11})/);
+  return m ? m[1] : s;
+}
+function previewYt(input) {
+  const clean = extractYoutubeId(input);
   const box = document.getElementById('ytPreview');
   if (!clean) { box.style.display='none'; return; }
   box.style.display = 'block';
@@ -2999,7 +3026,7 @@ async function saveShop() {
     address:      document.getElementById('f-addr').value.trim(),
     district:     document.getElementById('f-dist').value.trim(),
     phone:        document.getElementById('f-phone').value.trim(),
-    youtubeId:    document.getElementById('f-yt').value.trim(),
+    youtubeId:    extractYoutubeId(document.getElementById('f-yt').value),
     smartPlaceUrl:document.getElementById('f-url').value.trim(),
     thumbnail:    document.getElementById('f-thumb').value.trim(),
     tags:         document.getElementById('f-tags').value.split(',').map(t=>t.trim()).filter(Boolean),
