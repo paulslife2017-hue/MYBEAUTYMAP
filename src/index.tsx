@@ -85,11 +85,12 @@ function calcDist(la1: number, lo1: number, la2: number, lo2: number) {
 
 // 샵 목록
 app.get('/api/shops', async (c) => {
-  const cat    = c.req.query('category') ?? ''
-  const q      = (c.req.query('q') ?? '').toLowerCase()
-  const lat    = parseFloat(c.req.query('lat') ?? '')
-  const lng    = parseFloat(c.req.query('lng') ?? '')
-  const nearby = c.req.query('nearby') === '1'
+  const cat     = c.req.query('category') ?? ''
+  const q       = (c.req.query('q') ?? '').toLowerCase()
+  const lat     = parseFloat(c.req.query('lat') ?? '')
+  const lng     = parseFloat(c.req.query('lng') ?? '')
+  const nearby  = c.req.query('nearby') === '1'
+  const shuffle = c.req.query('shuffle') === '1'
 
   const rows = await sql`
     SELECT s.*, COALESCE(st.view_cnt,0) as view_cnt,
@@ -111,6 +112,12 @@ app.get('/api/shops', async (c) => {
       .map((s:any) => ({ ...s, dist: calcDist(lat, lng, s.lat, s.lng) }))
       .filter((s:any) => s.dist <= 20)
       .sort((a:any, b:any) => a.dist - b.dist)
+  } else if (shuffle) {
+    // Fisher-Yates 완전 랜덤 셔플
+    for (let i = list.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [list[i], list[j]] = [list[j], list[i]];
+    }
   }
   return c.json(list)
 })
