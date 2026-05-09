@@ -870,12 +870,12 @@ async function loadFeed(cat='all', q='') {
     const thumb = s.youtubeId
       ? \`https://img.youtube.com/vi/\${s.youtubeId}/hqdefault.jpg\`
       : s.thumbnail;
-    const ytArea = s.youtubeId ? \`
-      <div class="yt-area" id="yta-\${s.id}" onclick="playYt('\${s.id}','\${s.youtubeId}')">
-        <img class="yt-thumb" src="\${thumb}" alt="\${s.name}" loading="lazy"/>
-        <div class="yt-play-btn"></div>
-        <iframe class="yt-frame" id="ytf-\${s.id}" src="" allow="autoplay;encrypted-media;picture-in-picture" allowfullscreen></iframe>
-      </div>\`
+    const ytArea = s.youtubeId
+      ? \`<div class="yt-area" id="yta-\${s.id}" data-ytid="\${s.youtubeId}" onclick="playYt(this)">
+           <img class="yt-thumb" src="\${thumb}" alt="\${s.name}" loading="lazy"/>
+           <div class="yt-play-btn"></div>
+           <iframe class="yt-frame" id="ytf-\${s.id}" src="" allow="autoplay;encrypted-media;picture-in-picture" allowfullscreen></iframe>
+         </div>\`
       : \`<div class="yt-area"><img class="yt-thumb" src="\${thumb}" alt="\${s.name}" loading="lazy" style="pointer-events:none"/></div>\`;
     return \`
     <div class="fi">
@@ -902,7 +902,7 @@ async function loadFeed(cat='all', q='') {
   }).join('');
   screen.scrollTo(0, 0);
 
-  // 스크롤 멈추면 현재 보이는 영상 자동재생
+  // 스크롤 멈추면 현재 화면 영상 자동재생
   let scrollTmr;
   screen.onscroll = () => {
     clearTimeout(scrollTmr);
@@ -911,32 +911,30 @@ async function loadFeed(cat='all', q='') {
       const idx   = Math.round(screen.scrollTop / itemH);
       const fi    = screen.querySelectorAll('.fi')[idx];
       if (!fi) return;
-      const area = fi.querySelector('.yt-area');
+      const area = fi.querySelector('.yt-area[data-ytid]');
       if (!area || area.classList.contains('playing')) return;
-      const ytId = area.id?.replace('yta-','');
-      const shopId = area.id?.replace('yta-','');
-      if (ytId) playYt(shopId, area.getAttribute('onclick')?.match(/'([^']+)'\)/)?.[1] || '');
-    }, 300);
+      playYt(area);
+    }, 350);
   };
 }
 
-function playYt(shopId, ytId) {
+function playYt(area) {
+  const ytId = area.dataset.ytid;
   if (!ytId) return;
-  const area  = document.getElementById('yta-'+shopId);
-  const frame = document.getElementById('ytf-'+shopId);
-  if (!area || !frame) return;
-  // 이미 재생 중이면 무시
   if (area.classList.contains('playing')) return;
-  // 다른 재생 중인 것 멈추기
+  // 다른 재생 중인 영상 중지
   document.querySelectorAll('.yt-area.playing').forEach(a => {
     a.classList.remove('playing');
     const f = a.querySelector('.yt-frame');
     if (f) f.src = '';
   });
+  // iframe에 src 세팅
+  const frame = area.querySelector('.yt-frame');
+  if (!frame) return;
   frame.src = \`https://www.youtube.com/embed/\${ytId}?autoplay=1&mute=0&playsinline=1&rel=0&modestbranding=1&controls=1\`;
   frame.onload = () => frame.classList.add('loaded');
   area.classList.add('playing');
-  area.onclick = null; // 재생 후 클릭 비활성화
+  area.onclick = null;
 }
 
 function filterFeed(btn, cat) {
