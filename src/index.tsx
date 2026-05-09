@@ -1329,23 +1329,29 @@ function feedInitSlider() {
   if (feedSliderEventsAttached) return;
   feedSliderEventsAttached = true;
 
-  // PC 마우스 클릭 전용 (터치 기기는 touchend에서 직접 처리)
+  // click 이벤트: touchend 탭 처리 후 발화되는 유령 click 차단용 플래그
+  let feedTouchHandled = false;
+
   document.getElementById('feedScreen').addEventListener('click', e => {
-    if (e.sourceCapabilities && !e.sourceCapabilities.firesTouchEvents) {
-      // 마우스 클릭만 처리
-      const unmuteBtn = e.target.closest('.unmute-btn');
-      if (unmuteBtn) { e.stopPropagation(); unmuteYt(e, unmuteBtn.dataset.sid); return; }
-      const errBtn = e.target.closest('.yt-err-btn');
-      if (errBtn) { e.stopPropagation(); const url = errBtn.dataset.yturl; if (url) window.open(url, '_blank'); return; }
-      const area = e.target.closest('.yt-area');
-      if (area && !area.classList.contains('no-video')) playYt(area);
+    if (feedTouchHandled) {
+      // touchend에서 이미 처리됨 → 유령 click 무시
+      feedTouchHandled = false;
+      e.stopPropagation();
+      return;
     }
+    // 마우스 클릭만 여기서 처리
+    const unmuteBtn = e.target.closest('.unmute-btn');
+    if (unmuteBtn) { e.stopPropagation(); unmuteYt(e, unmuteBtn.dataset.sid); return; }
+    const errBtn = e.target.closest('.yt-err-btn');
+    if (errBtn) { e.stopPropagation(); const url = errBtn.dataset.yturl; if (url) window.open(url, '_blank'); return; }
+    const area = e.target.closest('.yt-area');
+    if (area && !area.classList.contains('no-video')) playYt(area);
   });
 
   // 터치 스와이프 + 탭 — feedScreen 레벨로 위임
   const screen = document.getElementById('feedScreen');
   let feedTsX = 0, feedTsY = 0, feedTsDiffLocal = 0, feedDragging = false;
-  let feedTsTarget = null; // touchstart 시점의 타겟 기억
+  let feedTsTarget = null;
 
   screen.addEventListener('touchstart', e => {
     feedTsX = e.touches[0].clientX;
@@ -1353,7 +1359,8 @@ function feedInitSlider() {
     feedTsDiffLocal = 0;
     feedDragging = true;
     feedTsDiff = 0;
-    feedTsTarget = e.target; // 탭 판단용 타겟 저장
+    feedTsTarget = e.target;
+    feedTouchHandled = false;
   }, {passive: true});
 
   screen.addEventListener('touchmove', e => {
@@ -1374,29 +1381,38 @@ function feedInitSlider() {
 
   screen.addEventListener('touchend', e => {
     feedDragging = false;
-    const isTap = Math.abs(feedTsDiffLocal) < 10; // 10px 미만 = 탭
+    const movedY = Math.abs(feedTsDiffLocal);
+    const isTap  = movedY < 10; // 10px 미만 = 탭
 
-    if (Math.abs(feedTsDiffLocal) > 40) {
-      // 스와이프: 다음/이전 카드
+    if (movedY > 40) {
       feedGoTo(feedTsDiffLocal < 0 ? feedIdx + 1 : feedIdx - 1, true);
     } else {
       feedGoTo(feedIdx, true);
     }
 
-    // ── 탭 처리: touchend에서 직접 (click 이벤트 지연/차단 우회) ──
+    // 탭이면 touchend에서 직접 처리하고 유령 click 차단 플래그 세팅
     if (isTap && feedTsTarget) {
       const t = feedTsTarget;
-      // 음소거 해제 버튼
+
       const unmuteBtn = t.closest('.unmute-btn');
-      if (unmuteBtn) { unmuteYt(e, unmuteBtn.dataset.sid); feedTsTarget = null; feedTsDiffLocal = 0; feedTsDiff = 0; return; }
-      // YouTube 외부 열기 버튼
+      if (unmuteBtn) {
+        feedTouchHandled = true;
+        unmuteYt(e, unmuteBtn.dataset.sid);
+        feedTsTarget = null; feedTsDiffLocal = 0; feedTsDiff = 0; return;
+      }
       const errBtn = t.closest('.yt-err-btn');
-      if (errBtn) { const url = errBtn.dataset.yturl; if (url) window.open(url, '_blank'); feedTsTarget = null; feedTsDiffLocal = 0; feedTsDiff = 0; return; }
-      // 예약 버튼 (btn-book) — 기존 onclick 유지, 여기선 건드리지 않음
-      if (t.closest('.btn-book')) { feedTsTarget = null; feedTsDiffLocal = 0; feedTsDiff = 0; return; }
-      // yt-area 탭 → 영상 재생
+      if (errBtn) {
+        feedTouchHandled = true;
+        const url = errBtn.dataset.yturl; if (url) window.open(url, '_blank');
+        feedTsTarget = null; feedTsDiffLocal = 0; feedTsDiff = 0; return;
+      }
+      // btn-book: onclick이 있으므로 click 이벤트 그대로 통과 (플래그 세팅 안 함)
+      if (t.closest('.btn-book')) {
+        feedTsTarget = null; feedTsDiffLocal = 0; feedTsDiff = 0; return;
+      }
       const area = t.closest('.yt-area');
       if (area && !area.classList.contains('no-video')) {
+        feedTouchHandled = true; // 유령 click 차단
         playYt(area);
         feedTsTarget = null; feedTsDiffLocal = 0; feedTsDiff = 0; return;
       }
