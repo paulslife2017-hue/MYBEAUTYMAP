@@ -1,6 +1,39 @@
 import { Hono } from 'hono'
+import { neon } from '@neondatabase/serverless'
 
 const app = new Hono()
+
+// ══════════════════════════════════════════════════════════════════════════
+// Neon DB 연결
+// ══════════════════════════════════════════════════════════════════════════
+const DATABASE_URL = process.env.DATABASE_URL ||
+  'postgresql://neondb_owner:npg_1PBkOmAWRcf2@ep-round-recipe-aqdgkjfj-pooler.c-8.us-east-1.aws.neon.tech/neondb?sslmode=require'
+const sql = neon(DATABASE_URL)
+
+// DB 행 → 앱 객체 변환
+function rowToShop(r: any) {
+  return {
+    id:            r.id,
+    name:          r.name,
+    category:      r.category,
+    tags:          r.tags ?? [],
+    price:         r.price ?? '',
+    address:       r.address ?? '',
+    district:      r.district ?? '',
+    lat:           parseFloat(r.lat) || 37.5326,
+    lng:           parseFloat(r.lng) || 127.0246,
+    smartPlaceUrl: r.smart_place_url ?? '',
+    youtubeId:     r.youtube_id ?? '',
+    featured:      r.featured ?? false,
+    thumbnail:     r.thumbnail ?? '',
+    phone:         r.phone ?? '',
+    desc:          r.description ?? '',
+    active:        r.active ?? true,
+    views:         parseInt(r.view_cnt) || 0,
+    feedSP:        parseInt(r.feed_sp)  || 0,
+    mapSP:         parseInt(r.map_sp)   || 0,
+  }
+}
 
 // ══════════════════════════════════════════════════════════════════════════
 // 데이터 구조
@@ -15,115 +48,14 @@ interface Shop {
   district: string
   lat: number
   lng: number
-  smartPlaceUrl: string   // 예약하기 URL (업체마다 다름)
-  youtubeId: string       // 유튜브 영상 ID (업체마다 다름)
+  smartPlaceUrl: string
+  youtubeId: string
   featured: boolean
   thumbnail: string
   phone: string
   desc: string
   active: boolean
 }
-
-// 런타임 샵 스토어 (메모리)
-let shopStore: Shop[] = [
-  {
-    id: 1, name: '글로우 스킨 강남', category: '피부관리',
-    tags: ['리프팅', '보습', '트러블케어'], price: '5만원~',
-    address: '서울 강남구 논현로 123', district: '강남구',
-    lat: 37.5172, lng: 127.0473,
-    smartPlaceUrl: 'https://naver.me/example1',
-    youtubeId: 'mldig2ZiRwA', featured: true,
-    thumbnail: 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=600&q=80',
-    phone: '02-1234-5678', desc: '강남 최고의 피부관리 전문샵', active: true,
-  },
-  {
-    id: 2, name: '헤드힐링 홍대', category: '헤드스파',
-    tags: ['두피케어', '헤드마사지', '탈모케어'], price: '4만원~',
-    address: '서울 마포구 와우산로 45', district: '마포구',
-    lat: 37.5563, lng: 126.9236,
-    smartPlaceUrl: 'https://naver.me/example2',
-    youtubeId: 'mldig2ZiRwA', featured: true,
-    thumbnail: 'https://images.unsplash.com/photo-1519823551278-64ac92734fb1?w=600&q=80',
-    phone: '02-2345-6789', desc: '홍대 감성 두피·헤드스파 전문', active: true,
-  },
-  {
-    id: 3, name: '헤어스튜디오 한남', category: '헤어',
-    tags: ['염색', '펌', '커트'], price: '6만원~',
-    address: '서울 용산구 한남대로 77', district: '용산구',
-    lat: 37.5340, lng: 127.0026,
-    smartPlaceUrl: 'https://naver.me/example3',
-    youtubeId: 'mldig2ZiRwA', featured: false,
-    thumbnail: 'https://images.unsplash.com/photo-1560066984-138dadb4c035?w=600&q=80',
-    phone: '02-3456-7890', desc: '한남동 프리미엄 헤어살롱', active: true,
-  },
-  {
-    id: 4, name: '라온 왁싱샵', category: '왁싱',
-    tags: ['전신왁싱', '브라질리언', '눈썹'], price: '2만원~',
-    address: '서울 서초구 방배로 55', district: '서초구',
-    lat: 37.4836, lng: 126.9822,
-    smartPlaceUrl: 'https://naver.me/example4',
-    youtubeId: 'mldig2ZiRwA', featured: false,
-    thumbnail: 'https://images.unsplash.com/photo-1616394584738-fc6e612e71b9?w=600&q=80',
-    phone: '02-4567-8901', desc: '깔끔하고 위생적인 왁싱 전문샵', active: true,
-  },
-  {
-    id: 5, name: '퍼펙트 눈썹 신촌', category: '반영구',
-    tags: ['눈썹문신', '아이라인', '입술'], price: '15만원~',
-    address: '서울 서대문구 신촌로 88', district: '서대문구',
-    lat: 37.5596, lng: 126.9368,
-    smartPlaceUrl: 'https://naver.me/example5',
-    youtubeId: 'mldig2ZiRwA', featured: false,
-    thumbnail: 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=600&q=80',
-    phone: '02-5678-9012', desc: '자연스러운 반영구 메이크업', active: true,
-  },
-  {
-    id: 6, name: '힐링 마사지 이태원', category: '마사지',
-    tags: ['전신마사지', '아로마', '스웨디시'], price: '7만원~',
-    address: '서울 용산구 이태원로 150', district: '용산구',
-    lat: 37.5348, lng: 126.9947,
-    smartPlaceUrl: 'https://naver.me/example6',
-    youtubeId: 'mldig2ZiRwA', featured: false,
-    thumbnail: 'https://images.unsplash.com/photo-1544161515-4ab6ce6db874?w=600&q=80',
-    phone: '02-6789-0123', desc: '전문 테라피스트의 힐링 마사지', active: true,
-  },
-  {
-    id: 7, name: '스칼프클리닉 성수', category: '헤드스파',
-    tags: ['두피스케일링', '헤드스파', '아로마'], price: '5만원~',
-    address: '서울 성동구 성수일로 30', district: '성동구',
-    lat: 37.5446, lng: 127.0557,
-    smartPlaceUrl: 'https://naver.me/example7',
-    youtubeId: 'mldig2ZiRwA', featured: false,
-    thumbnail: 'https://images.unsplash.com/photo-1562322140-8baeececf3df?w=600&q=80',
-    phone: '02-7890-1234', desc: '성수 프리미엄 두피 & 헤드스파', active: true,
-  },
-  {
-    id: 8, name: '리프트업 에스테틱', category: '피부관리',
-    tags: ['리프팅', '주름개선', '탄력'], price: '8만원~',
-    address: '서울 강남구 청담로 12', district: '강남구',
-    lat: 37.5247, lng: 127.0392,
-    smartPlaceUrl: 'https://naver.me/example8',
-    youtubeId: 'mldig2ZiRwA', featured: false,
-    thumbnail: 'https://images.unsplash.com/photo-1487412947147-5cebf100ffc2?w=600&q=80',
-    phone: '02-8901-2345', desc: '청담동 프리미엄 에스테틱', active: true,
-  },
-  {
-    id: 9, name: '뷰티메디컬 강남', category: '병원',
-    tags: ['보톡스', '필러', '피부레이저'], price: '10만원~',
-    address: '서울 강남구 역삼로 222', district: '강남구',
-    lat: 37.5006, lng: 127.0368,
-    smartPlaceUrl: 'https://naver.me/example9',
-    youtubeId: 'mldig2ZiRwA', featured: false,
-    thumbnail: 'https://images.unsplash.com/photo-1629909613654-28e377c37b09?w=600&q=80',
-    phone: '02-9012-3456', desc: '강남 피부과 전문의 직접 시술', active: true,
-  },
-]
-
-let nextId = 10
-const viewCnt:   Record<number, number> = {}  // 피드 조회수
-const feedSPCnt: Record<number, number> = {}  // 피드 예약클릭
-const mapSPCnt:  Record<number, number> = {}  // 지도 예약클릭
-// 하위호환용 (기존 spCnt → feedSPCnt 로 통합)
-const spCnt = feedSPCnt
 
 function calcDist(la1: number, lo1: number, la2: number, lo2: number) {
   const R = 6371, dL = (la2 - la1) * Math.PI / 180, dO = (lo2 - lo1) * Math.PI / 180
@@ -136,26 +68,35 @@ function calcDist(la1: number, lo1: number, la2: number, lo2: number) {
 // ══════════════════════════════════════════════════════════════════════════
 
 // 샵 목록
-app.get('/api/shops', (c) => {
+app.get('/api/shops', async (c) => {
   const cat    = c.req.query('category') ?? ''
   const q      = (c.req.query('q') ?? '').toLowerCase()
   const lat    = parseFloat(c.req.query('lat') ?? '')
   const lng    = parseFloat(c.req.query('lng') ?? '')
   const nearby = c.req.query('nearby') === '1'
-  let list = shopStore.filter(s => s.active)
-  if (cat && cat !== 'all') list = list.filter(s => s.category === cat)
-  if (q) list = list.filter(s =>
-    s.name.toLowerCase().includes(q) || s.tags.some(t => t.includes(q)) || s.district.includes(q)
+
+  const rows = await sql`
+    SELECT s.*, COALESCE(st.view_cnt,0) as view_cnt,
+           COALESCE(st.feed_sp,0) as feed_sp, COALESCE(st.map_sp,0) as map_sp
+    FROM shops s LEFT JOIN stats st ON s.id = st.shop_id
+    WHERE s.active = true
+    ORDER BY s.featured DESC, s.id ASC
+  `
+  let list = rows.map(rowToShop) as any[]
+
+  if (cat && cat !== 'all') list = list.filter((s:any) => s.category === cat)
+  if (q) list = list.filter((s:any) =>
+    s.name.toLowerCase().includes(q) ||
+    (s.tags||[]).some((t:string) => t.toLowerCase().includes(q)) ||
+    s.district.toLowerCase().includes(q)
   )
   if (nearby && !isNaN(lat) && !isNaN(lng)) {
     list = list
-      .map(s => ({ ...s, dist: calcDist(lat, lng, s.lat, s.lng) }))
-      .filter((s: any) => s.dist <= 20)
-      .sort((a: any, b: any) => a.dist - b.dist)
-  } else {
-    list = [...list.filter(s => s.featured), ...list.filter(s => !s.featured)]
+      .map((s:any) => ({ ...s, dist: calcDist(lat, lng, s.lat, s.lng) }))
+      .filter((s:any) => s.dist <= 20)
+      .sort((a:any, b:any) => a.dist - b.dist)
   }
-  return c.json(list.map(s => ({ ...s, views: viewCnt[s.id] ?? 0 })))
+  return c.json(list)
 })
 
 // 주소 → 좌표 변환 (네이버 지오코딩)
@@ -173,7 +114,6 @@ app.get('/api/geocode', async (c) => {
     const data = await res.json() as any
     if (!data.addresses?.length) return c.json({ error: '주소를 찾을 수 없어요' }, 404)
     const addr = data.addresses[0]
-    // 구/지역 자동 추출
     const district = addr.addressElements?.find((e: any) =>
       e.types?.includes('LEGAL_CODE') || e.types?.includes('DISTRICT')
     )?.longName || addr.roadAddress?.split(' ')[2] || ''
@@ -189,100 +129,158 @@ app.get('/api/geocode', async (c) => {
 })
 
 // 전체 샵 (지도용)
-app.get('/api/shops/all', (c) => {
-  return c.json(shopStore.filter(s => s.active).map(s => ({ ...s, views: viewCnt[s.id] ?? 0 })))
+app.get('/api/shops/all', async (c) => {
+  const rows = await sql`
+    SELECT s.*, COALESCE(st.view_cnt,0) as view_cnt,
+           COALESCE(st.feed_sp,0) as feed_sp, COALESCE(st.map_sp,0) as map_sp
+    FROM shops s LEFT JOIN stats st ON s.id = st.shop_id
+    WHERE s.active = true ORDER BY s.id ASC
+  `
+  return c.json(rows.map(rowToShop))
 })
 
 // 샵 단건
-app.get('/api/shops/:id', (c) => {
+app.get('/api/shops/:id', async (c) => {
   const id = +c.req.param('id')
-  const s = shopStore.find(x => x.id === id)
-  if (!s) return c.json({ error: 'not found' }, 404)
-  return c.json({ ...s, views: viewCnt[s.id] ?? 0 })
+  const rows = await sql`
+    SELECT s.*, COALESCE(st.view_cnt,0) as view_cnt,
+           COALESCE(st.feed_sp,0) as feed_sp, COALESCE(st.map_sp,0) as map_sp
+    FROM shops s LEFT JOIN stats st ON s.id = st.shop_id
+    WHERE s.id = ${id}
+  `
+  if (!rows.length) return c.json({ error: 'not found' }, 404)
+  return c.json(rowToShop(rows[0]))
 })
 
 // 샵 추가
 app.post('/api/admin/shops', async (c) => {
   const body = await c.req.json()
-  const shop: Shop = {
-    id: nextId++,
-    name:         body.name        ?? '새 업체',
-    category:     body.category    ?? '피부관리',
-    tags:         body.tags        ?? [],
-    price:        body.price       ?? '',
-    address:      body.address     ?? '',
-    district:     body.district    ?? '',
-    lat:          parseFloat(body.lat)  || 37.5326,
-    lng:          parseFloat(body.lng)  || 127.0246,
-    smartPlaceUrl: body.smartPlaceUrl ?? '',
-    youtubeId:    body.youtubeId   ?? '',
-    featured:     body.featured    ?? false,
-    thumbnail:    body.thumbnail   ?? 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=600&q=80',
-    phone:        body.phone       ?? '',
-    desc:         body.desc        ?? '',
-    active:       true,
-  }
-  shopStore.push(shop)
-  return c.json(shop)
+  const tags = Array.isArray(body.tags)
+    ? body.tags
+    : (body.tags ?? '').split(',').map((t: string) => t.trim()).filter(Boolean)
+  const rows = await sql`
+    INSERT INTO shops
+      (name, category, tags, price, address, district, lat, lng,
+       smart_place_url, youtube_id, featured, thumbnail, phone, description, active)
+    VALUES
+      (${body.name ?? '새 업체'}, ${body.category ?? '피부관리'}, ${tags},
+       ${body.price ?? ''}, ${body.address ?? ''}, ${body.district ?? ''},
+       ${parseFloat(body.lat) || 37.5326}, ${parseFloat(body.lng) || 127.0246},
+       ${body.smartPlaceUrl ?? ''}, ${body.youtubeId ?? ''},
+       ${body.featured ?? false},
+       ${body.thumbnail ?? 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=600&q=80'},
+       ${body.phone ?? ''}, ${body.desc ?? ''}, true)
+    RETURNING *
+  `
+  const shop = rows[0]
+  await sql`INSERT INTO stats (shop_id) VALUES (${shop.id}) ON CONFLICT DO NOTHING`
+  return c.json(rowToShop(shop))
 })
 
 // 샵 수정
 app.put('/api/admin/shops/:id', async (c) => {
   const id   = +c.req.param('id')
   const body = await c.req.json()
-  const idx  = shopStore.findIndex(s => s.id === id)
-  if (idx === -1) return c.json({ error: 'not found' }, 404)
-  shopStore[idx] = {
-    ...shopStore[idx],
-    ...body,
-    id,
-    lat: parseFloat(body.lat) || shopStore[idx].lat,
-    lng: parseFloat(body.lng) || shopStore[idx].lng,
-    tags: Array.isArray(body.tags)
-      ? body.tags
-      : (body.tags ?? '').split(',').map((t: string) => t.trim()).filter(Boolean),
-  }
-  return c.json(shopStore[idx])
+  const tags = Array.isArray(body.tags)
+    ? body.tags
+    : (body.tags ?? '').split(',').map((t: string) => t.trim()).filter(Boolean)
+  const rows = await sql`
+    UPDATE shops SET
+      name            = ${body.name},
+      category        = ${body.category},
+      tags            = ${tags},
+      price           = ${body.price ?? ''},
+      address         = ${body.address ?? ''},
+      district        = ${body.district ?? ''},
+      lat             = ${parseFloat(body.lat) || 37.5326},
+      lng             = ${parseFloat(body.lng) || 127.0246},
+      smart_place_url = ${body.smartPlaceUrl ?? ''},
+      youtube_id      = ${body.youtubeId ?? ''},
+      featured        = ${body.featured ?? false},
+      thumbnail       = ${body.thumbnail ?? ''},
+      phone           = ${body.phone ?? ''},
+      description     = ${body.desc ?? ''},
+      active          = ${body.active ?? true}
+    WHERE id = ${id}
+    RETURNING *
+  `
+  if (!rows.length) return c.json({ error: 'not found' }, 404)
+  await sql`INSERT INTO stats (shop_id) VALUES (${id}) ON CONFLICT DO NOTHING`
+  return c.json(rowToShop(rows[0]))
 })
 
 // 샵 삭제
-app.delete('/api/admin/shops/:id', (c) => {
-  const id  = +c.req.param('id')
-  const idx = shopStore.findIndex(s => s.id === id)
-  if (idx === -1) return c.json({ error: 'not found' }, 404)
-  shopStore.splice(idx, 1)
+app.delete('/api/admin/shops/:id', async (c) => {
+  const id = +c.req.param('id')
+  await sql`DELETE FROM shops WHERE id = ${id}`
   return c.json({ ok: true })
 })
 
-// 추적
-app.post('/api/track/view/:id', (c) => {
-  const id = +c.req.param('id'); viewCnt[id] = (viewCnt[id] ?? 0) + 1; return c.json({ ok: true })
+// 트래킹 — 영상 조회
+app.post('/api/track/view/:id', async (c) => {
+  const id = +c.req.param('id')
+  await sql`
+    INSERT INTO stats (shop_id, view_cnt) VALUES (${id}, 1)
+    ON CONFLICT (shop_id) DO UPDATE SET view_cnt = stats.view_cnt + 1
+  `
+  return c.json({ ok: true })
 })
-// 피드 예약클릭
-app.post('/api/track/sp/:id', (c) => {
-  const id = +c.req.param('id'); feedSPCnt[id] = (feedSPCnt[id] ?? 0) + 1; return c.json({ ok: true })
+// 트래킹 — 피드 예약클릭
+app.post('/api/track/sp/:id', async (c) => {
+  const id = +c.req.param('id')
+  await sql`
+    INSERT INTO stats (shop_id, feed_sp) VALUES (${id}, 1)
+    ON CONFLICT (shop_id) DO UPDATE SET feed_sp = stats.feed_sp + 1
+  `
+  return c.json({ ok: true })
 })
-// 지도 예약클릭
-app.post('/api/track/mapsp/:id', (c) => {
-  const id = +c.req.param('id'); mapSPCnt[id] = (mapSPCnt[id] ?? 0) + 1; return c.json({ ok: true })
+// 트래킹 — 지도 예약클릭
+app.post('/api/track/mapsp/:id', async (c) => {
+  const id = +c.req.param('id')
+  await sql`
+    INSERT INTO stats (shop_id, map_sp) VALUES (${id}, 1)
+    ON CONFLICT (shop_id) DO UPDATE SET map_sp = stats.map_sp + 1
+  `
+  return c.json({ ok: true })
 })
 
 // 어드민 통계
-app.get('/api/admin/stats', (c) => {
-  const stats = shopStore.map(s => ({
-    id: s.id, name: s.name, category: s.category,
-    thumbnail: s.thumbnail,
-    featured: s.featured, active: s.active,
-    views:     viewCnt[s.id]   ?? 0,
-    feedSP:    feedSPCnt[s.id] ?? 0,
-    mapSP:     mapSPCnt[s.id]  ?? 0,
-  })).sort((a, b) => (b.views + b.feedSP + b.mapSP) - (a.views + a.feedSP + a.mapSP))
+app.get('/api/admin/stats', async (c) => {
+  const rows = await sql`
+    SELECT s.id, s.name, s.category, s.thumbnail, s.youtube_id,
+           s.featured, s.active,
+           COALESCE(st.view_cnt,0) as view_cnt,
+           COALESCE(st.feed_sp,0)  as feed_sp,
+           COALESCE(st.map_sp,0)   as map_sp
+    FROM shops s LEFT JOIN stats st ON s.id = st.shop_id
+    ORDER BY (COALESCE(st.view_cnt,0)+COALESCE(st.feed_sp,0)+COALESCE(st.map_sp,0)) DESC
+  `
+  const totals = await sql`
+    SELECT
+      SUM(view_cnt) as total_views,
+      SUM(feed_sp)  as total_feed_sp,
+      SUM(map_sp)   as total_map_sp
+    FROM stats
+  `
+  const activeCount = await sql`SELECT COUNT(*) as cnt FROM shops WHERE active = true`
+  const t = totals[0] || {}
   return c.json({
-    stats,
-    totalViews:  Object.values(viewCnt).reduce((a,b)=>a+b,0),
-    totalFeedSP: Object.values(feedSPCnt).reduce((a,b)=>a+b,0),
-    totalMapSP:  Object.values(mapSPCnt).reduce((a,b)=>a+b,0),
-    totalShops:  shopStore.filter(s=>s.active).length,
+    stats: rows.map(r => ({
+      id:        r.id,
+      name:      r.name,
+      category:  r.category,
+      thumbnail: r.thumbnail,
+      youtubeId: r.youtube_id,
+      featured:  r.featured,
+      active:    r.active,
+      views:     parseInt(r.view_cnt) || 0,
+      feedSP:    parseInt(r.feed_sp)  || 0,
+      mapSP:     parseInt(r.map_sp)   || 0,
+    })),
+    totalViews:  parseInt(t.total_views)   || 0,
+    totalFeedSP: parseInt(t.total_feed_sp) || 0,
+    totalMapSP:  parseInt(t.total_map_sp)  || 0,
+    totalShops:  parseInt(activeCount[0].cnt) || 0,
   })
 })
 
