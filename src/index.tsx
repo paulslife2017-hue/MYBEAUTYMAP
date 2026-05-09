@@ -1158,12 +1158,12 @@ function feedCardHTML(s) {
   // onerror: data-fb 속성에 폴백 URL 저장 → 따옴표 충돌 완전 회피
   const fb = s.youtubeId ? 'https://img.youtube.com/vi/' + s.youtubeId + '/mqdefault.jpg' : '';
   const ytArea = s.youtubeId
-    ? '<div class="yt-area" id="yta-' + s.id + '" data-ytid="' + s.youtubeId + '" onclick="playYt(this)">'
+    ? '<div class="yt-area" id="yta-' + s.id + '" data-ytid="' + s.youtubeId + '" data-sid="' + s.id + '">'
         + '<img class="yt-thumb" id="ytt-' + s.id + '" src="' + thumb + '" loading="lazy"'
         + ' data-fb="' + fb + '" onerror="this.onerror=null;this.src=this.dataset.fb">'
         + '<div class="yt-play-btn" id="ypb-' + s.id + '"></div>'
         + '<div class="yt-player"  id="ytp-' + s.id + '"></div>'
-        + '<button class="unmute-btn" id="unm-' + s.id + '" onclick="unmuteYt(event,this.dataset.sid)" data-sid="' + s.id + '">🔇 탭하여 소리켜기</button>'
+        + '<button class="unmute-btn" id="unm-' + s.id + '" data-sid="' + s.id + '">🔇 탭하여 소리켜기</button>'
       + '</div>'
     : '<div class="yt-area no-video">'
         + (thumb ? '<img class="yt-thumb" src="' + thumb + '" loading="lazy" style="pointer-events:none">' : '')
@@ -1197,21 +1197,17 @@ function feedGoTo(idx, animate) {
   feedIdx = Math.max(0, Math.min(idx, n - 1));
   track.style.transition = animate === false ? 'none' : 'transform .35s cubic-bezier(.32,1,.23,1)';
   track.style.transform  = 'translateY(' + (-feedIdx * feedSliderH) + 'px)';
-  // 카드 이동 시 재생 중인 영상 모두 일시정지 (자동재생 없음 — 클릭해야 재생)
+  // 카드 이동 시 재생 중인 영상 일시정지 + 썸네일 복원
   setTimeout(() => {
     Object.values(ytPlayers).forEach(p => { try { p.pauseVideo(); } catch(e){} });
     document.querySelectorAll('.yt-area.playing').forEach(a => {
       a.classList.remove('playing');
-      // 썸네일·플레이버튼 다시 보이기
-      const sid = a.id.replace('yta-', '');
+      const sid = a.dataset.sid;
       const t = document.getElementById('ytt-' + sid);
       const b = document.getElementById('ypb-' + sid);
       if (t) t.style.opacity = '1';
       if (b) b.style.opacity = '1';
-      // 언뮤트 버튼 숨기기
       document.getElementById('unm-' + sid)?.classList.remove('show');
-      // onclick 복원 (playYt 가 null로 만들었으므로)
-      a.onclick = function() { playYt(this); };
     });
   }, 380);
 }
@@ -1243,6 +1239,23 @@ function feedInitSlider() {
     });
   }
   feedGoTo(feedIdx, false);
+
+  // 이벤트 위임: .yt-area 클릭 → playYt / .unmute-btn 클릭 → unmuteYt
+  slider.addEventListener('click', e => {
+    // 언뮤트 버튼
+    const unmuteBtn = e.target.closest('.unmute-btn');
+    if (unmuteBtn) {
+      e.stopPropagation();
+      unmuteYt(e, unmuteBtn.dataset.sid);
+      return;
+    }
+    // yt-area 클릭 (드래그가 아닐 때만)
+    if (Math.abs(tsDiff) > 5) return;
+    const area = e.target.closest('.yt-area');
+    if (area && !area.classList.contains('no-video')) {
+      playYt(area);
+    }
+  });
 
   // 터치 스와이프
   let tsY = 0, tsDiff = 0, dragging = false;
@@ -1331,21 +1344,26 @@ function loadYTAPI() {
 }
 loadYTAPI();
 
-function playYt(el) {
-  const area = el.closest ? el.closest('.yt-area') : el;
+function playYt(area) {
   if (!area) return;
   const ytId = area.dataset.ytid;
-  const sid  = area.id.replace('yta-', '');
+  const sid  = area.dataset.sid;
   if (!ytId) return;
   if (area.classList.contains('playing')) return;
 
   // 다른 플레이어 모두 중지
   Object.values(ytPlayers).forEach(p => { try { p.pauseVideo(); } catch(e){} });
-  document.querySelectorAll('.yt-area.playing').forEach(a => a.classList.remove('playing'));
-  document.querySelectorAll('.unmute-btn').forEach(b => b.classList.remove('show'));
+  document.querySelectorAll('.yt-area.playing').forEach(a => {
+    a.classList.remove('playing');
+    const s2 = a.dataset.sid;
+    const t2 = document.getElementById('ytt-' + s2);
+    const b2 = document.getElementById('ypb-' + s2);
+    if (t2) t2.style.opacity = '1';
+    if (b2) b2.style.opacity = '1';
+    document.getElementById('unm-' + s2)?.classList.remove('show');
+  });
 
   area.classList.add('playing');
-  area.onclick = null;
 
   const containerId = 'ytp-' + sid;
 
