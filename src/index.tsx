@@ -896,18 +896,18 @@ html,body{height:100%;background:var(--bg);color:#fff;
     <!-- 요금 안내 -->
     <div class="iq-pricing">
       <div class="iq-plan free">
-        <div class="plan-tag">FREE</div>
+        <div class="plan-tag">추천</div>
         <div class="plan-icon">🎬</div>
-        <div class="plan-price">무료</div>
-        <div class="plan-name">영상촬영 입점</div>
-        <div class="plan-desc">저희가 직접 촬영해드리면<br>입점 비용 <b style="color:#03C75A">완전 무료!</b></div>
+        <div class="plan-price">6개월 무료</div>
+        <div class="plan-name">촬영 플랜</div>
+        <div class="plan-desc">영상 촬영 포함 시<br><b style="color:#03C75A">6개월 무료</b><br><span style="font-size:9px;opacity:.6">이후 월 10,000원</span></div>
       </div>
       <div class="iq-plan paid">
-        <div class="plan-tag">SELF</div>
-        <div class="plan-icon">📱</div>
+        <div class="plan-tag">기본</div>
+        <div class="plan-icon">📍</div>
         <div class="plan-price">월 1만원</div>
-        <div class="plan-name">자체영상 입점</div>
-        <div class="plan-desc">보유 영상으로 직접 등록 시<br>월 <b style="color:var(--pink)">10,000원</b></div>
+        <div class="plan-name">기본 플랜</div>
+        <div class="plan-desc">영상 없이<br>맵 게재만<br><b style="color:var(--pink)">월 10,000원</b></div>
       </div>
     </div>
 
@@ -1327,7 +1327,18 @@ function playYt(el) {
 
   // YT API 준비됐으면 바로, 아니면 onYouTubeIframeAPIReady 이후
   const create = () => {
+    // 컨테이너 div가 존재하는지 확인 (PC wrapper innerHTML 재생성 후 사라질 수 있음)
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    // 컨테이너 크기를 부모(.yt-area)에 맞춰 명시적으로 설정
+    const parentArea = container.closest('.yt-area');
+    const w = parentArea ? parentArea.offsetWidth  : 640;
+    const h = parentArea ? parentArea.offsetHeight : 360;
+
     ytPlayers[sid] = new YT.Player(containerId, {
+      width:   String(w || 640),
+      height:  String(h || 360),
       videoId: ytId,
       playerVars: {
         autoplay:       1,
@@ -1340,13 +1351,17 @@ function playYt(el) {
       },
       events: {
         onReady(e) {
+          // 생성된 iframe을 position:absolute + 100% 크기로 강제 (YT가 px 박아 넣으므로)
+          const iframe = e.target.getIframe();
+          if (iframe) {
+            iframe.style.cssText =
+              'position:absolute;inset:0;width:100%;height:100%;border:none;z-index:1;';
+          }
           e.target.playVideo();
-          // 음소거 해제 버튼 표시
           const btn = document.getElementById('unm-' + sid);
           if (btn) btn.classList.add('show');
         },
         onStateChange(e) {
-          // 재생 중일 때 썸네일/플레이버튼 숨기기
           if (e.data === YT.PlayerState.PLAYING) {
             const t = document.getElementById('ytt-' + sid);
             const b = document.getElementById('ypb-' + sid);
