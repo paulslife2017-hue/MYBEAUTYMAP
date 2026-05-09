@@ -119,8 +119,11 @@ let shopStore: Shop[] = [
 ]
 
 let nextId = 10
-const viewCnt: Record<number, number> = {}
-const spCnt:   Record<number, number> = {}
+const viewCnt:   Record<number, number> = {}  // 피드 조회수
+const feedSPCnt: Record<number, number> = {}  // 피드 예약클릭
+const mapSPCnt:  Record<number, number> = {}  // 지도 예약클릭
+// 하위호환용 (기존 spCnt → feedSPCnt 로 통합)
+const spCnt = feedSPCnt
 
 function calcDist(la1: number, lo1: number, la2: number, lo2: number) {
   const R = 6371, dL = (la2 - la1) * Math.PI / 180, dO = (lo2 - lo1) * Math.PI / 180
@@ -255,22 +258,31 @@ app.delete('/api/admin/shops/:id', (c) => {
 app.post('/api/track/view/:id', (c) => {
   const id = +c.req.param('id'); viewCnt[id] = (viewCnt[id] ?? 0) + 1; return c.json({ ok: true })
 })
+// 피드 예약클릭
 app.post('/api/track/sp/:id', (c) => {
-  const id = +c.req.param('id'); spCnt[id] = (spCnt[id] ?? 0) + 1; return c.json({ ok: true })
+  const id = +c.req.param('id'); feedSPCnt[id] = (feedSPCnt[id] ?? 0) + 1; return c.json({ ok: true })
+})
+// 지도 예약클릭
+app.post('/api/track/mapsp/:id', (c) => {
+  const id = +c.req.param('id'); mapSPCnt[id] = (mapSPCnt[id] ?? 0) + 1; return c.json({ ok: true })
 })
 
 // 어드민 통계
 app.get('/api/admin/stats', (c) => {
   const stats = shopStore.map(s => ({
     id: s.id, name: s.name, category: s.category,
+    thumbnail: s.thumbnail,
     featured: s.featured, active: s.active,
-    views: viewCnt[s.id] ?? 0, spClicks: spCnt[s.id] ?? 0,
-  })).sort((a, b) => b.views - a.views)
+    views:     viewCnt[s.id]   ?? 0,
+    feedSP:    feedSPCnt[s.id] ?? 0,
+    mapSP:     mapSPCnt[s.id]  ?? 0,
+  })).sort((a, b) => (b.views + b.feedSP + b.mapSP) - (a.views + a.feedSP + a.mapSP))
   return c.json({
     stats,
-    totalViews: Object.values(viewCnt).reduce((a, b) => a + b, 0),
-    totalSP:    Object.values(spCnt).reduce((a, b) => a + b, 0),
-    totalShops: shopStore.filter(s => s.active).length,
+    totalViews:  Object.values(viewCnt).reduce((a,b)=>a+b,0),
+    totalFeedSP: Object.values(feedSPCnt).reduce((a,b)=>a+b,0),
+    totalMapSP:  Object.values(mapSPCnt).reduce((a,b)=>a+b,0),
+    totalShops:  shopStore.filter(s=>s.active).length,
   })
 })
 
@@ -816,19 +828,70 @@ function switchTab(tab) {
   if (tab==='feed') closeMapPopup();
 }
 
-// ── 로고 더블클릭 → 관리자 ───────────────────────────────────────────────
+// ── 로고 5번 탭 → 관리자 선택 팝업 ─────────────────────────────────────
 let logoCnt=0, logoTmr;
 document.getElementById('logoBtn').addEventListener('click', ()=>{
   logoCnt++;
   clearTimeout(logoTmr);
-  logoTmr = setTimeout(()=>{logoCnt=0;}, 600);
-  if (logoCnt >= 3) {
+  logoTmr = setTimeout(()=>{logoCnt=0;}, 800);
+  if (logoCnt >= 5) {
     logoCnt = 0;
-    const pw = prompt('관리자 비밀번호를 입력하세요');
-    if (pw === '0907') location.href = '/admin';
-    else if (pw !== null) showToast('비밀번호가 틀렸어요');
+    showAdminPicker();
   }
 });
+
+function showAdminPicker() {
+  const pw = prompt('관리자 비밀번호');
+  if (pw === null) return;
+  if (pw !== '0907') { showToast('❌ 비밀번호가 틀렸어요'); return; }
+  // 비밀번호 맞으면 선택 다이얼로그
+  const box = document.createElement('div');
+  box.id = 'adminPicker';
+  const overlay = document.createElement('div');
+  Object.assign(overlay.style, {
+    position:'fixed', inset:'0', background:'rgba(0,0,0,.75)', zIndex:'9999',
+    display:'flex', alignItems:'flex-end', justifyContent:'center'
+  });
+  overlay.onclick = function(e){ if(e.target===overlay) box.remove(); };
+  const sheet = document.createElement('div');
+  Object.assign(sheet.style, {
+    background:'#1a1a1a', borderRadius:'22px 22px 0 0', width:'100%',
+    maxWidth:'480px', padding:'20px 16px 40px',
+    borderTop:'1px solid rgba(255,255,255,.08)'
+  });
+  sheet.innerHTML = '<div style="width:36px;height:4px;background:rgba(255,255,255,.15);border-radius:2px;margin:0 auto 18px"></div>'
+    + '<div style="font-size:16px;font-weight:800;margin-bottom:6px">관리자 메뉴</div>'
+    + '<div style="font-size:12px;color:rgba(255,255,255,.35);margin-bottom:18px">이동할 관리자 페이지를 선택하세요</div>';
+  const btnFeed = document.createElement('button');
+  Object.assign(btnFeed.style, {
+    width:'100%', background:'rgba(255,77,125,.12)',
+    border:'1.5px solid rgba(255,77,125,.3)', color:'#FF4D7D',
+    borderRadius:'14px', padding:'16px', fontSize:'14px', fontWeight:'800',
+    cursor:'pointer', fontFamily:'inherit', display:'flex',
+    alignItems:'center', gap:'10px', marginBottom:'10px'
+  });
+  btnFeed.innerHTML = '<span style="font-size:22px">🎬</span>'
+    + '<div style="text-align:left"><div>피드 관리자</div>'
+    + '<div style="font-size:11px;font-weight:500;color:rgba(255,255,255,.45);margin-top:2px">영상 피드 업체·통계 관리</div></div>';
+  btnFeed.onclick = function(){ location.href='/admin'; };
+  const btnMap = document.createElement('button');
+  Object.assign(btnMap.style, {
+    width:'100%', background:'rgba(99,102,241,.12)',
+    border:'1.5px solid rgba(99,102,241,.3)', color:'#818CF8',
+    borderRadius:'14px', padding:'16px', fontSize:'14px', fontWeight:'800',
+    cursor:'pointer', fontFamily:'inherit', display:'flex',
+    alignItems:'center', gap:'10px'
+  });
+  btnMap.innerHTML = '<span style="font-size:22px">🗺️</span>'
+    + '<div style="text-align:left"><div>지도 관리자</div>'
+    + '<div style="font-size:11px;font-weight:500;color:rgba(255,255,255,.45);margin-top:2px">지도 핀 업체·통계 관리</div></div>';
+  btnMap.onclick = function(){ location.href='/map-admin'; };
+  sheet.appendChild(btnFeed);
+  sheet.appendChild(btnMap);
+  overlay.appendChild(sheet);
+  box.appendChild(overlay);
+  document.body.appendChild(box);
+}
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // 피드
@@ -1326,7 +1389,10 @@ function closeFeedSheet() {
   document.getElementById('dim').classList.remove('on');
   document.getElementById('sheet').classList.remove('open');
 }
+// 피드 예약 트래킹
 function trackSP() { if(curShop) fetch('/api/track/sp/'+curShop.id,{method:'POST'}); }
+// 지도 예약 트래킹
+function trackMapSP(id) { fetch('/api/track/mapsp/'+id,{method:'POST'}); }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // 인앱 브라우저
@@ -1594,9 +1660,12 @@ function playVideo() {
   document.getElementById('cardThumb').style.display = 'none';
 }
 
-/* ── 예약 ── */
+/* ── 예약 (지도 트래킹 포함) ── */
 function openReserve() {
-  if (curShop?.smartPlaceUrl) window.open(curShop.smartPlaceUrl, '_blank');
+  if (!curShop?.smartPlaceUrl) return;
+  // 지도 예약 트래킹
+  fetch('/api/track/mapsp/' + curShop.id, { method: 'POST' }).catch(()=>{});
+  window.open(curShop.smartPlaceUrl, '_blank');
 }
 
 /* ── 카드 열기 ── */
@@ -2020,18 +2089,45 @@ function renderShops(stats) {
 }
 
 function renderStats(stats) {
-  document.getElementById('panel-stats').innerHTML = stats.map(s=>\`
+  if (!stats.length) {
+    document.getElementById('panel-stats').innerHTML =
+      '<div style="text-align:center;color:rgba(255,255,255,.2);padding:40px">데이터가 없어요</div>';
+    return;
+  }
+  const sorted = [...stats].sort((a,b)=>
+    (b.views+b.feedSP+b.mapSP)-(a.views+a.feedSP+a.mapSP));
+  const thumb0 = 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=400&q=60';
+  document.getElementById('panel-stats').innerHTML = sorted.map((s,i)=>{
+    const rankClass = i===0?'r1':i===1?'r2':i===2?'r3':'';
+    const img = s.youtubeId
+      ? 'https://img.youtube.com/vi/'+s.youtubeId+'/hqdefault.jpg'
+      : (s.thumbnail||thumb0);
+    return \`
     <div class="stat-row">
-      <div class="sr-top">
-        <div class="sr-name">\${s.name}</div>
-        <span class="sr-cat">\${s.category}</span>
+      <img class="sr-media" src="\${img}" onerror="this.src='\${thumb0}'" alt="">
+      <div class="sr-body">
+        <div class="sr-top">
+          <div class="sr-rank \${rankClass}">\${i+1}</div>
+          <div class="sr-name">\${s.name}</div>
+          <span class="sr-cat">\${s.category}</span>
+        </div>
+        <div class="sr-nums">
+          <div class="sr-num c-view">
+            <div class="sr-n">\${s.views.toLocaleString()}</div>
+            <div class="sr-l">👁 영상조회</div>
+          </div>
+          <div class="sr-num c-feed">
+            <div class="sr-n">\${s.feedSP.toLocaleString()}</div>
+            <div class="sr-l">📹 피드예약</div>
+          </div>
+          <div class="sr-num c-map">
+            <div class="sr-n">\${s.mapSP.toLocaleString()}</div>
+            <div class="sr-l">🗺 지도예약</div>
+          </div>
+        </div>
       </div>
-      <div class="sr-nums">
-        <div class="sr-num"><div class="sr-n">\${s.views.toLocaleString()}</div><div class="sr-l">👁 조회수</div></div>
-        <div class="sr-num"><div class="sr-n">\${s.spClicks.toLocaleString()}</div><div class="sr-l">📅 예약클릭</div></div>
-      </div>
-    </div>
-  \`).join('');
+    </div>\`;
+  }).join('');
 }
 
 // ── 모달 열기/닫기 ────────────────────────────────────────────────────────
