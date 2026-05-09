@@ -1811,11 +1811,12 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0a;
   .card-close{top:14px;right:14px}
 }
 
-/* PC에서 미디어 영역 높이 제한 (16:9 그대로면 너무 높음) */
+/* PC: 사이드패널 너비(360px) 기준 16:9 비율 그대로 유지 → 썸네일/영상 안 짤림 */
 @media(min-width:768px){
   .card-media{
-    aspect-ratio:unset;
-    height:200px;   /* 고정 높이로 변경 */
+    aspect-ratio:16/9;  /* 비율 유지 → 360px 너비면 202px 높이로 자동 */
+    height:auto;
+    flex-shrink:0;      /* 스크롤 시 미디어 영역 찌그러짐 방지 */
   }
 }
 .card-handle{width:36px;height:4px;border-radius:2px;
