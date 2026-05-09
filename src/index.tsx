@@ -1197,15 +1197,22 @@ function feedGoTo(idx, animate) {
   feedIdx = Math.max(0, Math.min(idx, n - 1));
   track.style.transition = animate === false ? 'none' : 'transform .35s cubic-bezier(.32,1,.23,1)';
   track.style.transform  = 'translateY(' + (-feedIdx * feedSliderH) + 'px)';
-  // 현재 카드 영상 자동재생
-  const s = feedShops[feedIdx];
-  if (!s) return;
+  // 카드 이동 시 재생 중인 영상 모두 일시정지 (자동재생 없음 — 클릭해야 재생)
   setTimeout(() => {
-    const area = document.getElementById('yta-' + s.id);
-    if (!area || area.classList.contains('playing')) return;
     Object.values(ytPlayers).forEach(p => { try { p.pauseVideo(); } catch(e){} });
-    document.querySelectorAll('.yt-area.playing').forEach(a => a.classList.remove('playing'));
-    playYt(area);
+    document.querySelectorAll('.yt-area.playing').forEach(a => {
+      a.classList.remove('playing');
+      // 썸네일·플레이버튼 다시 보이기
+      const sid = a.id.replace('yta-', '');
+      const t = document.getElementById('ytt-' + sid);
+      const b = document.getElementById('ypb-' + sid);
+      if (t) t.style.opacity = '1';
+      if (b) b.style.opacity = '1';
+      // 언뮤트 버튼 숨기기
+      document.getElementById('unm-' + sid)?.classList.remove('show');
+      // onclick 복원 (playYt 가 null로 만들었으므로)
+      a.onclick = function() { playYt(this); };
+    });
   }, 380);
 }
 
