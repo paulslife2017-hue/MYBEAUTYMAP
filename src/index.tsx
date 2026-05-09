@@ -155,6 +155,36 @@ app.get('/api/shops', (c) => {
   return c.json(list.map(s => ({ ...s, views: viewCnt[s.id] ?? 0 })))
 })
 
+// 주소 → 좌표 변환 (네이버 지오코딩)
+app.get('/api/geocode', async (c) => {
+  const query = c.req.query('query') ?? ''
+  if (!query) return c.json({ error: 'query required' }, 400)
+  try {
+    const res = await fetch(
+      `https://maps.apigw.ntruss.com/map-geocode/v2/geocode?query=${encodeURIComponent(query)}`,
+      { headers: {
+        'X-NCP-APIGW-API-KEY-ID': 'xjjg4490h8',
+        'X-NCP-APIGW-API-KEY':    'RB4DFA4ZEF2iHtkerlNrqzoG8P8YHwE2UddGrAtD',
+      }}
+    )
+    const data = await res.json() as any
+    if (!data.addresses?.length) return c.json({ error: '주소를 찾을 수 없어요' }, 404)
+    const addr = data.addresses[0]
+    // 구/지역 자동 추출
+    const district = addr.addressElements?.find((e: any) =>
+      e.types?.includes('LEGAL_CODE') || e.types?.includes('DISTRICT')
+    )?.longName || addr.roadAddress?.split(' ')[2] || ''
+    return c.json({
+      lat:      parseFloat(addr.y),
+      lng:      parseFloat(addr.x),
+      address:  addr.roadAddress || addr.jibunAddress,
+      district,
+    })
+  } catch(e) {
+    return c.json({ error: '지오코딩 실패' }, 500)
+  }
+})
+
 // 전체 샵 (지도용)
 app.get('/api/shops/all', (c) => {
   return c.json(shopStore.filter(s => s.active).map(s => ({ ...s, views: viewCnt[s.id] ?? 0 })))
@@ -1480,11 +1510,21 @@ body{font-family:'Pretendard',sans-serif;background:var(--bg);color:#fff;min-hei
     </div>
     <div class="field">
       <label>주소 *</label>
-      <input id="f-addr" type="text" placeholder="서울 강남구 논현로 123"/>
+      <div style="display:flex;gap:8px">
+        <input id="f-addr" type="text" placeholder="예: 서울 강남구 논현로 123" style="flex:1"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();geocodeAddr()}"/>
+        <button type="button" onclick="geocodeAddr()" id="geocodeBtn"
+          style="flex-shrink:0;background:var(--pink);color:#fff;border:none;border-radius:10px;
+                 padding:0 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;
+                 white-space:nowrap;display:flex;align-items:center;gap:5px;height:42px">
+          <i class="fas fa-map-marker-alt"></i> 좌표찾기
+        </button>
+      </div>
+      <div id="geocodeStatus" style="margin-top:6px;font-size:11px;display:none"></div>
     </div>
     <div class="row2">
       <div class="field">
-        <label>구/지역</label>
+        <label>구/지역 <span style="color:rgba(255,255,255,.3);font-weight:400">(자동입력)</span></label>
         <input id="f-dist" type="text" placeholder="강남구"/>
       </div>
       <div class="field">
@@ -1494,12 +1534,14 @@ body{font-family:'Pretendard',sans-serif;background:var(--bg);color:#fff;min-hei
     </div>
     <div class="row2">
       <div class="field">
-        <label>위도 (lat) *</label>
-        <input id="f-lat" type="number" step="0.0001" placeholder="37.5172"/>
+        <label>위도 (lat) <span style="color:rgba(255,255,255,.3);font-weight:400">(자동입력)</span></label>
+        <input id="f-lat" type="number" step="0.000001" placeholder="자동입력"
+          style="color:rgba(255,255,255,.5)"/>
       </div>
       <div class="field">
-        <label>경도 (lng) *</label>
-        <input id="f-lng" type="number" step="0.0001" placeholder="127.0473"/>
+        <label>경도 (lng) <span style="color:rgba(255,255,255,.3);font-weight:400">(자동입력)</span></label>
+        <input id="f-lng" type="number" step="0.000001" placeholder="자동입력"
+          style="color:rgba(255,255,255,.5)"/>
       </div>
     </div>
     <div class="field">
@@ -1659,6 +1701,36 @@ function closeModal(e) {
   document.getElementById('modalBg').classList.add('hidden');
 }
 
+// ── 주소 → 좌표 자동변환 ──────────────────────────────────────────────────
+async function geocodeAddr() {
+  const addr = document.getElementById('f-addr').value.trim();
+  if (!addr) { alert('주소를 먼저 입력하세요'); return; }
+  const btn    = document.getElementById('geocodeBtn');
+  const status = document.getElementById('geocodeStatus');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 검색중...';
+  status.style.display = 'block';
+  status.style.color   = 'rgba(255,255,255,.4)';
+  status.textContent   = '주소를 검색하고 있어요...';
+  try {
+    const res  = await fetch('/api/geocode?query='+encodeURIComponent(addr));
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || '찾을 수 없어요');
+    document.getElementById('f-lat').value  = data.lat;
+    document.getElementById('f-lng').value  = data.lng;
+    document.getElementById('f-addr').value = data.address;
+    if (data.district && !document.getElementById('f-dist').value)
+      document.getElementById('f-dist').value = data.district;
+    status.style.color = '#03C75A';
+    status.textContent = '✅ 좌표 자동입력 완료! 위도 '+data.lat.toFixed(6)+' / 경도 '+data.lng.toFixed(6);
+  } catch(e) {
+    status.style.color = '#FF4D7D';
+    status.textContent = '❌ '+e.message+' — 주소를 더 정확히 입력하거나 위도/경도를 직접 입력해주세요';
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fas fa-map-marker-alt"></i> 좌표찾기';
+}
+
 // 유튜브 미리보기
 function previewYt(id) {
   const clean = id.trim();
@@ -1681,7 +1753,7 @@ async function saveShop() {
   const lat  = document.getElementById('f-lat').value.trim();
   const lng  = document.getElementById('f-lng').value.trim();
   if (!name) { alert('업체명을 입력하세요'); return; }
-  if (!lat || !lng) { alert('위도/경도를 입력하세요'); return; }
+  if (!lat || !lng) { alert('주소를 입력하고 [좌표찾기] 버튼을 눌러주세요'); return; }
 
   const body = {
     name,
