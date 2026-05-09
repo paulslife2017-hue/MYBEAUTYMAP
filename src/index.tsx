@@ -1762,7 +1762,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0a;
   font-family:-apple-system,'Pretendard',sans-serif}
 #naverMap{width:100%;height:100%;}
 
-/* ── 하단 카드 ── */
+/* ── 하단 카드 (모바일) ── */
 #card{
   position:fixed;bottom:0;left:0;right:0;z-index:300;
   background:#141414;
@@ -1772,10 +1772,29 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0a;
   transform:translateY(100%);
   transition:transform .32s cubic-bezier(.22,.68,0,1.2);
   overflow:hidden;
-  max-height:80vh;
+  max-height:85vh;
   overflow-y:auto;
 }
 #card.open{transform:translateY(0)}
+
+/* ── PC: 오른쪽 사이드 패널 ── */
+@media(min-width:768px){
+  #card{
+    top:0;bottom:0;right:0;left:auto;
+    width:360px;
+    border-radius:0;
+    border-top:none;
+    border-left:1px solid rgba(255,255,255,.08);
+    box-shadow:-4px 0 40px rgba(0,0,0,.8);
+    max-height:100vh;
+    transform:translateX(100%);
+    transition:transform .32s cubic-bezier(.22,.68,0,1.2);
+    overflow-y:auto;
+  }
+  #card.open{transform:translateX(0)}
+  .card-handle{display:none}
+  .card-close{top:14px;right:14px}
+}
 .card-handle{width:36px;height:4px;border-radius:2px;
   background:rgba(255,255,255,.18);margin:10px auto 0;flex-shrink:0}
 
