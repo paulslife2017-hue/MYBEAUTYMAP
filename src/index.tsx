@@ -284,6 +284,24 @@ app.get('/api/admin/stats', async (c) => {
   })
 })
 
+// 입점 문의 접수
+app.post('/api/inquiry', async (c) => {
+  const body = await c.req.json()
+  if (!body.name || !body.phone) return c.json({ error: 'required' }, 400)
+  await sql`
+    INSERT INTO inquiries (name, category, area, phone, url, youtube_url, message)
+    VALUES (${body.name}, ${body.category??''}, ${body.area??''}, ${body.phone},
+            ${body.url??''}, ${body.youtubeUrl??''}, ${body.message??''})
+  `
+  return c.json({ ok: true })
+})
+
+// 입점 문의 목록 (관리자용)
+app.get('/api/admin/inquiries', async (c) => {
+  const rows = await sql`SELECT * FROM inquiries ORDER BY created_at DESC`
+  return c.json(rows)
+})
+
 // favicon
 app.get('/favicon.ico', (c) => favicon(c))
 app.get('/favicon.svg', (c) => favicon(c))
@@ -303,9 +321,9 @@ app.get('/', (c) => c.html(mainPage()))
 // 메인 페이지
 // ══════════════════════════════════════════════════════════════════════════
 const NAVER_CLIENT_ID = 'xjjg4490h8'
-const CATEGORIES = ['전체', '마사지', '헤드스파', '피부관리', '헤어', '왁싱', '반영구', '병원']
+const CATEGORIES = ['전체', '마사지', '헤드스파', '피부관리', '헤어', '왁싱', '반영구', '병원', '그외']
 const CAT_EMOJI:  Record<string, string> = {
-  '전체': '🏠', '마사지': '💆', '헤드스파': '🧖', '피부관리': '✨', '헤어': '💇', '왁싱': '🌸', '반영구': '👁', '병원': '🏥',
+  '전체': '🏠', '마사지': '💆', '헤드스파': '🧖', '피부관리': '✨', '헤어': '💇', '왁싱': '🌸', '반영구': '👁', '병원': '🏥', '그외': '🌟',
 }
 
 function mainPage() { return `<!DOCTYPE html>
@@ -396,6 +414,49 @@ html,body{height:100%;background:var(--bg);color:#fff;
 #mapScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:var(--nav);
   display:none;}
 #mapScreen.active{display:block;}
+#inquiryScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:var(--nav);
+  overflow-y:auto;display:none;background:var(--bg);}
+#inquiryScreen.active{display:block;}
+
+/* 입점문의 스타일 */
+.iq-wrap{max-width:480px;margin:0 auto;padding:24px 16px 40px}
+.iq-hero{text-align:center;padding:32px 0 24px}
+.iq-badge{display:inline-block;background:rgba(255,77,125,.12);
+  border:1px solid rgba(255,77,125,.3);color:var(--pink);
+  font-size:11px;font-weight:700;padding:4px 12px;border-radius:99px;margin-bottom:14px}
+.iq-title{font-size:26px;font-weight:900;line-height:1.25;margin-bottom:8px}
+.iq-sub{font-size:13px;color:rgba(255,255,255,.4);line-height:1.6}
+.iq-benefits{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:24px}
+.iq-benefit{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);
+  border-radius:14px;padding:14px 12px;text-align:center}
+.iq-benefit .icon{font-size:24px;margin-bottom:6px}
+.iq-benefit .bl{font-size:12px;font-weight:700;margin-bottom:2px}
+.iq-benefit .bs{font-size:10px;color:rgba(255,255,255,.35)}
+.iq-form{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);
+  border-radius:20px;padding:20px 16px;margin-bottom:16px}
+.iq-form h3{font-size:15px;font-weight:800;margin-bottom:16px}
+.iq-field{margin-bottom:12px}
+.iq-field label{display:block;font-size:11px;font-weight:700;
+  color:rgba(255,255,255,.4);margin-bottom:6px;letter-spacing:.3px}
+.iq-field input,.iq-field select,.iq-field textarea{
+  width:100%;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.1);
+  border-radius:10px;padding:11px 13px;font-size:14px;color:#fff;
+  font-family:inherit;outline:none;transition:border-color .2s;resize:none}
+.iq-field input:focus,.iq-field select:focus,.iq-field textarea:focus{
+  border-color:var(--pink)}
+.iq-field select option{background:#1a1a1a}
+.iq-field textarea{height:90px;line-height:1.5}
+.iq-row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.iq-submit{width:100%;background:var(--pink);color:#fff;border:none;
+  border-radius:14px;padding:16px;font-size:15px;font-weight:800;
+  cursor:pointer;font-family:inherit;transition:opacity .15s;margin-top:4px}
+.iq-submit:hover{opacity:.88}
+.iq-submit:active{opacity:.75}
+.iq-notice{font-size:11px;color:rgba(255,255,255,.25);text-align:center;line-height:1.7}
+.iq-done{display:none;text-align:center;padding:40px 20px}
+.iq-done .done-icon{font-size:56px;margin-bottom:16px}
+.iq-done .done-title{font-size:20px;font-weight:800;margin-bottom:8px}
+.iq-done .done-sub{font-size:13px;color:rgba(255,255,255,.4);line-height:1.6}
 
 /* 하단탭 */
 .tabbar{position:fixed;bottom:0;left:0;right:0;z-index:300;height:var(--nav);
@@ -742,6 +803,97 @@ html,body{height:100%;background:var(--bg);color:#fff;
   <iframe id="mapFrame" src="/map" style="position:absolute;inset:0;width:100%;height:100%;border:none;"></iframe>
 </section>
 
+<!-- 입점문의 화면 -->
+<section id="inquiryScreen">
+  <div class="iq-wrap">
+    <!-- 히어로 -->
+    <div class="iq-hero">
+      <div class="iq-badge">✨ 파트너 모집 중</div>
+      <div class="iq-title">마이뷰티맵에<br>내 샵을 등록하세요</div>
+      <div class="iq-sub">영상·지도 피드에 노출되어<br>더 많은 고객에게 닿을 수 있어요</div>
+    </div>
+
+    <!-- 혜택 카드 -->
+    <div class="iq-benefits">
+      <div class="iq-benefit">
+        <div class="icon">📹</div>
+        <div class="bl">영상 피드 노출</div>
+        <div class="bs">쇼츠형 홍보 영상<br>자동 노출</div>
+      </div>
+      <div class="iq-benefit">
+        <div class="icon">🗺️</div>
+        <div class="bl">지도 핀 등록</div>
+        <div class="bs">네이버 지도 위에<br>업체 핀 표시</div>
+      </div>
+      <div class="iq-benefit">
+        <div class="icon">📅</div>
+        <div class="bl">예약 연동</div>
+        <div class="bs">스마트플레이스<br>바로 예약 연결</div>
+      </div>
+      <div class="iq-benefit">
+        <div class="icon">📊</div>
+        <div class="bl">통계 제공</div>
+        <div class="bs">조회수·예약클릭<br>실시간 확인</div>
+      </div>
+    </div>
+
+    <!-- 문의 폼 -->
+    <div class="iq-form" id="iqForm">
+      <h3>📝 입점 신청서</h3>
+      <div class="iq-field">
+        <label>샵 이름 *</label>
+        <input type="text" id="iq-name" placeholder="예) 글로우 스킨 강남점">
+      </div>
+      <div class="iq-row2">
+        <div class="iq-field">
+          <label>업종 *</label>
+          <select id="iq-cat">
+            <option value="">선택</option>
+            <option>마사지</option><option>헤드스파</option><option>피부관리</option>
+            <option>헤어</option><option>왁싱</option><option>반영구</option>
+            <option>병원</option><option>그외</option>
+          </select>
+        </div>
+        <div class="iq-field">
+          <label>지역 *</label>
+          <input type="text" id="iq-area" placeholder="예) 강남구">
+        </div>
+      </div>
+      <div class="iq-field">
+        <label>담당자 연락처 *</label>
+        <input type="tel" id="iq-phone" placeholder="010-0000-0000">
+      </div>
+      <div class="iq-field">
+        <label>스마트플레이스 URL</label>
+        <input type="url" id="iq-url" placeholder="https://naver.me/...">
+      </div>
+      <div class="iq-field">
+        <label>유튜브 영상 URL (있으면)</label>
+        <input type="url" id="iq-yt" placeholder="https://youtu.be/...">
+      </div>
+      <div class="iq-field">
+        <label>추가 문의사항</label>
+        <textarea id="iq-msg" placeholder="궁금한 점이나 요청사항을 자유롭게 적어주세요"></textarea>
+      </div>
+      <button class="iq-submit" onclick="submitInquiry()">
+        <i class="fas fa-paper-plane" style="margin-right:6px"></i>입점 신청하기
+      </button>
+    </div>
+
+    <!-- 완료 메시지 -->
+    <div class="iq-done" id="iqDone">
+      <div class="done-icon">🎉</div>
+      <div class="done-title">신청이 접수됐어요!</div>
+      <div class="done-sub">담당자가 확인 후<br>1~2일 내로 연락드릴게요.<br><br>문의: beautymap@kakao.com</div>
+    </div>
+
+    <div class="iq-notice">
+      입력하신 정보는 입점 검토 목적으로만 사용되며<br>
+      제3자에게 제공되지 않아요.
+    </div>
+  </div>
+</section>
+
 <!-- 하단 탭바 -->
 <nav class="tabbar">
   <button class="tab active" id="tab-feed" onclick="switchTab('feed')">
@@ -749,6 +901,9 @@ html,body{height:100%;background:var(--bg);color:#fff;
   </button>
   <button class="tab" id="tab-map" onclick="switchTab('map')">
     <i class="fas fa-map-marker-alt"></i>지도
+  </button>
+  <button class="tab" id="tab-inquiry" onclick="switchTab('inquiry')">
+    <i class="fas fa-store"></i>입점문의
   </button>
 </nav>
 
@@ -809,20 +964,19 @@ let userMarker = null;
 const CAT_CLASS = {
   '마사지':'cat-massage', '헤드스파':'cat-headspa',
   '피부관리':'cat-skin', '헤어':'cat-hair',
-  '왁싱':'cat-wax', '반영구':'cat-perm', '병원':'cat-hospital',
+  '왁싱':'cat-wax', '반영구':'cat-perm', '병원':'cat-hospital', '그외':'cat-etc',
 };
 
 // ── 탭 전환 ───────────────────────────────────────────────────────────────
 function switchTab(tab) {
-  ['feed','map'].forEach(t => {
-    document.getElementById('tab-'+t).classList.toggle('active', t===tab);
-    document.getElementById(t+'Screen').classList.toggle('active', t===tab);
+  ['feed','map','inquiry'].forEach(t => {
+    const tabEl = document.getElementById('tab-'+t);
+    const scrEl = document.getElementById(t+'Screen');
+    if(tabEl) tabEl.classList.toggle('active', t===tab);
+    if(scrEl) scrEl.classList.toggle('active', t===tab);
   });
   document.getElementById('catBar').classList.toggle('show', tab==='feed');
-  if (tab==='map') {
-    closeMapPopup();
-    initMap();
-  }
+  if (tab==='map') { closeMapPopup(); initMap(); }
   if (tab==='feed') closeMapPopup();
 }
 
@@ -1154,7 +1308,7 @@ function catClass(cat) { return CAT_CLASS[cat] || ''; }
 const CAT_COLOR = {
   '마사지':'#10B981', '헤드스파':'#6366F1',
   '피부관리':'#FF4D7D', '헤어':'#F59E0B',
-  '왁싱':'#EC4899', '반영구':'#06B6D4', '병원':'#3B82F6',
+  '왁싱':'#EC4899', '반영구':'#06B6D4', '병원':'#3B82F6', '그외':'#8B5CF6',
 };
 function pinColor(cat) { return CAT_COLOR[cat] || '#FF4D7D'; }
 
@@ -1461,6 +1615,30 @@ function showToast(msg) {
   toastTmr=setTimeout(()=>t.classList.remove('show'),2600);
 }
 
+function submitInquiry() {
+  const name  = document.getElementById('iq-name').value.trim();
+  const cat   = document.getElementById('iq-cat').value;
+  const area  = document.getElementById('iq-area').value.trim();
+  const phone = document.getElementById('iq-phone').value.trim();
+  if (!name || !cat || !area || !phone) {
+    showToast('⚠️ 필수 항목을 모두 입력해 주세요');
+    return;
+  }
+  const url   = document.getElementById('iq-url').value.trim();
+  const yt    = document.getElementById('iq-yt').value.trim();
+  const msg   = document.getElementById('iq-msg').value.trim();
+  fetch('/api/inquiry', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ name, category:cat, area, phone, url, youtubeUrl:yt, message:msg })
+  }).then(r => r.json()).then(() => {
+    document.getElementById('iqForm').style.display = 'none';
+    document.getElementById('iqDone').style.display = 'block';
+  }).catch(() => {
+    showToast('❌ 전송에 실패했어요. 다시 시도해 주세요');
+  });
+}
+
 loadFeed('all');
 </script>
 </body>
@@ -1628,7 +1806,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0a;
 <script>
 const CAT_COLOR = {
   '마사지':'#10B981','헤드스파':'#6366F1','피부관리':'#FF4D7D',
-  '헤어':'#F59E0B','왁싱':'#EC4899','반영구':'#06B6D4','병원':'#3B82F6'
+  '헤어':'#F59E0B','왁싱':'#EC4899','반영구':'#06B6D4','병원':'#3B82F6','그외':'#8B5CF6'
 };
 
 let map = null, markers = [], curCat = 'all', curShop = null;
@@ -1945,7 +2123,7 @@ body{font-family:'Pretendard',sans-serif;background:var(--bg);color:#fff;min-hei
         <label>카테고리 *</label>
         <select id="f-cat">
           <option>마사지</option><option>헤드스파</option><option>피부관리</option>
-          <option>헤어</option><option>왁싱</option><option>반영구</option><option>병원</option>
+          <option>헤어</option><option>왁싱</option><option>반영구</option><option>병원</option><option>그외</option>
         </select>
       </div>
       <div class="field">
@@ -2448,6 +2626,7 @@ body{font-family:'Pretendard',sans-serif;background:var(--bg);color:#fff;min-hei
   <button class="fb" onclick="setFilter('왁싱',this)">왁싱</button>
   <button class="fb" onclick="setFilter('반영구',this)">반영구</button>
   <button class="fb" onclick="setFilter('병원',this)">병원</button>
+  <button class="fb" onclick="setFilter('그외',this)">그외</button>
 </div>
 
 <!-- 업체 목록 -->
@@ -2472,7 +2651,7 @@ body{font-family:'Pretendard',sans-serif;background:var(--bg);color:#fff;min-hei
         <label>카테고리 *</label>
         <select id="f-cat">
           <option>피부관리</option><option>마사지</option><option>헤드스파</option>
-          <option>헤어</option><option>왁싱</option><option>반영구</option><option>병원</option>
+          <option>헤어</option><option>왁싱</option><option>반영구</option><option>병원</option><option>그외</option>
         </select>
       </div>
       <div class="field">
@@ -2567,7 +2746,7 @@ body{font-family:'Pretendard',sans-serif;background:var(--bg);color:#fff;min-hei
 <script>
 const CAT_COLOR = {
   '마사지':'#10B981','헤드스파':'#6366F1','피부관리':'#FF4D7D',
-  '헤어':'#F59E0B','왁싱':'#EC4899','반영구':'#06B6D4','병원':'#3B82F6'
+  '헤어':'#F59E0B','왁싱':'#EC4899','반영구':'#06B6D4','병원':'#3B82F6','그외':'#8B5CF6'
 };
 let allShops = [], curFilter = 'all', editId = null;
 
