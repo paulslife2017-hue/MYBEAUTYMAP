@@ -828,7 +828,7 @@ function switchTab(tab) {
     document.getElementById(t+'Screen').classList.toggle('active', t===tab);
   });
   document.getElementById('catBar').classList.toggle('show', tab==='feed');
-  if (tab==='map') { closeMapPopup(); initMap(); }
+  if (tab==='map') { closeMapPopup(); setTimeout(initMap, 50); }
   if (tab==='feed') closeMapPopup();
 }
 
@@ -1001,7 +1001,10 @@ function waitNaverMap(cb, tries=0) {
 
 function initMap() {
   if (mapInited) {
-    if (naverMap) naverMap.autoResize();
+    if (naverMap) {
+      naverMap.autoResize();
+      loadMapShops(mapCat, nearbyOn, searchQ);
+    }
     return;
   }
   waitNaverMap(()=>{
@@ -1015,9 +1018,9 @@ function initMap() {
       logoControl: false,
       mapDataControl: false,
     });
-    // 지도 빈 곳 클릭 → 팝업 닫기
     naver.maps.Event.addListener(naverMap, 'click', ()=>closeMapPopup());
-    loadMapShops('all', false);
+    // 지도 크기 잡힌 후 마커 로드
+    setTimeout(()=>loadMapShops('all', false), 100);
   });
 }
 
