@@ -1252,11 +1252,28 @@ function feedGoTo(idx, animate) {
 }
 
 function getFeedGeometry() {
-  // DOM 실측값으로 top/height 계산 (CSS 변수 파싱 우회)
+  // DOM 실측값으로 top/height 계산
+  // catBar가 display:none(맵 탭)일 때는 CSS 변수 폴백 사용
+  const style  = getComputedStyle(document.documentElement);
+  const hdPx   = parseFloat(style.getPropertyValue('--hd'))  || 50;
+  const catPx  = parseFloat(style.getPropertyValue('--cat')) || 44;
+  const sbPx   = parseFloat(style.getPropertyValue('--sb'))  || 0;
+  const navPx  = parseFloat(style.getPropertyValue('--nav')) || 60;
+
   const catBar = document.getElementById('catBar');
   const tabbar = document.querySelector('.tabbar');
-  const catBottom = catBar ? catBar.getBoundingClientRect().bottom : 94;
-  const tabTop    = tabbar ? tabbar.getBoundingClientRect().top    : (window.innerHeight - 60);
+
+  // catBar가 보이면 실측, 숨겨져 있으면 CSS 변수로 계산
+  const catBarVisible = catBar && getComputedStyle(catBar).display !== 'none';
+  const catBottom = catBarVisible
+    ? catBar.getBoundingClientRect().bottom
+    : (hdPx + catPx + sbPx);
+
+  // tabbar 실측 (없으면 폴백)
+  const tabTop = tabbar
+    ? tabbar.getBoundingClientRect().top
+    : (window.innerHeight - navPx);
+
   const top    = Math.round(catBottom);
   const height = Math.round(tabTop - catBottom);
   return { top, height: Math.max(height, 200) };
@@ -1328,7 +1345,8 @@ function feedInitSlider() {
       if (url) window.open(url, '_blank');
       return;
     }
-    if (Math.abs(feedTsDiff) > 5) return;
+    // 스와이프(40px 이상)가 아닌 경우만 클릭으로 처리
+    if (Math.abs(feedTsDiff) > 40) return;
     const area = e.target.closest('.yt-area');
     if (area && !area.classList.contains('no-video')) {
       playYt(area);
@@ -1364,7 +1382,9 @@ function feedInitSlider() {
     } else {
       feedGoTo(feedIdx, true);
     }
-    setTimeout(() => { feedTsDiff = 0; }, 50);
+    // click 이벤트가 touchend 직후 발생하므로 즉시 초기화
+    feedTsDiff = feedTsDiffLocal;
+    setTimeout(() => { feedTsDiff = 0; feedTsDiffLocal = 0; }, 300);
   }, {passive: true});
 
   // 마우스 휠 (PC)
@@ -2369,6 +2389,9 @@ function openCard(shop) {
   document.getElementById('card').classList.add('open');
   window.parent.postMessage({ type:'shopSelected', id: shop.id }, '*');
   map.panTo(new naver.maps.LatLng(shop.lat, shop.lng));
+  // position:fixed 카드가 iframe 첫 렌더 시 뷰포트 밖에 숨는 문제 해결
+  // → map.autoResize()로 강제 리페인트 트리거
+  requestAnimationFrame(() => { try { map.autoResize(); } catch(e){} });
 }
 
 /* 마커 생성 */
