@@ -532,7 +532,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
 
 /* 피드 아이템 (모바일: 틱톡 풀스크린) */
 .fi{height:calc(100dvh - var(--hd) - var(--cat) - var(--nav) - var(--sb,0px));
-  scroll-snap-align:start;scroll-snap-stop:always;
+  scroll-snap-align:start;scroll-snap-stop:normal;
   background:#000;display:flex;flex-direction:column;overflow:hidden}
 .yt-area{flex:1;position:relative;overflow:hidden;background:#000;cursor:pointer}
 .yt-thumb{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
