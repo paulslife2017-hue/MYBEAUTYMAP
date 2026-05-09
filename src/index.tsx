@@ -344,9 +344,10 @@ html,body{height:100%;background:var(--bg);color:#fff;
   box-shadow:0 2px 10px rgba(255,77,125,.35)}
 
 /* 화면 */
-#feedScreen{position:fixed;top:calc(var(--hd)+var(--cat));left:0;right:0;
+#feedScreen{position:fixed;top:calc(var(--hd)+var(--cat)+var(--sb,0px));left:0;right:0;
   bottom:var(--nav);overflow-y:scroll;scroll-snap-type:y mandatory;
-  -webkit-overflow-scrolling:touch;scrollbar-width:none;display:none}
+  -webkit-overflow-scrolling:touch;scrollbar-width:none;display:none;
+  transition:top .3s cubic-bezier(.32,1,.23,1)}
 #feedScreen.active{display:block}
 #feedScreen::-webkit-scrollbar{display:none}
 #mapScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:var(--nav);
@@ -367,11 +368,25 @@ html,body{height:100%;background:var(--bg);color:#fff;
 .tab.active i{color:var(--pink);transform:scale(1.1)}
 
 /* 피드 아이템 */
-.fi{height:calc(100dvh - var(--hd) - var(--cat) - var(--nav));
+.fi{height:calc(100dvh - var(--hd) - var(--cat) - var(--nav) - var(--sb,0px));
   scroll-snap-align:start;scroll-snap-stop:always;
   background:#000;display:flex;flex-direction:column;overflow:hidden}
-.yt-area{flex:1;position:relative;overflow:hidden;background:#000}
-.yt-frame{position:absolute;inset:0;width:100%;height:100%;border:none}
+.yt-area{flex:1;position:relative;overflow:hidden;background:#000;cursor:pointer}
+.yt-thumb{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
+  transition:opacity .3s}
+.yt-play-btn{position:absolute;inset:0;display:flex;align-items:center;
+  justify-content:center;pointer-events:none}
+.yt-play-btn::after{content:'';width:64px;height:64px;border-radius:50%;
+  background:rgba(0,0,0,.55);border:3px solid rgba(255,255,255,.9);
+  box-shadow:0 4px 24px rgba(0,0,0,.5)}
+.yt-play-btn::before{content:'▶';position:absolute;font-size:22px;
+  color:#fff;margin-left:4px;z-index:1}
+.yt-frame{position:absolute;inset:0;width:100%;height:100%;border:none;
+  opacity:0;transition:opacity .4s}
+.yt-frame.loaded{opacity:1}
+.yt-area.playing .yt-thumb{opacity:0;pointer-events:none}
+.yt-area.playing .yt-play-btn{display:none}
+.yt-area.playing .yt-frame{opacity:1}
 
 /* 업체 정보 바 */
 .shop-bar{flex-shrink:0;padding:18px 14px 14px;
@@ -848,19 +863,23 @@ async function loadFeed(cat='all', q='') {
   const res   = await fetch(url);
   const shops = await res.json();
   if (!shops.length) {
-    screen.innerHTML = '<div class="feed-empty"><i class="fas fa-search"></i><p>'+(searchQ?'\''+searchQ+'\' 검색 결과가 없어요':'등록된 샵이 없어요')+'</p></div>';
+    screen.innerHTML = \`<div class="feed-empty"><i class="fas fa-search"></i><p>\${searchQ ? '"'+searchQ+'" 검색 결과가 없어요' : '등록된 샵이 없어요'}</p></div>\`;
     return;
   }
-  screen.innerHTML = shops.map((s,i) => \`
+  screen.innerHTML = shops.map((s) => {
+    const thumb = s.youtubeId
+      ? \`https://img.youtube.com/vi/\${s.youtubeId}/hqdefault.jpg\`
+      : s.thumbnail;
+    const ytArea = s.youtubeId ? \`
+      <div class="yt-area" id="yta-\${s.id}" onclick="playYt('\${s.id}','\${s.youtubeId}')">
+        <img class="yt-thumb" src="\${thumb}" alt="\${s.name}" loading="lazy"/>
+        <div class="yt-play-btn"></div>
+        <iframe class="yt-frame" id="ytf-\${s.id}" src="" allow="autoplay;encrypted-media;picture-in-picture" allowfullscreen></iframe>
+      </div>\`
+      : \`<div class="yt-area"><img class="yt-thumb" src="\${thumb}" alt="\${s.name}" loading="lazy" style="pointer-events:none"/></div>\`;
+    return \`
     <div class="fi">
-      <div class="yt-area">
-        \${s.youtubeId
-          ? \`<iframe class="yt-frame"
-              src="https://www.youtube.com/embed/\${s.youtubeId}?autoplay=\${i===0?1:0}&mute=1&playsinline=1&rel=0&modestbranding=1&controls=1&loop=1&playlist=\${s.youtubeId}"
-              allow="autoplay;encrypted-media;picture-in-picture" allowfullscreen loading="lazy"></iframe>\`
-          : \`<img src="\${s.thumbnail}" style="width:100%;height:100%;object-fit:cover"/>\`
-        }
-      </div>
+      \${ytArea}
       <div class="shop-bar">
         <div class="shop-bar-info">
           <div class="shop-bar-cat">\${s.category}</div>
@@ -879,9 +898,45 @@ async function loadFeed(cat='all', q='') {
           : \`<div style="flex-shrink:0;width:64px;text-align:center;font-size:10px;color:rgba(255,255,255,.3)">예약링크<br>없음</div>\`
         }
       </div>
-    </div>
-  \`).join('');
+    </div>\`;
+  }).join('');
   screen.scrollTo(0, 0);
+
+  // 스크롤 멈추면 현재 보이는 영상 자동재생
+  let scrollTmr;
+  screen.onscroll = () => {
+    clearTimeout(scrollTmr);
+    scrollTmr = setTimeout(() => {
+      const itemH = screen.querySelector('.fi')?.offsetHeight || screen.clientHeight;
+      const idx   = Math.round(screen.scrollTop / itemH);
+      const fi    = screen.querySelectorAll('.fi')[idx];
+      if (!fi) return;
+      const area = fi.querySelector('.yt-area');
+      if (!area || area.classList.contains('playing')) return;
+      const ytId = area.id?.replace('yta-','');
+      const shopId = area.id?.replace('yta-','');
+      if (ytId) playYt(shopId, area.getAttribute('onclick')?.match(/'([^']+)'\)/)?.[1] || '');
+    }, 300);
+  };
+}
+
+function playYt(shopId, ytId) {
+  if (!ytId) return;
+  const area  = document.getElementById('yta-'+shopId);
+  const frame = document.getElementById('ytf-'+shopId);
+  if (!area || !frame) return;
+  // 이미 재생 중이면 무시
+  if (area.classList.contains('playing')) return;
+  // 다른 재생 중인 것 멈추기
+  document.querySelectorAll('.yt-area.playing').forEach(a => {
+    a.classList.remove('playing');
+    const f = a.querySelector('.yt-frame');
+    if (f) f.src = '';
+  });
+  frame.src = \`https://www.youtube.com/embed/\${ytId}?autoplay=1&mute=0&playsinline=1&rel=0&modestbranding=1&controls=1\`;
+  frame.onload = () => frame.classList.add('loaded');
+  area.classList.add('playing');
+  area.onclick = null; // 재생 후 클릭 비활성화
 }
 
 function filterFeed(btn, cat) {
