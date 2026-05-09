@@ -259,7 +259,8 @@ app.post('/api/track/mapsp/:id', async (c) => {
 app.get('/api/admin/stats', async (c) => {
   const rows = await sql`
     SELECT s.id, s.name, s.category, s.thumbnail, s.youtube_id,
-           s.featured, s.active,
+           s.featured, s.active, s.lat, s.lng, s.smart_place_url,
+           s.address, s.district, s.phone,
            COALESCE(st.view_cnt,0) as view_cnt,
            COALESCE(st.feed_sp,0)  as feed_sp,
            COALESCE(st.map_sp,0)   as map_sp
@@ -287,6 +288,12 @@ app.get('/api/admin/stats', async (c) => {
       views:     parseInt(r.view_cnt) || 0,
       feedSP:    parseInt(r.feed_sp)  || 0,
       mapSP:     parseInt(r.map_sp)   || 0,
+      lat:          parseFloat(r.lat) || 0,
+      lng:          parseFloat(r.lng) || 0,
+      smartPlaceUrl: r.smart_place_url ?? '',
+      address:      r.address ?? '',
+      district:     r.district ?? '',
+      phone:        r.phone ?? '',
     })),
     totalViews:  parseInt(t.total_views)   || 0,
     totalFeedSP: parseInt(t.total_feed_sp) || 0,
@@ -872,11 +879,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
         <div class="bl">예약 연동</div>
         <div class="bs">스마트플레이스<br>바로 예약 연결</div>
       </div>
-      <div class="iq-benefit">
-        <div class="icon">📊</div>
-        <div class="bl">통계 제공</div>
-        <div class="bs">영상조회·예약클릭<br>실시간 확인</div>
-      </div>
+
     </div>
 
     <!-- 요금 안내 -->
@@ -2305,7 +2308,7 @@ let shopList = [];
 async function loadAll() {
   const d = await (await fetch('/api/admin/stats')).json();
   document.getElementById('tv').textContent = d.totalViews.toLocaleString();
-  document.getElementById('ts').textContent = d.totalSP.toLocaleString();
+  document.getElementById('ts').textContent = (d.totalFeedSP+d.totalMapSP).toLocaleString();
   document.getElementById('tc').textContent = d.totalShops;
   shopList = d.stats;
   renderShops(d.stats);
