@@ -1089,53 +1089,7 @@ function showAdminPicker() {
   const pw = prompt('관리자 비밀번호');
   if (pw === null) return;
   if (pw !== '0907') { showToast('❌ 비밀번호가 틀렸어요'); return; }
-  // 비밀번호 맞으면 선택 다이얼로그
-  const box = document.createElement('div');
-  box.id = 'adminPicker';
-  const overlay = document.createElement('div');
-  Object.assign(overlay.style, {
-    position:'fixed', inset:'0', background:'rgba(0,0,0,.75)', zIndex:'9999',
-    display:'flex', alignItems:'flex-end', justifyContent:'center'
-  });
-  overlay.onclick = function(e){ if(e.target===overlay) box.remove(); };
-  const sheet = document.createElement('div');
-  Object.assign(sheet.style, {
-    background:'#1a1a1a', borderRadius:'22px 22px 0 0', width:'100%',
-    maxWidth:'480px', padding:'20px 16px 40px',
-    borderTop:'1px solid rgba(255,255,255,.08)'
-  });
-  sheet.innerHTML = '<div style="width:36px;height:4px;background:rgba(255,255,255,.15);border-radius:2px;margin:0 auto 18px"></div>'
-    + '<div style="font-size:16px;font-weight:800;margin-bottom:6px">관리자 메뉴</div>'
-    + '<div style="font-size:12px;color:rgba(255,255,255,.35);margin-bottom:18px">이동할 관리자 페이지를 선택하세요</div>';
-  const btnFeed = document.createElement('button');
-  Object.assign(btnFeed.style, {
-    width:'100%', background:'rgba(255,77,125,.12)',
-    border:'1.5px solid rgba(255,77,125,.3)', color:'#FF4D7D',
-    borderRadius:'14px', padding:'16px', fontSize:'14px', fontWeight:'800',
-    cursor:'pointer', fontFamily:'inherit', display:'flex',
-    alignItems:'center', gap:'10px', marginBottom:'10px'
-  });
-  btnFeed.innerHTML = '<span style="font-size:22px">🎬</span>'
-    + '<div style="text-align:left"><div>피드 관리자</div>'
-    + '<div style="font-size:11px;font-weight:500;color:rgba(255,255,255,.45);margin-top:2px">영상 피드 업체·통계 관리</div></div>';
-  btnFeed.onclick = function(){ location.href='/admin'; };
-  const btnMap = document.createElement('button');
-  Object.assign(btnMap.style, {
-    width:'100%', background:'rgba(99,102,241,.12)',
-    border:'1.5px solid rgba(99,102,241,.3)', color:'#818CF8',
-    borderRadius:'14px', padding:'16px', fontSize:'14px', fontWeight:'800',
-    cursor:'pointer', fontFamily:'inherit', display:'flex',
-    alignItems:'center', gap:'10px'
-  });
-  btnMap.innerHTML = '<span style="font-size:22px">🗺️</span>'
-    + '<div style="text-align:left"><div>지도 관리자</div>'
-    + '<div style="font-size:11px;font-weight:500;color:rgba(255,255,255,.45);margin-top:2px">지도 핀 업체·통계 관리</div></div>';
-  btnMap.onclick = function(){ location.href='/map-admin'; };
-  sheet.appendChild(btnFeed);
-  sheet.appendChild(btnMap);
-  overlay.appendChild(sheet);
-  box.appendChild(overlay);
-  document.body.appendChild(box);
+  location.href = '/admin';
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
