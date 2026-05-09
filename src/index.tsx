@@ -39,11 +39,15 @@ function rowToShop(r: any) {
     thumbnail:     r.thumbnail ?? '',
     phone:         r.phone ?? '',
     desc:          r.description ?? '',
-    active:        r.active ?? true,
-    displayMode:   r.display_mode ?? 'both',
-    views:         parseInt(r.view_cnt) || 0,
-    feedSP:        parseInt(r.feed_sp)  || 0,
-    mapSP:         parseInt(r.map_sp)   || 0,
+    active:          r.active ?? true,
+    displayMode:     r.display_mode ?? 'both',
+    plan:            r.plan ?? 'basic',
+    paidUntil:       r.paid_until ?? null,
+    paymentStatus:   r.payment_status ?? 'unpaid',
+    paymentMemo:     r.payment_memo ?? '',
+    views:           parseInt(r.view_cnt) || 0,
+    feedSP:          parseInt(r.feed_sp)  || 0,
+    mapSP:           parseInt(r.map_sp)   || 0,
   }
 }
 
@@ -223,6 +227,23 @@ app.put('/api/admin/shops/:id', async (c) => {
   `
   if (!rows.length) return c.json({ error: 'not found' }, 404)
   await sql`INSERT INTO stats (shop_id) VALUES (${id}) ON CONFLICT DO NOTHING`
+  return c.json(rowToShop(rows[0]))
+})
+
+// 구독/결제 정보 수정
+app.put('/api/admin/shops/:id/payment', async (c) => {
+  const id   = +c.req.param('id')
+  const body = await c.req.json()
+  const rows = await sql`
+    UPDATE shops SET
+      plan           = ${body.plan ?? 'basic'},
+      paid_until     = ${body.paidUntil || null},
+      payment_status = ${body.paymentStatus ?? 'unpaid'},
+      payment_memo   = ${body.paymentMemo ?? ''}
+    WHERE id = ${id}
+    RETURNING *
+  `
+  if (!rows.length) return c.json({ error: 'not found' }, 404)
   return c.json(rowToShop(rows[0]))
 })
 
@@ -535,7 +556,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
 .tab.active i{color:var(--pink);transform:scale(1.1)}
 
 /* 피드 아이템 (모바일: 틱톡 풀스크린) */
-.fi{height:calc(100dvh - var(--hd) - var(--cat) - var(--nav) - var(--sb,0px));
+.fi{height:var(--feed-h, calc(100dvh - var(--hd) - var(--cat) - var(--nav) - var(--sb,0px)));
   scroll-snap-align:start;scroll-snap-stop:normal;
   background:#000;display:flex;flex-direction:column;overflow:hidden}
 .yt-area{flex:1;position:relative;overflow:hidden;background:#000;cursor:pointer}
@@ -1249,41 +1270,47 @@ async function loadFeed(cat='all', q='') {
       return;
     }
 
+    // .fi 높이를 window.innerHeight 기준으로 직접 계산 (100dvh 오차 완전 제거)
+    const _root = document.documentElement;
+    const _hd  = parseInt(getComputedStyle(_root).getPropertyValue('--hd'))  || 50;
+    const _cat = parseInt(getComputedStyle(_root).getPropertyValue('--cat')) || 44;
+    const _nav = parseInt(getComputedStyle(_root).getPropertyValue('--nav')) || 60;
+    const _sb  = parseInt(getComputedStyle(_root).getPropertyValue('--sb'))  || 0;
+    const fiH  = window.innerHeight - _hd - _cat - _nav - _sb;
+
     screen.innerHTML = shops.map((s) => {
       const thumb = s.youtubeId
-        ? \`https://img.youtube.com/vi/\${s.youtubeId}/maxresdefault.jpg\`
+        ? 'https://img.youtube.com/vi/' + s.youtubeId + '/hqdefault.jpg'
         : (s.thumbnail || '');
       const ytArea = s.youtubeId
-        ? \`<div class="yt-area" id="yta-\${s.id}" data-ytid="\${s.youtubeId}" onclick="playYt(event.currentTarget)">
-             <img class="yt-thumb" id="ytt-\${s.id}" src="\${thumb}" alt="\${s.name}" loading="lazy"/>
-             <div class="yt-play-btn" id="ypb-\${s.id}"></div>
-             <div class="yt-player" id="ytp-\${s.id}"></div>
-             <button class="unmute-btn" id="unm-\${s.id}" onclick="unmuteYt(event,'\${s.id}')">🔇 탭하여 소리켜기</button>
-           </div>\`
-        : \`<div class="yt-area no-video"><img class="yt-thumb" src="\${thumb}" alt="\${s.name}" loading="lazy" style="pointer-events:none"/></div>\`;
-      return \`
-      <div class="fi">
-        \${ytArea}
-        <div class="shop-bar">
-          <div class="shop-bar-info">
-            <div class="shop-bar-cat">\${s.category}</div>
-            <div class="shop-bar-name">\${s.name}</div>
-            <div class="shop-bar-loc">
-              <i class="fas fa-map-marker-alt"></i>
-              <span>\${s.address || s.district} · \${s.price}</span>
-            </div>
-            \${s.desc ? '<div class="shop-bar-desc">'+s.desc+'</div>' : ''}
-          </div>
-          \${s.smartPlaceUrl
-            ? \`<button class="btn-book"
-                 onclick="curShop=\${JSON.stringify({id:s.id,name:s.name,smartPlaceUrl:s.smartPlaceUrl}).replace(/'/g,'\\'')};openInapp()">
-                <i class="fas fa-calendar-check"></i>
-                <span>예약하기</span>
-               </button>\`
-            : \`<div style="flex-shrink:0;width:64px;text-align:center;font-size:10px;color:rgba(255,255,255,.3)">예약링크<br>없음</div>\`
-          }
-        </div>
-      </div>\`;
+        ? '<div class="yt-area" id="yta-' + s.id + '" data-ytid="' + s.youtubeId + '" onclick="playYt(event.currentTarget)">'
+          + '<img class="yt-thumb" id="ytt-' + s.id + '" src="' + thumb + '" alt="' + s.name + '" loading="lazy"'
+          + ' onerror="this.src=\'https://img.youtube.com/vi/' + s.youtubeId + '/mqdefault.jpg\'"'
+          + '/>'
+          + '<div class="yt-play-btn" id="ypb-' + s.id + '"></div>'
+          + '<div class="yt-player" id="ytp-' + s.id + '"></div>'
+          + '<button class="unmute-btn" id="unm-' + s.id + '" onclick="unmuteYt(event,\'' + s.id + \')">🔇 탭하여 소리켜기</button>'
+          + '</div>'
+        : '<div class="yt-area no-video"><img class="yt-thumb" src="' + thumb + '" alt="' + s.name + '" loading="lazy" style="pointer-events:none"/></div>';
+      const bookBtn = s.smartPlaceUrl
+        ? '<button class="btn-book" onclick="curShop='
+          + JSON.stringify({id:s.id,name:s.name,smartPlaceUrl:s.smartPlaceUrl}).replace(/"/g,'&quot;').replace(/'/g,"\\'")
+          + ';openInapp()"><i class="fas fa-calendar-check"></i><span>예약하기</span></button>'
+        : '<div style="flex-shrink:0;width:64px;text-align:center;font-size:10px;color:rgba(255,255,255,.3)">예약링크<br>없음</div>';
+      return '<div class="fi" style="height:' + fiH + 'px">'
+        + ytArea
+        + '<div class="shop-bar">'
+          + '<div class="shop-bar-info">'
+            + '<div class="shop-bar-cat">' + s.category + '</div>'
+            + '<div class="shop-bar-name">' + s.name + '</div>'
+            + '<div class="shop-bar-loc"><i class="fas fa-map-marker-alt"></i><span>'
+              + (s.address || s.district) + ' · ' + s.price
+            + '</span></div>'
+            + (s.desc ? '<div class="shop-bar-desc">' + s.desc + '</div>' : '')
+          + '</div>'
+          + bookBtn
+        + '</div>'
+        + '</div>';
     }).join('');
     screen.scrollTo(0, 0);
 
@@ -2520,6 +2547,9 @@ body{font-family:'Pretendard',sans-serif;background:var(--bg);color:#fff;min-hei
   <button class="tabbtn" id="tab-stats" onclick="switchTab('stats')">
     <i class="fas fa-chart-bar"></i>통계
   </button>
+  <button class="tabbtn" id="tab-pay" onclick="switchTab('pay')">
+    <i class="fas fa-credit-card"></i>구독관리
+  </button>
   <button class="tabbtn" id="tab-inq" onclick="switchTab('inq')">
     <i class="fas fa-envelope"></i>입점문의
   </button>
@@ -2537,6 +2567,7 @@ body{font-family:'Pretendard',sans-serif;background:var(--bg);color:#fff;min-hei
   <!-- 패널들 -->
   <div id="panel-shops"></div>
   <div id="panel-stats" style="display:none"></div>
+  <div id="panel-pay"   style="display:none"></div>
   <div id="panel-inq"   style="display:none"></div>
 </div>
 
@@ -2696,7 +2727,7 @@ let thumbDataUrl = ''; // 파일 업로드 시 base64
 ═══════════════════════════════════════════════════════ */
 function switchTab(t) {
   curTab = t;
-  ['shops','stats','inq'].forEach(x => {
+  ['shops','stats','pay','inq'].forEach(x => {
     document.getElementById('tab-'+x).classList.toggle('on', x===t);
     document.getElementById('panel-'+x).style.display = x===t ? 'block' : 'none';
   });
@@ -2705,6 +2736,7 @@ function switchTab(t) {
   document.querySelector('.add-btn').style.display =
     t==='shops' ? 'flex' : 'none';
   if (t==='inq') loadInquiries();
+  if (t==='pay') renderPayments();
 }
 
 /* ═══════════════════════════════════════════════════════
