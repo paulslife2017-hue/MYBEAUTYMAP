@@ -285,6 +285,7 @@ function favicon(c: any) {
 }
 
 app.get('/admin', (c) => c.html(adminPage()))
+app.get('/map', (c) => c.html(mapPage()))
 app.get('/', (c) => c.html(mainPage()))
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -708,42 +709,14 @@ html,body{height:100%;background:var(--bg);color:#fff;
   <div class="feed-spin"><div class="spinner"></div></div>
 </main>
 
-<!-- 지도 화면: 풀스크린 -->
+<!-- 지도 화면: iframe -->
 <section id="mapScreen">
-  <!-- 지도 자체 -->
-  <div id="naverMap"></div>
-
-  <!-- 카테고리 필터 (지도 위 floating) -->
+  <!-- 카테고리 필터 -->
   <div class="map-cat-bar" id="mapCatBar">
     ${CATEGORIES.map((c, i) => `<button class="mc${i === 0 ? ' active' : ''}" onclick="filterMap(this,'${c === '전체' ? 'all' : c}')">${CAT_EMOJI[c]} ${c}</button>`).join('')}
   </div>
-
-  <!-- 내 주변 FAB -->
-  <button class="nearby-fab" id="nearbyFab" onclick="toggleNearby()">
-    <i class="fas fa-location-arrow"></i> 내 주변
-  </button>
-
-  <!-- 지도 위 팝업 카드 -->
-  <div class="map-popup" id="mapPopup">
-    <div class="mp-yt" id="mpYt"></div>
-    <div class="mp-info">
-      <div class="mp-info-main">
-        <div class="mp-badge" id="mpBadge"></div>
-        <div class="mp-name"  id="mpName"></div>
-        <div class="mp-meta" id="mpMeta"></div>
-        <div class="mp-desc" id="mpDesc"></div>
-        <div class="mp-tags" id="mpTags"></div>
-      </div>
-      <div class="mp-actions">
-        <button class="mp-book" id="mpBook" onclick="openInapp()">
-          <i class="fas fa-calendar-check"></i> 예약
-        </button>
-        <button class="mp-close" onclick="closeMapPopup()"><i class="fas fa-times"></i></button>
-      </div>
-    </div>
-  </div>
-
-
+  <!-- 지도 iframe -->
+  <iframe id="mapFrame" src="/map" style="position:absolute;inset:0;width:100%;height:100%;border:none;"></iframe>
 </section>
 
 <!-- 하단 탭바 -->
@@ -795,11 +768,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
   <iframe class="inapp-iframe" id="inappFrame" src="" allowfullscreen></iframe>
 </div>
 
-<!-- 네이버 지도 SDK -->
-<script>
-window.__naverMapCb = function() { window.__naverMapReady = true; };
-</script>
-<script src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${NAVER_CLIENT_ID}&callback=__naverMapCb" async></script>
+
 
 <script>
 // ── 전역 ──────────────────────────────────────────────────────────────────
@@ -1209,7 +1178,8 @@ function filterMap(btn, cat) {
   document.querySelectorAll('.mc').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   mapCat = cat;
-  loadMapShops(cat, nearbyOn, searchQ);
+  const frame = document.getElementById('mapFrame');
+  if (frame) frame.contentWindow.postMessage({ type:'filterCat', cat }, '*');
 }
 
 function toggleNearby() {
@@ -1341,6 +1311,140 @@ function showToast(msg) {
 }
 
 loadFeed('all');
+</script>
+</body>
+</html>`
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// 지도 전용 페이지 (/map) - iframe으로 임베드됨
+// ══════════════════════════════════════════════════════════════════════════
+function mapPage() { return `<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#111}
+#naverMap{width:100%;height:100%;}
+/* 마커 */
+.nv-pin{display:flex;flex-direction:column;align-items:center;cursor:pointer}
+.nv-pin-label{font-size:11px;font-weight:800;padding:5px 11px;border-radius:20px;
+  white-space:nowrap;box-shadow:0 3px 10px rgba(0,0,0,.45);
+  border:2px solid rgba(255,255,255,.35);font-family:-apple-system,sans-serif;
+  color:#fff;max-width:110px;overflow:hidden;text-overflow:ellipsis}
+.nv-pin-tail{width:0;height:0;border-left:6px solid transparent;
+  border-right:6px solid transparent;margin-top:-1px}
+/* 팝업 */
+#popup{position:fixed;bottom:16px;left:12px;right:12px;z-index:200;
+  background:#111;border-radius:20px;overflow:hidden;
+  box-shadow:0 8px 32px rgba(0,0,0,.7);border:1px solid rgba(255,255,255,.1);
+  transform:translateY(30px);opacity:0;pointer-events:none;
+  transition:transform .3s ease,opacity .25s;display:none}
+#popup.show{transform:translateY(0);opacity:1;pointer-events:auto;display:block}
+.pp-info{padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.pp-left{flex:1;min-width:0}
+.pp-badge{font-size:10px;font-weight:700;color:#FF4D7D;margin-bottom:4px}
+.pp-name{font-size:16px;font-weight:800;color:#fff;margin-bottom:4px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pp-meta{font-size:12px;color:rgba(255,255,255,.5)}
+.pp-close{width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.1);
+  border:none;color:#fff;font-size:16px;cursor:pointer;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center}
+</style>
+</head>
+<body>
+<div id="naverMap"></div>
+<div id="popup">
+  <div class="pp-info">
+    <div class="pp-left">
+      <div class="pp-badge" id="ppBadge"></div>
+      <div class="pp-name"  id="ppName"></div>
+      <div class="pp-meta"  id="ppMeta"></div>
+    </div>
+    <button class="pp-close" onclick="closePopup()">✕</button>
+  </div>
+</div>
+
+<script src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=xjjg4490h8"></script>
+<script>
+const CAT_COLOR = {
+  '마사지':'#10B981','헤드스파':'#6366F1','피부관리':'#FF4D7D',
+  '헤어':'#F59E0B','왁싱':'#EC4899','반영구':'#06B6D4','병원':'#3B82F6'
+};
+
+let map = null;
+let markers = [];
+let curCat = 'all';
+
+// 부모에서 카테고리 변경 메시지 수신
+window.addEventListener('message', e => {
+  if (e.data?.type === 'filterCat') {
+    curCat = e.data.cat;
+    renderMarkers();
+  }
+});
+
+// 팝업 닫기
+function closePopup() {
+  document.getElementById('popup').classList.remove('show');
+}
+
+// 마커 생성
+function makeMarker(shop) {
+  const color = CAT_COLOR[shop.category] || '#FF4D7D';
+  const wrap  = document.createElement('div');
+  wrap.className = 'nv-pin';
+  wrap.innerHTML = \`
+    <div class="nv-pin-label" style="background:\${color}">\${shop.name}</div>
+    <div class="nv-pin-tail"  style="border-top:8px solid \${color}"></div>
+  \`;
+  wrap.onclick = () => {
+    // 팝업 표시
+    document.getElementById('ppBadge').textContent = shop.category;
+    document.getElementById('ppName').textContent  = shop.name;
+    document.getElementById('ppMeta').textContent  = shop.district + ' · ' + shop.price;
+    document.getElementById('popup').classList.add('show');
+    map.panTo(new naver.maps.LatLng(shop.lat, shop.lng));
+    // 부모에게 샵 선택 알림
+    window.parent.postMessage({ type:'shopSelected', id: shop.id }, '*');
+  };
+  return new naver.maps.CustomOverlay({
+    position: new naver.maps.LatLng(shop.lat, shop.lng),
+    content: wrap,
+    anchor: new naver.maps.Point(50, 38),
+    map: map,
+    zIndex: shop.featured ? 100 : 10,
+  });
+}
+
+// 마커 렌더링
+let allShops = [];
+function renderMarkers() {
+  markers.forEach(m => m.setMap(null));
+  markers = [];
+  const list = curCat === 'all' ? allShops : allShops.filter(s => s.category === curCat);
+  list.forEach(s => markers.push(makeMarker(s)));
+}
+
+// 지도 초기화
+window.onload = async () => {
+  map = new naver.maps.Map('naverMap', {
+    center: new naver.maps.LatLng(37.5326, 127.0246),
+    zoom: 12,
+    mapTypeControl: false,
+    scaleControl: false,
+    logoControl: false,
+    mapDataControl: false,
+  });
+  map.addListener('click', closePopup);
+
+  // 샵 데이터 로드
+  const res = await fetch('/api/shops/all');
+  allShops = await res.json();
+  renderMarkers();
+};
 </script>
 </body>
 </html>`
