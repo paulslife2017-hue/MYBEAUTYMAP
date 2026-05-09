@@ -376,6 +376,73 @@ app.post('/api/admin/upload-thumbnail', async (c) => {
 app.get('/admin', (c) => c.html(adminPage()))
 app.get('/map-admin', (c) => c.redirect('/admin'))
 app.get('/map', (c) => c.html(mapPage()))
+app.get('/reserve', (c) => {
+  const url  = c.req.query('url')  || ''
+  const name = c.req.query('name') || ''
+  if (!url) return c.text('url required', 400)
+  return c.html(`<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;background:#fff;font-family:-apple-system,sans-serif}
+.top-bar{
+  position:fixed;top:0;left:0;right:0;z-index:999;
+  height:48px;background:#fff;
+  border-bottom:1px solid #eee;
+  display:flex;align-items:center;padding:0 14px;gap:10px;
+  box-shadow:0 1px 6px rgba(0,0,0,.06);
+}
+.top-title{
+  flex:1;font-size:14px;font-weight:700;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#111;
+}
+.btn-ext{
+  flex-shrink:0;width:34px;height:34px;border-radius:10px;
+  background:#f4f4f4;border:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+}
+.btn-close{
+  flex-shrink:0;width:34px;height:34px;border-radius:10px;
+  background:#fff0f4;border:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  color:#FF4D7D;
+}
+.loader{
+  position:fixed;top:48px;left:0;right:0;
+  height:3px;background:#f0f0f0;overflow:hidden;
+}
+.loader-bar{
+  height:100%;width:40%;
+  background:#03C75A;
+  animation:slide 1.1s ease-in-out infinite alternate;
+}
+@keyframes slide{from{transform:translateX(-100%)}to{transform:translateX(300%)}}
+.loader.done{display:none}
+iframe{
+  position:fixed;top:48px;left:0;right:0;bottom:0;
+  width:100%;height:calc(100% - 48px);
+  border:none;
+}
+</style>
+</head>
+<body>
+<div class="top-bar">
+  <span class="top-title" id="ttl">${name ? name + ' 예약하기' : '예약하기'}</span>
+  <button class="btn-ext" onclick="window.open('${url}','_blank','noopener')" title="외부 브라우저">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2.2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+  </button>
+  <button class="btn-close" onclick="window.parent.closeInapp()" title="닫기">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FF4D7D" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+  </button>
+</div>
+<div class="loader" id="ldr"><div class="loader-bar"></div></div>
+<iframe src="${url}" onload="document.getElementById('ldr').className='loader done'"></iframe>
+</body>
+</html>`)
+})
 app.get('/', (c) => c.html(mainPage()))
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -785,47 +852,23 @@ html,body{height:100%;background:var(--bg);color:#fff;
 .inapp-bg.show{opacity:1;pointer-events:auto}
 .inapp-sheet{
   position:fixed;bottom:0;left:0;right:0;z-index:801;
-  height:92dvh;
-  background:#111;border-radius:22px 22px 0 0;
+  height:95dvh;
+  background:#fff;border-radius:20px 20px 0 0;
   display:flex;flex-direction:column;
   transform:translateY(100%);
   transition:transform .38s cubic-bezier(.32,1,.23,1);
-  box-shadow:0 -6px 40px rgba(0,0,0,.6)}
+  box-shadow:0 -6px 40px rgba(0,0,0,.4);overflow:hidden;}
 .inapp-sheet.show{transform:translateY(0)}
-.inapp-bar{
-  flex-shrink:0;height:52px;
-  display:flex;align-items:center;gap:8px;
-  padding:0 12px;
-  border-bottom:1px solid rgba(255,255,255,.07)}
-.inapp-handle{
-  position:absolute;top:8px;left:50%;transform:translateX(-50%);
-  width:36px;height:4px;background:rgba(255,255,255,.15);border-radius:4px}
-.inapp-title{
-  flex:1;font-size:13px;font-weight:700;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  color:rgba(255,255,255,.75)}
-.inapp-btn{
-  flex-shrink:0;width:36px;height:36px;
-  border:none;border-radius:10px;cursor:pointer;
-  display:flex;align-items:center;justify-content:center;
-  font-size:15px;font-family:inherit;transition:background .15s}
-.inapp-btn-ext{
-  background:rgba(255,255,255,.07);color:rgba(255,255,255,.5)}
-.inapp-btn-ext:active{background:rgba(255,255,255,.14)}
-.inapp-btn-close{
-  background:rgba(255,77,125,.15);color:var(--pink)}
-.inapp-btn-close:active{background:rgba(255,77,125,.28)}
 .inapp-iframe{
-  flex:1;border:none;width:100%;background:#fff;
-  border-radius:0 0 22px 22px}
+  flex:1;border:none;width:100%;background:#fff;}
 .inapp-loader{
-  position:absolute;top:52px;left:0;right:0;
-  height:2px;background:rgba(255,255,255,.07);
-  overflow:hidden;pointer-events:none}
+  position:absolute;top:0;left:0;right:0;
+  height:3px;background:#f0f0f0;
+  overflow:hidden;pointer-events:none;z-index:1;}
 .inapp-loader::after{
   content:'';position:absolute;top:0;left:-60%;
-  width:60%;height:100%;background:var(--pink);
-  animation:loader-slide 1.2s ease-in-out infinite}
+  width:60%;height:100%;background:#03C75A;
+  animation:loader-slide 1.1s ease-in-out infinite}
 @keyframes loader-slide{to{left:110%}}
 .inapp-loader.done{display:none}
 
@@ -1057,16 +1100,6 @@ html,body{height:100%;background:var(--bg);color:#fff;
 <!-- 인앱 브라우저 시트 -->
 <div class="inapp-bg" id="inappBg" onclick="closeInapp()"></div>
 <div class="inapp-sheet" id="inappSheet">
-  <div class="inapp-handle"></div>
-  <div class="inapp-bar">
-    <span class="inapp-title" id="inappTitle">예약하기</span>
-    <button class="inapp-btn inapp-btn-ext" onclick="openInappExternal()" title="외부 브라우저로 열기">
-      <i class="fas fa-external-link-alt"></i>
-    </button>
-    <button class="inapp-btn inapp-btn-close" onclick="closeInapp()" title="닫기">
-      <i class="fas fa-times"></i>
-    </button>
-  </div>
   <div class="inapp-loader" id="inappLoader"></div>
   <iframe class="inapp-iframe" id="inappFrame" src="" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-top-navigation" allowfullscreen></iframe>
 </div>
@@ -1675,34 +1708,15 @@ function openInapp() {
   if (!curShop || !curShop.smartPlaceUrl) { showToast('예약 링크가 없어요'); return; }
   trackSP();
   _inappUrl = curShop.smartPlaceUrl;
+  // /reserve 중간 페이지를 iframe에 로드 → 네이버 차단 우회
+  const reservePageUrl = '/reserve?url=' + encodeURIComponent(_inappUrl)
+    + '&name=' + encodeURIComponent(curShop.name || '');
   const frame  = document.getElementById('inappFrame');
   const loader = document.getElementById('inappLoader');
   document.getElementById('inappTitle').textContent = (curShop.name||'') + ' 예약하기';
   loader.classList.remove('done');
-  frame.src = '';
-  // iframe 로드 실패(차단) 감지 → 자동으로 새 탭 열기
-  let opened = false;
-  frame.onerror = () => { if(!opened){ opened=true; closeInapp(); window.open(_inappUrl,'_blank','noopener'); } };
-  // 3초 안에 onload 안 오면 차단으로 판단 → 새 탭 폴백
-  const fallbackTimer = setTimeout(() => {
-    if(!opened && loader && !loader.classList.contains('done')){
-      opened=true; closeInapp(); window.open(_inappUrl,'_blank','noopener');
-    }
-  }, 3000);
-  frame.onload = () => {
-    clearTimeout(fallbackTimer);
-    // about:blank 로드는 무시
-    if(frame.src === '' || frame.src === 'about:blank') return;
-    try {
-      // 차단된 경우 contentDocument 접근 불가 → 새 탭
-      const doc = frame.contentDocument || frame.contentWindow?.document;
-      if(!doc || doc.body.innerHTML === '') throw new Error('blocked');
-    } catch(e) {
-      if(!opened){ opened=true; closeInapp(); window.open(_inappUrl,'_blank','noopener'); return; }
-    }
-    loader.classList.add('done');
-  };
-  setTimeout(() => { frame.src = _inappUrl; }, 30);
+  frame.src = reservePageUrl;
+  frame.onload = () => loader.classList.add('done');
   document.getElementById('inappBg').classList.add('show');
   document.getElementById('inappSheet').classList.add('show');
   document.body.style.overflow = 'hidden';
@@ -2078,14 +2092,20 @@ function playVideo() {
   document.getElementById('thumbWrap').style.display = 'none';
 }
 
-/* ── 예약 (지도 트래킹 포함) ── */
 /* ── 예약 버튼 ── */
-// /map 은 iframe 안 → window.top.open 으로 부모 컨텍스트에서 새 탭 열기
-// (네이버 URL은 map.naver.com 리다이렉트로 iframe 자체가 차단됨)
+// /map 은 iframe 안 → window.top.openInapp() 으로 부모의 인앱 시트 열기
 function openReserve() {
   if (!curShop?.smartPlaceUrl) return;
   fetch('/api/track/mapsp/' + curShop.id, { method: 'POST' }).catch(()=>{});
-  (window.top || window).open(curShop.smartPlaceUrl, '_blank', 'noopener');
+  try {
+    // 부모(메인) 페이지의 openInapp 호출 → 인앱 시트로 예약 페이지 표시
+    const top = window.top;
+    top.curShop = curShop;
+    top.openInapp();
+  } catch(e) {
+    // 접근 불가 시 새 탭 폴백
+    (window.top || window).open(curShop.smartPlaceUrl, '_blank', 'noopener');
+  }
 }
 
 /* ── 카드 열기 ── */
