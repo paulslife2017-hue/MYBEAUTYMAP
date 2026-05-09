@@ -829,16 +829,7 @@ function switchTab(tab) {
   document.getElementById('catBar').classList.toggle('show', tab==='feed');
   if (tab==='map') {
     closeMapPopup();
-    requestAnimationFrame(()=>{
-      requestAnimationFrame(()=>{
-        if (!mapInited) {
-          initMap();
-        } else if (naverMap) {
-          naverMap.autoResize();
-          loadMapShops(mapCat, nearbyOn, searchQ);
-        }
-      });
-    });
+    initMap();
   }
   if (tab==='feed') closeMapPopup();
 }
@@ -1018,6 +1009,12 @@ function initMap() {
     }
     return;
   }
+  // display:none 우회: naverMap 크기를 window 기준으로 강제 지정
+  const hd  = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--hd') || '56');
+  const nav = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--nav') || '60');
+  const nm  = document.getElementById('naverMap');
+  nm.style.width  = window.innerWidth  + 'px';
+  nm.style.height = (window.innerHeight - hd - nav) + 'px';
   waitNaverMap(()=>{
     mapInited = true;
     naverMap = new naver.maps.Map('naverMap', {
@@ -1030,11 +1027,7 @@ function initMap() {
       mapDataControl: false,
     });
     naver.maps.Event.addListener(naverMap, 'click', ()=>closeMapPopup());
-    // display:block 전환 후 실제 크기 인식 → autoResize → 마커 로드
-    setTimeout(()=>{
-      naverMap.autoResize();
-      loadMapShops('all', false);
-    }, 400);
+    loadMapShops('all', false);
   });
 }
 
