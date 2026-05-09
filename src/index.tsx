@@ -535,33 +535,6 @@ html,body{height:100%;background:var(--bg);color:#fff;
   scroll-snap-align:start;scroll-snap-stop:always;
   background:#000;display:flex;flex-direction:column;overflow:hidden}
 .yt-area{flex:1;position:relative;overflow:hidden;background:#000;cursor:pointer}
-/* PC(마우스 장치): 카드형으로 전환 — .fi 기본 CSS 뒤에 선언해야 덮어씀 */
-@media(hover:hover){
-  #feedScreen{
-    scroll-snap-type:none;
-    overflow-y:auto !important;
-    padding:12px;
-    box-sizing:border-box;
-    background:#0a0a0a;
-  }
-  .fi{
-    height:auto !important;
-    min-height:0 !important;
-    scroll-snap-align:none !important;
-    scroll-snap-stop:normal !important;
-    border-radius:16px;
-    margin-bottom:16px;
-  }
-  .yt-area{
-    flex:none !important;
-    height:52vw !important;
-    max-height:500px;
-    min-height:220px;
-  }
-  .shop-bar{
-    background:rgba(14,14,14,.98);
-  }
-}
 .yt-thumb{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
   transition:opacity .35s;z-index:2}
 .yt-play-btn{
@@ -1096,6 +1069,13 @@ function switchTab(tab) {
     if(scrEl) scrEl.classList.toggle('active', t===tab);
   });
   document.getElementById('catBar').classList.toggle('show', tab==='feed');
+
+  // PC wrapper 표시/숨김: 피드 탭이 아닐 때 숨기고, 피드 탭으로 돌아오면 다시 보이기
+  const pcWrapper = document.getElementById('feed-pc-wrapper');
+  if (pcWrapper) {
+    pcWrapper.style.display = (tab === 'feed') ? '' : 'none';
+  }
+
   if (tab==='map') { closeMapPopup(); initMap(); }
   if (tab==='feed') closeMapPopup();
 }
@@ -1129,91 +1109,103 @@ let searchTimer = null;
 async function loadFeed(cat='all', q='') {
   feedCat = cat;
   const screen = document.getElementById('feedScreen');
-  screen.innerHTML = '<div class="feed-spin"><div class="spinner"></div></div>';
-  let url = '/api/shops?category='+encodeURIComponent(cat==='all'?'':cat);
-  if (q) url += '&q='+encodeURIComponent(q);
-  const res   = await fetch(url);
-  const shops = await res.json();
-  if (!shops.length) {
-    screen.innerHTML = \`<div class="feed-empty"><i class="fas fa-search"></i><p>\${searchQ ? '"'+searchQ+'" 검색 결과가 없어요' : '등록된 샵이 없어요'}</p></div>\`;
-    return;
-  }
-  screen.innerHTML = shops.map((s) => {
-    const thumb = s.youtubeId
-      ? \`https://img.youtube.com/vi/\${s.youtubeId}/maxresdefault.jpg\`
-      : s.thumbnail;
-    const ytArea = s.youtubeId
-      ? \`<div class="yt-area" id="yta-\${s.id}" data-ytid="\${s.youtubeId}" onclick="playYt(event.currentTarget)">
-           <img class="yt-thumb" id="ytt-\${s.id}" src="\${thumb}" alt="\${s.name}" loading="lazy"/>
-           <div class="yt-play-btn" id="ypb-\${s.id}"></div>
-           <div class="yt-player" id="ytp-\${s.id}"></div>
-           <button class="unmute-btn" id="unm-\${s.id}" onclick="unmuteYt(event,'\${s.id}')">🔇 탭하여 소리켜기</button>
-         </div>\`
-      : \`<div class="yt-area no-video"><img class="yt-thumb" src="\${thumb}" alt="\${s.name}" loading="lazy" style="pointer-events:none"/></div>\`;
-    return \`
-    <div class="fi">
-      \${ytArea}
-      <div class="shop-bar">
-        <div class="shop-bar-info">
-          <div class="shop-bar-cat">\${s.category}</div>
-          <div class="shop-bar-name">\${s.name}</div>
-          <div class="shop-bar-loc">
-            <i class="fas fa-map-marker-alt"></i>
-            <span>\${s.district} · \${s.price}</span>
-          </div>
-        </div>
-        \${s.smartPlaceUrl
-          ? \`<button class="btn-book"
-               onclick="curShop=\${JSON.stringify({id:s.id,name:s.name,smartPlaceUrl:s.smartPlaceUrl}).replace(/'/g,'\\'')};openInapp()">
-              <i class="fas fa-calendar-check"></i>
-              <span>예약하기</span>
-             </button>\`
-          : \`<div style="flex-shrink:0;width:64px;text-align:center;font-size:10px;color:rgba(255,255,255,.3)">예약링크<br>없음</div>\`
-        }
-      </div>
-    </div>\`;
-  }).join('');
-  screen.scrollTo(0, 0);
 
-  // PC(마우스 장치) 감지 → 인라인 스타일로 직접 강제 적용
+  // PC 감지 (마우스 있는 장치)
   const isPC = window.matchMedia('(hover:hover)').matches;
-  if (isPC) {
-    // feedScreen: snap 해제 + 자유 스크롤
-    screen.style.scrollSnapType = 'none';
-    screen.style.overflowY      = 'auto';
-    screen.style.padding        = '12px';
-    screen.style.boxSizing      = 'border-box';
-    screen.style.background     = '#0a0a0a';
-    // 각 .fi 아이템: 높이 auto + 카드형
-    screen.querySelectorAll('.fi').forEach(fi => {
-      fi.style.height         = 'auto';
-      fi.style.minHeight      = '0';
-      fi.style.scrollSnapAlign = 'none';
-      fi.style.borderRadius   = '16px';
-      fi.style.overflow       = 'hidden';
-      fi.style.marginBottom   = '16px';
-    });
-    // .yt-area: 고정 높이
-    screen.querySelectorAll('.yt-area').forEach(el => {
-      el.style.flex      = 'none';
-      el.style.height    = Math.min(window.innerWidth * 0.56, 500) + 'px';
-      el.style.minHeight = '220px';
-    });
-  }
 
-  // 스크롤 시 현재 보이는 영상 자동재생
-  let scrollTmr;
-  screen.onscroll = () => {
-    clearTimeout(scrollTmr);
-    scrollTmr = setTimeout(() => {
-      if (isPC) {
-        // PC: 화면 중앙에 가장 가까운 .fi 찾기
-        const fis = [...screen.querySelectorAll('.fi')];
-        const mid = screen.scrollTop + screen.clientHeight / 2;
+  // ── PC: 기존 wrapper 제거 후 로딩 스피너를 wrapper 안에 표시 ──
+  if (isPC) {
+    document.getElementById('feed-pc-wrapper')?.remove();
+    // feedScreen은 active 클래스만 있고 실제 display는 none으로 고정
+    // wrapper를 body에 붙여서 snap 완전 우회
+    const root = document.documentElement;
+    const hd  = getComputedStyle(root).getPropertyValue('--hd').trim() || '56px';
+    const catH = getComputedStyle(root).getPropertyValue('--cat').trim() || '44px';
+    const nav = getComputedStyle(root).getPropertyValue('--nav').trim() || '60px';
+    const sb  = getComputedStyle(root).getPropertyValue('--sb').trim()  || '0px';
+
+    const wrapper = document.createElement('div');
+    wrapper.id = 'feed-pc-wrapper';
+    wrapper.style.cssText =
+      'position:fixed;' +
+      'top:calc(' + hd + ' + ' + catH + ' + ' + sb + ');' +
+      'left:0;right:0;' +
+      'bottom:' + nav + ';' +
+      'overflow-y:auto;' +
+      'padding:12px 16px;box-sizing:border-box;' +
+      'background:#0a0a0a;z-index:200;' +
+      'overscroll-behavior:contain;';
+    wrapper.innerHTML = '<div class="feed-spin"><div class="spinner"></div></div>';
+    document.body.appendChild(wrapper);
+
+    // feedScreen 자체는 완전히 숨김 (snap 제거)
+    screen.style.cssText = 'display:none!important;';
+
+    let url = '/api/shops?category='+encodeURIComponent(cat==='all'?'':cat)+'&shuffle=1';
+    if (q) url += '&q='+encodeURIComponent(q);
+    const res   = await fetch(url);
+    const shops = await res.json();
+
+    if (!shops.length) {
+      wrapper.innerHTML = \`<div class="feed-empty"><i class="fas fa-search"></i><p>\${q ? '"'+q+'" 검색 결과가 없어요' : '등록된 샵이 없어요'}</p></div>\`;
+      return;
+    }
+
+    // 비디오 높이: 창 너비 기준 (PC에서 너무 크지 않게)
+    const fiH = Math.min(Math.round(window.innerWidth * 0.45), 460);
+
+    wrapper.innerHTML = shops.map((s) => {
+      const thumb = s.youtubeId
+        ? \`https://img.youtube.com/vi/\${s.youtubeId}/maxresdefault.jpg\`
+        : (s.thumbnail || '');
+      const ytArea = s.youtubeId
+        ? \`<div class="yt-area" id="yta-\${s.id}" data-ytid="\${s.youtubeId}"
+               style="flex:none;height:\${fiH}px;"
+               onclick="playYt(event.currentTarget)">
+             <img class="yt-thumb" id="ytt-\${s.id}" src="\${thumb}" alt="\${s.name}" loading="lazy"/>
+             <div class="yt-play-btn" id="ypb-\${s.id}"></div>
+             <div class="yt-player" id="ytp-\${s.id}"></div>
+             <button class="unmute-btn" id="unm-\${s.id}" onclick="unmuteYt(event,'\${s.id}')">🔇 탭하여 소리켜기</button>
+           </div>\`
+        : \`<div class="yt-area no-video" style="flex:none;height:\${fiH}px;">
+             <img class="yt-thumb" src="\${thumb}" alt="\${s.name}" loading="lazy" style="pointer-events:none"/>
+           </div>\`;
+      return \`
+      <div class="fi" style="height:auto;min-height:0;scroll-snap-align:none;scroll-snap-stop:normal;
+           border-radius:16px;overflow:hidden;margin-bottom:16px;display:flex;flex-direction:column;">
+        \${ytArea}
+        <div class="shop-bar">
+          <div class="shop-bar-info">
+            <div class="shop-bar-cat">\${s.category}</div>
+            <div class="shop-bar-name">\${s.name}</div>
+            <div class="shop-bar-loc">
+              <i class="fas fa-map-marker-alt"></i>
+              <span>\${s.district} · \${s.price}</span>
+            </div>
+          </div>
+          \${s.smartPlaceUrl
+            ? \`<button class="btn-book"
+                 onclick="curShop=\${JSON.stringify({id:s.id,name:s.name,smartPlaceUrl:s.smartPlaceUrl}).replace(/'/g,'\\'')};openInapp()">
+                <i class="fas fa-calendar-check"></i>
+                <span>예약하기</span>
+               </button>\`
+            : \`<div style="flex-shrink:0;width:64px;text-align:center;font-size:10px;color:rgba(255,255,255,.3)">예약링크<br>없음</div>\`
+          }
+        </div>
+      </div>\`;
+    }).join('');
+
+    // wrapper 스크롤 → 중앙 영상 자동재생
+    let scrollTmr;
+    wrapper.addEventListener('scroll', () => {
+      clearTimeout(scrollTmr);
+      scrollTmr = setTimeout(() => {
+        const fis = [...wrapper.querySelectorAll('.fi')];
+        const mid = wrapper.scrollTop + wrapper.clientHeight / 2;
         let closest = null, minDist = Infinity;
         fis.forEach(fi => {
-          const dist = Math.abs(fi.offsetTop + fi.offsetHeight / 2 - mid);
-          if (dist < minDist) { minDist = dist; closest = fi; }
+          const d = Math.abs(fi.offsetTop + fi.offsetHeight / 2 - mid);
+          if (d < minDist) { minDist = d; closest = fi; }
         });
         if (!closest) return;
         const area = closest.querySelector('.yt-area[data-ytid]');
@@ -1221,8 +1213,66 @@ async function loadFeed(cat='all', q='') {
         Object.values(ytPlayers).forEach(p => { try { p.pauseVideo(); } catch(e){} });
         document.querySelectorAll('.yt-area.playing').forEach(a => a.classList.remove('playing'));
         playYt(area);
-      } else {
-        // 모바일: snap 기준
+      }, 400);
+    });
+
+  } else {
+    // ── 모바일: snap 스크롤 유지 ──
+    document.getElementById('feed-pc-wrapper')?.remove();
+    screen.style.cssText = ''; // 인라인 스타일 완전 초기화 (CSS 클래스로 제어)
+
+    screen.innerHTML = '<div class="feed-spin"><div class="spinner"></div></div>';
+    let url = '/api/shops?category='+encodeURIComponent(cat==='all'?'':cat)+'&shuffle=1';
+    if (q) url += '&q='+encodeURIComponent(q);
+    const res   = await fetch(url);
+    const shops = await res.json();
+
+    if (!shops.length) {
+      screen.innerHTML = \`<div class="feed-empty"><i class="fas fa-search"></i><p>\${q ? '"'+q+'" 검색 결과가 없어요' : '등록된 샵이 없어요'}</p></div>\`;
+      return;
+    }
+
+    screen.innerHTML = shops.map((s) => {
+      const thumb = s.youtubeId
+        ? \`https://img.youtube.com/vi/\${s.youtubeId}/maxresdefault.jpg\`
+        : (s.thumbnail || '');
+      const ytArea = s.youtubeId
+        ? \`<div class="yt-area" id="yta-\${s.id}" data-ytid="\${s.youtubeId}" onclick="playYt(event.currentTarget)">
+             <img class="yt-thumb" id="ytt-\${s.id}" src="\${thumb}" alt="\${s.name}" loading="lazy"/>
+             <div class="yt-play-btn" id="ypb-\${s.id}"></div>
+             <div class="yt-player" id="ytp-\${s.id}"></div>
+             <button class="unmute-btn" id="unm-\${s.id}" onclick="unmuteYt(event,'\${s.id}')">🔇 탭하여 소리켜기</button>
+           </div>\`
+        : \`<div class="yt-area no-video"><img class="yt-thumb" src="\${thumb}" alt="\${s.name}" loading="lazy" style="pointer-events:none"/></div>\`;
+      return \`
+      <div class="fi">
+        \${ytArea}
+        <div class="shop-bar">
+          <div class="shop-bar-info">
+            <div class="shop-bar-cat">\${s.category}</div>
+            <div class="shop-bar-name">\${s.name}</div>
+            <div class="shop-bar-loc">
+              <i class="fas fa-map-marker-alt"></i>
+              <span>\${s.district} · \${s.price}</span>
+            </div>
+          </div>
+          \${s.smartPlaceUrl
+            ? \`<button class="btn-book"
+                 onclick="curShop=\${JSON.stringify({id:s.id,name:s.name,smartPlaceUrl:s.smartPlaceUrl}).replace(/'/g,'\\'')};openInapp()">
+                <i class="fas fa-calendar-check"></i>
+                <span>예약하기</span>
+               </button>\`
+            : \`<div style="flex-shrink:0;width:64px;text-align:center;font-size:10px;color:rgba(255,255,255,.3)">예약링크<br>없음</div>\`
+          }
+        </div>
+      </div>\`;
+    }).join('');
+    screen.scrollTo(0, 0);
+
+    let scrollTmr;
+    screen.onscroll = () => {
+      clearTimeout(scrollTmr);
+      scrollTmr = setTimeout(() => {
         const itemH = screen.querySelector('.fi')?.offsetHeight || screen.clientHeight;
         const idx   = Math.round(screen.scrollTop / itemH);
         const fi    = screen.querySelectorAll('.fi')[idx];
@@ -1230,9 +1280,9 @@ async function loadFeed(cat='all', q='') {
         const area = fi.querySelector('.yt-area[data-ytid]');
         if (!area || area.classList.contains('playing')) return;
         playYt(area);
-      }
-    }, 350);
-  };
+      }, 350);
+    };
+  }
 }
 
 // ── 유튜브 IFrame Player API ──────────────────────────────────────────────
