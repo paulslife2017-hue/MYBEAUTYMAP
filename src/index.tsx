@@ -1155,19 +1155,24 @@ function feedCardHTML(s) {
   const thumb = s.youtubeId
     ? 'https://img.youtube.com/vi/' + s.youtubeId + '/hqdefault.jpg'
     : (s.thumbnail || '');
+  // onerror: data-fb 속성에 폴백 URL 저장 → 따옴표 충돌 완전 회피
+  const fb = s.youtubeId ? 'https://img.youtube.com/vi/' + s.youtubeId + '/mqdefault.jpg' : '';
   const ytArea = s.youtubeId
     ? '<div class="yt-area" id="yta-' + s.id + '" data-ytid="' + s.youtubeId + '" onclick="playYt(this)">'
         + '<img class="yt-thumb" id="ytt-' + s.id + '" src="' + thumb + '" loading="lazy"'
-        + ' onerror="this.onerror=null;this.src=\'https://img.youtube.com/vi/' + s.youtubeId + '/mqdefault.jpg\'">'
+        + ' data-fb="' + fb + '" onerror="this.onerror=null;this.src=this.dataset.fb">'
         + '<div class="yt-play-btn" id="ypb-' + s.id + '"></div>'
         + '<div class="yt-player"  id="ytp-' + s.id + '"></div>'
-        + '<button class="unmute-btn" id="unm-' + s.id + '" onclick="unmuteYt(event,' + "'" + s.id + "'" + ')">🔇 탭하여 소리켜기</button>'
+        + '<button class="unmute-btn" id="unm-' + s.id + '" onclick="unmuteYt(event,this.dataset.sid)" data-sid="' + s.id + '">🔇 탭하여 소리켜기</button>'
       + '</div>'
     : '<div class="yt-area no-video">'
         + (thumb ? '<img class="yt-thumb" src="' + thumb + '" loading="lazy" style="pointer-events:none">' : '')
       + '</div>';
+  // curShop: JSON을 data 속성에 저장 → onclick 따옴표 충돌 회피
+  const shopJson = JSON.stringify({id:s.id, name:s.name, smartPlaceUrl:s.smartPlaceUrl})
+                       .replace(/&/g,'&amp;').replace(/"/g,'&quot;');
   const bookBtn = s.smartPlaceUrl
-    ? '<button class="btn-book" onclick="curShop=' + "'" + JSON.stringify({id:s.id,name:s.name,smartPlaceUrl:s.smartPlaceUrl}).replace(/'/g, "\\'") + "'" + ';openInapp()"><i class="fas fa-calendar-check"></i><span>예약하기</span></button>'
+    ? '<button class="btn-book" data-shop="' + shopJson + '" onclick="curShop=JSON.parse(this.dataset.shop);openInapp()"><i class="fas fa-calendar-check"></i><span>예약하기</span></button>'
     : '<div style="flex-shrink:0;width:64px;text-align:center;font-size:10px;color:rgba(255,255,255,.3)">예약링크<br>없음</div>';
   return '<div class="fi" id="fi-' + s.id + '">'
     + ytArea
@@ -1208,6 +1213,16 @@ function feedInitSlider() {
   const slider = document.getElementById('feedSlider');
   if (!slider) return;
   feedSliderH = slider.clientHeight;
+  // clientHeight가 0이면 feedScreen 실제 높이로 fallback
+  if (feedSliderH === 0) {
+    const sc = document.getElementById('feedScreen');
+    feedSliderH = sc ? sc.clientHeight : window.innerHeight;
+  }
+  // 그래도 0이면 재시도
+  if (feedSliderH === 0) {
+    setTimeout(feedInitSlider, 50);
+    return;
+  }
   // 트랙 높이 = 카드수 × 슬라이더 높이
   const track = document.getElementById('feedTrack');
   if (track) {
@@ -1288,7 +1303,12 @@ async function loadFeed(cat='all', q='') {
     + '</div>'
     + '</div>';
 
-  feedInitSlider();
+  // rAF 두 번: 첫 번째는 DOM 삽입, 두 번째는 실제 레이아웃 계산 완료 후 실행
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      feedInitSlider();
+    });
+  });
 }
 
 // ── 유튜브 IFrame Player API ──────────────────────────────────────────────
