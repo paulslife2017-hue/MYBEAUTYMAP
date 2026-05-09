@@ -1811,21 +1811,34 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0a;
   .card-close{top:14px;right:14px}
 }
 
-/* PC: 사이드패널 너비(360px) 기준 16:9 비율 그대로 유지 → 썸네일/영상 안 짤림 */
+/* PC: padding-top hack으로 16:9 비율 안정적 확보 (overflow-y:auto 컨테이너 안에서도 정확) */
 @media(min-width:768px){
   .card-media{
-    aspect-ratio:16/9;  /* 비율 유지 → 360px 너비면 202px 높이로 자동 */
+    aspect-ratio:unset;
     height:auto;
-    flex-shrink:0;      /* 스크롤 시 미디어 영역 찌그러짐 방지 */
+    flex-shrink:0;
   }
 }
 .card-handle{width:36px;height:4px;border-radius:2px;
   background:rgba(255,255,255,.18);margin:10px auto 0;flex-shrink:0}
 
-/* 미디어 영역 (유튜브 or 썸네일) */
-.card-media{position:relative;width:100%;aspect-ratio:16/9;background:#000;overflow:hidden}
-.card-media img{width:100%;height:100%;object-fit:cover;display:block}
-.card-media iframe{position:absolute;inset:0;width:100%;height:100%;border:none}
+/* 미디어 영역 (유튜브 or 썸네일) — padding-top:56.25% hack으로 16:9 비율 안정 확보 */
+.card-media{
+  position:relative;
+  width:100%;
+  padding-top:56.25%;   /* 9/16 = 56.25% → 16:9 비율 */
+  background:#000;
+  overflow:hidden;
+  flex-shrink:0;
+}
+.card-media > *{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+}
+.card-media img{object-fit:cover;display:block}
+.card-media iframe{border:none}
 /* 썸네일 위 플레이 버튼 */
 .play-btn{
   position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
