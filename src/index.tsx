@@ -592,6 +592,24 @@ html,body{height:100%;background:var(--bg);color:#fff;
   font-family:-apple-system,sans-serif;
 }
 .unmute-btn.show{display:flex}
+/* 임베드 불가 영상 안내 */
+.yt-error-overlay{
+  position:absolute;inset:0;z-index:10;
+  display:none;flex-direction:column;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.72);gap:12px;padding:20px;text-align:center;
+}
+.yt-error-overlay.show{display:flex}
+.yt-error-overlay .yt-err-msg{
+  font-size:13px;color:rgba(255,255,255,.75);line-height:1.5;
+}
+.yt-error-overlay .yt-err-btn{
+  display:inline-flex;align-items:center;gap:7px;
+  background:#FF0000;color:#fff;border:none;
+  border-radius:999px;padding:10px 20px;
+  font-size:14px;font-weight:700;cursor:pointer;
+  font-family:-apple-system,sans-serif;
+}
+.yt-error-overlay .yt-err-btn i{font-size:16px;}
 
 /* 업체 정보 바 */
 .shop-bar{flex-shrink:0;padding:18px 14px 14px;
@@ -1168,14 +1186,27 @@ function feedCardHTML(s) {
     : (s.thumbnail || '');
   const fb1 = s.youtubeId ? 'https://img.youtube.com/vi/' + s.youtubeId + '/hqdefault.jpg' : '';
   const fb2 = s.youtubeId ? 'https://img.youtube.com/vi/' + s.youtubeId + '/mqdefault.jpg' : '';
+  // onerror: maxres → hq → mq 3단계 폴백 (각 단계마다 onerror 재등록)
+  const onerrorAttr = s.youtubeId
+    ? 'onerror="(function(img){'
+      + 'if(img.src===img.dataset.fb2){img.onerror=null;img.style.opacity=\'0.4\';return;}'
+      + 'if(img.src===img.dataset.fb1){img.src=img.dataset.fb2;return;}'
+      + 'img.src=img.dataset.fb1;'
+      + '})(this)"'
+    : '';
   const ytArea = s.youtubeId
     ? '<div class="yt-area" id="yta-' + s.id + '" data-ytid="' + s.youtubeId + '" data-sid="' + s.id + '">'
         + '<img class="yt-thumb" id="ytt-' + s.id + '" src="' + thumb + '" loading="lazy"'
-        + ' data-fb1="' + fb1 + '" data-fb2="' + fb2 + '"'
-        + ' onerror="this.onerror=null;this.src=(this.src===this.dataset.fb1)?this.dataset.fb2:this.dataset.fb1">'
+        + ' data-fb1="' + fb1 + '" data-fb2="' + fb2 + '" ' + onerrorAttr + '>'
         + '<div class="yt-play-btn" id="ypb-' + s.id + '"></div>'
         + '<div class="yt-player"  id="ytp-' + s.id + '"></div>'
         + '<button class="unmute-btn" id="unm-' + s.id + '" data-sid="' + s.id + '">🔇 탭하여 소리켜기</button>'
+        + '<div class="yt-error-overlay" id="yte-' + s.id + '">'
+          + '<div class="yt-err-msg">이 영상은 외부 재생이<br>제한되어 있어요</div>'
+          + '<button class="yt-err-btn" onclick="window.open(\'https://www.youtube.com/watch?v=' + s.youtubeId + '\',\'_blank\')" >'
+            + '<i class="fab fa-youtube"></i> YouTube에서 보기'
+          + '</button>'
+        + '</div>'
       + '</div>'
     : '<div class="yt-area no-video">'
         + (thumb ? '<img class="yt-thumb" src="' + thumb + '" loading="lazy" style="pointer-events:none">' : '')
@@ -1493,6 +1524,20 @@ function playYt(area) {
             if (t) t.style.opacity = '0';
             if (b) b.style.opacity = '0';
           }
+        },
+        onError(e) {
+          // 임베드 제한(150, 101) 또는 영상 없음(100, 105) 등 재생 오류
+          const errArea = document.getElementById('yta-' + sid);
+          const errOverlay = document.getElementById('yte-' + sid);
+          if (errArea)  errArea.classList.remove('playing');
+          if (errOverlay) errOverlay.classList.add('show');
+          const t = document.getElementById('ytt-' + sid);
+          const b = document.getElementById('ypb-' + sid);
+          if (t) t.style.opacity = '1';
+          if (b) b.style.opacity = '0';
+          // 실패한 플레이어 정리
+          try { e.target.destroy(); } catch(_){}
+          delete ytPlayers[sid];
         },
       },
     });
