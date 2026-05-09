@@ -1336,8 +1336,8 @@ function initMap() {
   waitNaverMap(()=>{
     mapInited = true;
     naverMap = new naver.maps.Map('naverMap', {
-      center: new naver.maps.LatLng(37.5326, 127.0246),
-      zoom: 12,
+      center: new naver.maps.LatLng(36.5, 127.5),
+      zoom: 7,
       mapTypeId: naver.maps.MapTypeId.NORMAL,
       mapTypeControl: false,
       scaleControl: false,
@@ -1416,9 +1416,22 @@ function createNaverMarker(shop, selected=false) {
 function renderNaverMarkers(shops) {
   Object.values(nvMarkers).forEach(o => o.setMap(null));
   nvMarkers = {};
+  if (!shops.length) return;
   shops.forEach(shop => {
     nvMarkers[shop.id] = createNaverMarker(shop, false);
   });
+  // 업체 전체가 화면에 보이도록 자동 범위 조정
+  if (shops.length === 1) {
+    naverMap.setCenter(new naver.maps.LatLng(shops[0].lat, shops[0].lng));
+    naverMap.setZoom(15);
+  } else {
+    const lats = shops.map(s => s.lat);
+    const lngs = shops.map(s => s.lng);
+    const sw = new naver.maps.LatLng(Math.min(...lats), Math.min(...lngs));
+    const ne = new naver.maps.LatLng(Math.max(...lats), Math.max(...lngs));
+    const bounds = new naver.maps.LatLngBounds(sw, ne);
+    naverMap.fitBounds(bounds, { top: 80, right: 40, bottom: 80, left: 40 });
+  }
 }
 
 function selectShopOnMap(id) {
