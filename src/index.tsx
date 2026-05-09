@@ -1118,7 +1118,13 @@ function switchTab(tab) {
       if (frame) frame.contentWindow.postMessage({ type: 'fitBounds' }, '*');
     }, 300);
   }
-  if (tab==='feed') closeMapPopup();
+  if (tab==='feed') {
+    closeMapPopup();
+    // 피드 탭 전환 시 레이아웃 재계산 (다른 탭에서 돌아올 때 크기 틀어짐 방지)
+    if (feedShops.length > 0) {
+      requestAnimationFrame(() => feedApplyLayout());
+    }
+  }
 }
 
 // ── 로고 5번 탭 → 관리자 선택 팝업 ─────────────────────────────────────
@@ -1216,91 +1222,127 @@ function feedGoTo(idx, animate) {
 }
 
 function getFeedHeight() {
-  // CSS 변수로 직접 계산 (clientHeight 의존 제거)
+  // CSS 변수 파싱 (env() 함수는 parseFloat로 못 읽으므로 실제 계산된 픽셀값 사용)
   const style = getComputedStyle(document.documentElement);
   const hd  = parseFloat(style.getPropertyValue('--hd'))  || 50;
   const cat = parseFloat(style.getPropertyValue('--cat')) || 44;
   const nav = parseFloat(style.getPropertyValue('--nav')) || 60;
   const sb  = parseFloat(style.getPropertyValue('--sb'))  || 0;
-  const safe= parseFloat(style.getPropertyValue('--safe'))|| 0;
-  return window.innerHeight - hd - cat - nav - sb - safe;
+  // --safe는 env() 함수이므로 직접 계산: tabbar의 padding-bottom으로 측정
+  const tabbar = document.querySelector('.tabbar');
+  const safe = tabbar ? Math.max(0, tabbar.offsetHeight - nav) : 0;
+  const h = window.innerHeight - hd - cat - nav - sb - safe;
+  return Math.max(h, 200); // 최소 200px 보장
+}
+
+// 이벤트 리스너 중복 등록 방지용 플래그
+let feedSliderEventsAttached = false;
+
+function feedApplyLayout() {
+  // 항상 getFeedHeight() 직접 사용 (clientHeight 의존 제거)
+  feedSliderH = getFeedHeight();
+  const track = document.getElementById('feedTrack');
+  if (!track) return;
+  track.style.height = (feedSliderH * feedShops.length) + 'px';
+  [...track.querySelectorAll('.fi')].forEach((fi, i) => {
+    fi.style.height   = feedSliderH + 'px';
+    fi.style.position = 'absolute';
+    fi.style.top      = (i * feedSliderH) + 'px';
+    fi.style.left = '0'; fi.style.right = '0';
+  });
+  feedGoTo(feedIdx, false);
 }
 
 function feedInitSlider() {
   const slider = document.getElementById('feedSlider');
   if (!slider) return;
-  // clientHeight 대신 CSS 변수로 직접 계산 (display:block 직후 0 문제 해결)
-  feedSliderH = slider.clientHeight || getFeedHeight();
-  // 그래도 0이면 재시도
-  if (feedSliderH <= 0) {
-    setTimeout(feedInitSlider, 50);
-    return;
+
+  // 항상 getFeedHeight() 우선 사용 (clientHeight는 보조 검증용)
+  feedSliderH = getFeedHeight();
+
+  // 혹시 계산값이 이상하면 최대 10회 재시도 (50ms 간격)
+  if (feedSliderH <= 100) {
+    if ((feedInitSlider._retry = (feedInitSlider._retry || 0) + 1) < 10) {
+      setTimeout(feedInitSlider, 50);
+      return;
+    }
   }
-  // 트랙 높이 = 카드수 × 슬라이더 높이
-  const track = document.getElementById('feedTrack');
-  if (track) {
-    track.style.height = (feedSliderH * feedShops.length) + 'px';
-    // 각 .fi 높이 픽셀 고정
-    [...track.querySelectorAll('.fi')].forEach((fi, i) => {
-      fi.style.height  = feedSliderH + 'px';
-      fi.style.position = 'absolute';
-      fi.style.top      = (i * feedSliderH) + 'px';
-      fi.style.left = '0'; fi.style.right = '0';
-    });
-  }
-  feedGoTo(feedIdx, false);
+  feedInitSlider._retry = 0;
+
+  feedApplyLayout();
+
+  // 이벤트 리스너는 슬라이더가 새로 생성될 때만 등록 (중복 방지)
+  if (feedSliderEventsAttached) return;
+  feedSliderEventsAttached = true;
 
   // 이벤트 위임: .yt-area 클릭 → playYt / .unmute-btn 클릭 → unmuteYt
-  slider.addEventListener('click', e => {
-    // 언뮤트 버튼
+  // ※ #feedSlider 자체는 loadFeed마다 재생성되므로 document 레벨 위임
+  document.getElementById('feedScreen').addEventListener('click', e => {
     const unmuteBtn = e.target.closest('.unmute-btn');
     if (unmuteBtn) {
       e.stopPropagation();
       unmuteYt(e, unmuteBtn.dataset.sid);
       return;
     }
-    // yt-area 클릭 (드래그가 아닐 때만)
-    if (Math.abs(tsDiff) > 5) return;
+    if (Math.abs(feedTsDiff) > 5) return;
     const area = e.target.closest('.yt-area');
     if (area && !area.classList.contains('no-video')) {
       playYt(area);
     }
   });
 
-  // 터치 스와이프
-  let tsY = 0, tsDiff = 0, dragging = false;
-  slider.addEventListener('touchstart', e => {
-    tsY = e.touches[0].clientY; tsDiff = 0; dragging = true;
+  // 터치 스와이프 — feedScreen 레벨로 위임
+  const screen = document.getElementById('feedScreen');
+  let feedTsY = 0, feedTsDiffLocal = 0, feedDragging = false;
+
+  screen.addEventListener('touchstart', e => {
+    feedTsY = e.touches[0].clientY;
+    feedTsDiffLocal = 0;
+    feedDragging = true;
+    feedTsDiff = 0;
   }, {passive: true});
-  slider.addEventListener('touchmove', e => {
-    if (!dragging) return;
-    tsDiff = e.touches[0].clientY - tsY;
-    // 중간 드래그 미리보기
+
+  screen.addEventListener('touchmove', e => {
+    if (!feedDragging) return;
+    feedTsDiffLocal = e.touches[0].clientY - feedTsY;
+    feedTsDiff = feedTsDiffLocal;
     const track2 = document.getElementById('feedTrack');
     if (track2) {
       track2.style.transition = 'none';
-      track2.style.transform  = 'translateY(' + (-feedIdx * feedSliderH + tsDiff) + 'px)';
+      track2.style.transform  = 'translateY(' + (-feedIdx * feedSliderH + feedTsDiffLocal) + 'px)';
     }
   }, {passive: true});
-  slider.addEventListener('touchend', () => {
-    dragging = false;
-    if (Math.abs(tsDiff) > 40) {
-      feedGoTo(tsDiff < 0 ? feedIdx + 1 : feedIdx - 1, true);
+
+  screen.addEventListener('touchend', () => {
+    feedDragging = false;
+    if (Math.abs(feedTsDiffLocal) > 40) {
+      feedGoTo(feedTsDiffLocal < 0 ? feedIdx + 1 : feedIdx - 1, true);
     } else {
-      feedGoTo(feedIdx, true); // 제자리 복귀
+      feedGoTo(feedIdx, true);
     }
+    setTimeout(() => { feedTsDiff = 0; }, 50);
   }, {passive: true});
 
   // 마우스 휠 (PC)
   let wheelTmr;
-  slider.addEventListener('wheel', e => {
+  screen.addEventListener('wheel', e => {
     e.preventDefault();
     clearTimeout(wheelTmr);
     wheelTmr = setTimeout(() => {
       feedGoTo(e.deltaY > 0 ? feedIdx + 1 : feedIdx - 1, true);
     }, 80);
   }, {passive: false});
+
+  // 화면 크기 변경 시 레이아웃 재계산
+  window.addEventListener('resize', () => {
+    if (document.getElementById('feedScreen').classList.contains('active')) {
+      feedApplyLayout();
+    }
+  });
 }
+
+// 클릭/드래그 구분용 전역 변수 (feedInitSlider 밖에서도 접근 가능하게)
+let feedTsDiff = 0;
 
 async function loadFeed(cat='all', q='') {
   feedCat = cat;
@@ -1310,6 +1352,10 @@ async function loadFeed(cat='all', q='') {
 
   // 기존 pc-wrapper 제거
   document.getElementById('feed-pc-wrapper')?.remove();
+
+  // 카테고리 필터가 바뀔 때 → 트랙/카드만 교체하므로
+  // 이벤트 리스너는 최초 1회만 등록 (feedSliderEventsAttached 플래그 유지)
+  // 단, feedScreen 자체가 재생성되지 않으므로 플래그 유지 OK
 
   // 로딩 표시
   screen.innerHTML = '<div id="feedSlider"><div class="feed-spin"><div class="spinner"></div></div></div>';
@@ -1333,10 +1379,18 @@ async function loadFeed(cat='all', q='') {
     + '</div>'
     + '</div>';
 
-  // rAF 두 번: 첫 번째는 DOM 삽입, 두 번째는 실제 레이아웃 계산 완료 후 실행
+  // DOM 삽입 후 레이아웃 계산: rAF 2회 + 추가 100ms 보험
+  // (모바일에서 position:fixed 높이가 첫 프레임에 0을 반환하는 경우 대응)
+  feedInitSlider._retry = 0;
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       feedInitSlider();
+      // 추가 보험: 150ms 후 한 번 더 레이아웃 재적용
+      setTimeout(() => {
+        if (feedShops.length > 0 && document.getElementById('feedTrack')) {
+          feedApplyLayout();
+        }
+      }, 150);
     });
   });
 }
