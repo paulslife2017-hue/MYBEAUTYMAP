@@ -564,23 +564,11 @@ html,body{height:100%;background:var(--bg);color:#fff;
 
 /* 피드 아이템 (모바일: 틱톡 풀스크린) */
 .fi{background:#000;display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;}
-.yt-area{flex:1;position:relative;overflow:hidden;background:#000;cursor:pointer}
-.yt-thumb{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
-  transition:opacity .35s;z-index:2;pointer-events:none}
-.yt-play-btn{
-  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-  z-index:3;transition:opacity .2s}
-.yt-play-btn::after{
-  content:'';width:68px;height:68px;border-radius:50%;
-  background:rgba(0,0,0,.6);border:3px solid rgba(255,255,255,.95);
-  box-shadow:0 4px 24px rgba(0,0,0,.6)}
-.yt-play-btn::before{
-  content:'▶';position:absolute;font-size:24px;
-  color:#fff;margin-left:5px;z-index:1}
-/* 유튜브 iframe (탭 시 동적 생성) */
-.yt-iframe{position:absolute;inset:0;width:100%;height:100%;border:none;z-index:4}
-.yt-area.playing .yt-thumb{opacity:0}
-.yt-area.playing .yt-play-btn{opacity:0;pointer-events:none}
+.yt-area{flex:1;position:relative;overflow:hidden;background:#000}
+/* 유튜브 iframe — 처음부터 직접 삽입, 유튜브 자체 플레이어 UI 사용 */
+.yt-iframe{position:absolute;inset:0;width:100%;height:100%;border:none;z-index:2}
+/* 유튜브 없는 카드 — 썸네일 이미지 */
+.yt-thumb-only{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none}
 /* 임베드 불가 영상 안내 */
 .yt-error-overlay{
   position:absolute;inset:0;z-index:10;
@@ -1169,31 +1157,18 @@ let feedIdx    = 0;    // 현재 보이는 인덱스
 let feedSliderH = 0;   // 슬라이더 높이 (px)
 
 function feedCardHTML(s) {
-  // 썸네일: maxresdefault(1280×720 고화질) 우선, 실패 시 hqdefault → mqdefault 폴백
-  const thumb = s.youtubeId
-    ? 'https://img.youtube.com/vi/' + s.youtubeId + '/maxresdefault.jpg'
-    : (s.thumbnail || '');
-  const fb1 = s.youtubeId ? 'https://img.youtube.com/vi/' + s.youtubeId + '/hqdefault.jpg' : '';
-  const fb2 = s.youtubeId ? 'https://img.youtube.com/vi/' + s.youtubeId + '/mqdefault.jpg' : '';
-  // onerror: maxres → hq → mq 3단계 폴백 (각 단계마다 onerror 재등록)
-  const onerrorAttr = s.youtubeId
-    ? 'onerror="(function(i){if(i.src===i.dataset.fb2){i.onerror=null;return;}if(i.src===i.dataset.fb1){i.src=i.dataset.fb2;return;}i.src=i.dataset.fb1;})(this)"'
-    : '';
+  // 유튜브 ID 있으면 iframe 직접 삽입 (썸네일/플레이버튼 없음)
+  // autoplay=0 → 유튜브 자체 플레이어 UI로 재생 → 앱 전환 없음
   const ytArea = s.youtubeId
     ? '<div class="yt-area" id="yta-' + s.id + '" data-ytid="' + s.youtubeId + '" data-sid="' + s.id + '">'
-        + '<img class="yt-thumb" id="ytt-' + s.id + '" src="' + thumb + '" loading="lazy"'
-        + ' data-fb1="' + fb1 + '" data-fb2="' + fb2 + '" ' + onerrorAttr + '>'
-        + '<div class="yt-play-btn" id="ypb-' + s.id + '"></div>'
-        + '<div class="yt-iframe-wrap" id="yti-' + s.id + '"></div>'
-        + '<div class="yt-error-overlay" id="yte-' + s.id + '">'
-          + '<div class="yt-err-msg">이 영상은 외부 재생이<br>제한되어 있어요</div>'
-          + '<button class="yt-err-btn" data-yturl="https://www.youtube.com/watch?v=' + s.youtubeId + '">'
-            + '<i class="fab fa-youtube"></i> YouTube에서 보기'
-          + '</button>'
-        + '</div>'
+        + '<iframe id="yti-' + s.id + '" class="yt-iframe"'
+        + ' src="https://www.youtube.com/embed/' + s.youtubeId
+        + '?autoplay=0&playsinline=1&rel=0&modestbranding=1&controls=1"'
+        + ' allow="autoplay; encrypted-media; picture-in-picture"'
+        + ' allowfullscreen playsinline></iframe>'
       + '</div>'
     : '<div class="yt-area no-video">'
-        + (thumb ? '<img class="yt-thumb" src="' + thumb + '" loading="lazy" style="pointer-events:none">' : '')
+        + (s.thumbnail ? '<img class="yt-thumb-only" src="' + s.thumbnail + '" loading="lazy">' : '')
       + '</div>';
   // curShop: JSON을 data 속성에 저장 → onclick 따옴표 충돌 회피
   const shopJson = JSON.stringify({id:s.id, name:s.name, smartPlaceUrl:s.smartPlaceUrl})
@@ -1216,7 +1191,7 @@ function feedCardHTML(s) {
   + '</div>';
 }
 
-function feedGoTo(idx, animate, skipPause) {
+function feedGoTo(idx, animate, skipPause?) {
   const track = document.getElementById('feedTrack');
   if (!track) return;
   const n = feedShops.length;
@@ -1225,10 +1200,9 @@ function feedGoTo(idx, animate, skipPause) {
   feedIdx = Math.max(0, Math.min(idx, n - 1));
   track.style.transition = animate === false ? 'none' : 'transform .35s cubic-bezier(.32,1,.23,1)';
   track.style.transform  = 'translateY(' + (-feedIdx * feedSliderH) + 'px)';
-  // 실제로 카드가 바뀔 때만 pause + 썸네일 복원 (탭으로 제자리 snap 시엔 스킵)
+  // 카드가 실제로 바뀔 때만 이전 iframe 정지 (src='' 방식)
   if (skipPause || feedIdx === prevIdx) return;
-  // 카드 이동 시 재생 중인 iframe 완전 제거 + 썸네일 복원
-  setTimeout(() => { stopAllYt(); }, 380);
+  setTimeout(() => { stopAllYt(prevIdx); }, 380);
 }
 
 function getFeedGeometry() {
@@ -1368,25 +1342,10 @@ function feedInitSlider() {
       track.style.transform  = 'translateY(' + (-feedIdx * feedSliderH) + 'px)';
     }
 
-    // 탭 대상 처리
+    // 탭 대상 처리 (iframe이 직접 처리하므로 yt-area 탭 로직 불필요)
     if (tsTarget) {
-      // yt-err-btn (유튜브 외부 열기)
-      const errBtn = tsTarget.closest('.yt-err-btn');
-      if (errBtn) {
-        blockClick = true;
-        const url = errBtn.dataset.yturl;
-        if (url) window.open(url, '_blank');
-        tsDy = 0; feedTsDiff = 0; tsTarget = null; return;
-      }
-      // btn-book: 기존 onclick 그대로 통과 (blockClick 안 함)
+      // btn-book: 기존 onclick 그대로 통과
       if (tsTarget.closest('.btn-book')) {
-        tsDy = 0; feedTsDiff = 0; tsTarget = null; return;
-      }
-      // yt-area 탭 → 재생
-      const area = tsTarget.closest('.yt-area');
-      if (area && !area.classList.contains('no-video')) {
-        blockClick = true; // 유령 click 차단
-        playYt(area);
         tsDy = 0; feedTsDiff = 0; tsTarget = null; return;
       }
     }
@@ -1394,14 +1353,9 @@ function feedInitSlider() {
     tsDy = 0; feedTsDiff = 0; tsTarget = null;
   }, {passive: true});
 
-  // ── click: 유령 click 차단 + PC 마우스 처리 ──
+  // ── click: PC 마우스 처리 (iframe이 직접 재생 처리) ──
   screen.addEventListener('click', e => {
     if (blockClick) { blockClick = false; e.stopPropagation(); return; }
-    // PC 마우스 클릭
-    const errBtn = e.target.closest('.yt-err-btn');
-    if (errBtn) { const url = errBtn.dataset.yturl; if (url) window.open(url, '_blank'); return; }
-    const area = e.target.closest('.yt-area');
-    if (area && !area.classList.contains('no-video')) playYt(area);
   });
 
   // ── 마우스 휠 (PC) ──
@@ -1477,40 +1431,21 @@ async function loadFeed(cat='all', q='') {
 }
 
 // ── 유튜브 재생: iframe 직접 삽입 방식 ──────────────────────────────────
-function stopAllYt() {
-  document.querySelectorAll('.yt-area.playing').forEach(a => {
-    a.classList.remove('playing');
-    const s2  = a.dataset.sid;
-    const wrap = document.getElementById('yti-' + s2);
-    if (wrap) wrap.innerHTML = ''; // iframe 완전 제거
-    const t2 = document.getElementById('ytt-' + s2);
-    const b2 = document.getElementById('ypb-' + s2);
-    if (t2) t2.style.opacity = '1';
-    if (b2) b2.style.opacity = '1';
+// 스와이프로 카드 이동 시 이전 카드 iframe 정지 (src='' 방식)
+function stopAllYt(prevIdx?) {
+  // prevIdx 지정 시 해당 카드만, 없으면 현재 카드 제외 전체 정지
+  feedShops.forEach((s, i) => {
+    if (prevIdx !== undefined && i !== prevIdx) return;
+    const fr = document.getElementById('yti-' + s.id) as HTMLIFrameElement | null;
+    if (fr && fr.tagName === 'IFRAME') {
+      // src를 빈 값으로 했다가 복원 → 재생 중단, iframe 유지
+      const orig = 'https://www.youtube.com/embed/' + s.youtubeId
+        + '?autoplay=0&playsinline=1&rel=0&modestbranding=1&controls=1';
+      fr.src = '';
+      // 500ms 후 원래 src 복원 (다시 카드로 돌아올 때 로드 가능하게)
+      setTimeout(() => { if (fr) fr.src = orig; }, 500);
+    }
   });
-}
-
-function playYt(area) {
-  if (!area) return;
-  const ytId = area.dataset.ytid;
-  const sid  = area.dataset.sid;
-  if (!ytId || area.classList.contains('playing')) return;
-
-  stopAllYt(); // 다른 재생 중인 카드 모두 중지
-  area.classList.add('playing');
-
-  // wrap div 안에 iframe 동적 생성 → 유튜브 앱 넘어가기 방지
-  const wrap = document.getElementById('yti-' + sid);
-  if (wrap) {
-    const fr = document.createElement('iframe');
-    fr.className = 'yt-iframe';
-    fr.allow    = 'autoplay; encrypted-media; picture-in-picture';
-    fr.setAttribute('allowfullscreen', '');
-    fr.setAttribute('playsinline', '');  // iOS 인라인 재생
-    fr.src = 'https://www.youtube.com/embed/' + ytId
-           + '?autoplay=1&playsinline=1&rel=0&modestbranding=1&controls=1&enablejsapi=0';
-    wrap.appendChild(fr);
-  }
 }
 
 function filterFeed(btn, cat) {
