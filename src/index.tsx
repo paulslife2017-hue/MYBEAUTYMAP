@@ -1046,21 +1046,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
 <div class="toast" id="toast"></div>
 
 <!-- 인앱 브라우저 -->
-<div class="inapp-bg" id="inappBg" onclick="closeInapp()"></div>
-<div class="inapp-sheet" id="inappSheet">
-  <div class="inapp-handle"></div>
-  <div class="inapp-bar">
-    <span class="inapp-title" id="inappTitle">예약하기</span>
-    <button class="inapp-btn inapp-btn-ext" id="inappExtBtn" onclick="openInappExternal()" title="외부 브라우저로 열기">
-      <i class="fas fa-external-link-alt"></i>
-    </button>
-    <button class="inapp-btn inapp-btn-close" onclick="closeInapp()" title="닫기">
-      <i class="fas fa-times"></i>
-    </button>
-  </div>
-  <div class="inapp-loader" id="inappLoader"></div>
-  <iframe class="inapp-iframe" id="inappFrame" src="" allowfullscreen></iframe>
-</div>
+
 
 
 
@@ -1656,40 +1642,11 @@ function trackMapSP(id) { fetch('/api/track/mapsp/'+id,{method:'POST'}); }
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // 인앱 브라우저
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-let inappUrl = '';
-
+// 네이버 URL은 iframe 로드 불가 (map.naver.com 리다이렉트 차단) → window.open 직접 호출
 function openInapp() {
   if (!curShop || !curShop.smartPlaceUrl) { showToast('예약 링크가 없어요'); return; }
   trackSP();
-  inappUrl = curShop.smartPlaceUrl;
-
-  // 타이틀 세팅
-  document.getElementById('inappTitle').textContent = curShop.name + ' 예약하기';
-
-  // iframe 로드
-  const frame  = document.getElementById('inappFrame');
-  const loader = document.getElementById('inappLoader');
-  loader.classList.remove('done');
-  frame.src = '';
-  setTimeout(() => { frame.src = inappUrl; }, 30);
-  frame.onload = () => loader.classList.add('done');
-
-  // 시트 열기
-  document.getElementById('inappBg').classList.add('show');
-  document.getElementById('inappSheet').classList.add('show');
-  document.body.style.overflow = 'hidden';
-}
-
-function closeInapp() {
-  document.getElementById('inappBg').classList.remove('show');
-  document.getElementById('inappSheet').classList.remove('show');
-  document.body.style.overflow = '';
-  // iframe src 초기화 (백그라운드 재생 방지)
-  setTimeout(() => { document.getElementById('inappFrame').src = ''; }, 400);
-}
-
-function openInappExternal() {
-  if (inappUrl) window.open(inappUrl, '_blank', 'noopener');
+  window.open(curShop.smartPlaceUrl, '_blank', 'noopener');
 }
 
 // 인앱 시트 스와이프 다운 닫기
@@ -2010,21 +1967,6 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0a;
 </div>
 
 <!-- 인앱 브라우저 시트 (예약하기) -->
-<div class="map-inapp-bg" id="mapInappBg" onclick="closeMapInapp()"></div>
-<div class="map-inapp-sheet" id="mapInappSheet">
-  <div class="map-inapp-handle"></div>
-  <div class="map-inapp-bar">
-    <span class="map-inapp-title" id="mapInappTitle">예약하기</span>
-    <button class="map-inapp-btn map-inapp-btn-ext" onclick="openMapInappExternal()" title="외부 브라우저로 열기">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-    </button>
-    <button class="map-inapp-btn map-inapp-btn-close" onclick="closeMapInapp()" title="닫기">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-    </button>
-  </div>
-  <div class="map-inapp-loader" id="mapInappLoader"></div>
-  <iframe class="map-inapp-iframe" id="mapInappFrame" src="" allowfullscreen></iframe>
-</div>
 
 <script src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=xjjg4490h8"></script>
 <script>
@@ -2070,29 +2012,13 @@ function playVideo() {
 }
 
 /* ── 예약 (지도 트래킹 포함) ── */
-/* ── 지도 인앱 브라우저 ── */
-let mapInappUrl = '';
+/* ── 예약 버튼 ── */
+// /map 은 iframe 안 → window.top.open 으로 부모 컨텍스트에서 새 탭 열기
+// (네이버 URL은 map.naver.com 리다이렉트로 iframe 자체가 차단됨)
 function openReserve() {
   if (!curShop?.smartPlaceUrl) return;
   fetch('/api/track/mapsp/' + curShop.id, { method: 'POST' }).catch(()=>{});
-  mapInappUrl = curShop.smartPlaceUrl;
-  document.getElementById('mapInappTitle').textContent = (curShop.name || '') + ' 예약하기';
-  const frame  = document.getElementById('mapInappFrame');
-  const loader = document.getElementById('mapInappLoader');
-  loader.classList.remove('done');
-  frame.src = '';
-  setTimeout(() => { frame.src = mapInappUrl; }, 30);
-  frame.onload = () => loader.classList.add('done');
-  document.getElementById('mapInappBg').classList.add('show');
-  document.getElementById('mapInappSheet').classList.add('show');
-}
-function closeMapInapp() {
-  document.getElementById('mapInappBg').classList.remove('show');
-  document.getElementById('mapInappSheet').classList.remove('show');
-  setTimeout(() => { document.getElementById('mapInappFrame').src = ''; }, 400);
-}
-function openMapInappExternal() {
-  if (mapInappUrl) window.open(mapInappUrl, '_blank', 'noopener');
+  (window.top || window).open(curShop.smartPlaceUrl, '_blank', 'noopener');
 }
 
 /* ── 카드 열기 ── */
