@@ -829,7 +829,16 @@ function switchTab(tab) {
   document.getElementById('catBar').classList.toggle('show', tab==='feed');
   if (tab==='map') {
     closeMapPopup();
-    setTimeout(()=>{ if(naverMap) naverMap.autoResize(); }, 50);
+    requestAnimationFrame(()=>{
+      requestAnimationFrame(()=>{
+        if (!mapInited) {
+          initMap();
+        } else if (naverMap) {
+          naverMap.autoResize();
+          loadMapShops(mapCat, nearbyOn, searchQ);
+        }
+      });
+    });
   }
   if (tab==='feed') closeMapPopup();
 }
