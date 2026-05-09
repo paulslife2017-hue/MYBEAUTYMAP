@@ -381,8 +381,8 @@ html,body{height:100%;background:var(--bg);color:#fff;
 #feedScreen.active{display:block}
 #feedScreen::-webkit-scrollbar{display:none}
 #mapScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:var(--nav);
-  visibility:hidden;pointer-events:none;}
-#mapScreen.active{visibility:visible;pointer-events:auto;}
+  opacity:0;pointer-events:none;z-index:-1;}
+#mapScreen.active{opacity:1;pointer-events:auto;z-index:1;}
 
 /* 하단탭 */
 .tabbar{position:fixed;bottom:0;left:0;right:0;z-index:300;height:var(--nav);
@@ -828,8 +828,7 @@ function switchTab(tab) {
   document.getElementById('catBar').classList.toggle('show', tab==='feed');
   if (tab==='map') {
     closeMapPopup();
-    // 컨테이너 크기 강제 지정 후 초기화
-    setTimeout(initMap, 100);
+    if (naverMap) { naverMap.autoResize(); loadMapShops(mapCat, nearbyOn, searchQ); }
   }
   if (tab==='feed') closeMapPopup();
 }
@@ -1339,6 +1338,8 @@ function showToast(msg) {
 }
 
 loadFeed('all');
+// 페이지 로드 시 지도 미리 초기화 (opacity:0 상태라 크기는 정상)
+initMap();
 </script>
 </body>
 </html>`
