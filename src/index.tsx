@@ -579,6 +579,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
   background:rgba(220,0,0,.88);box-shadow:0 4px 20px rgba(0,0,0,.5)}
 .yt-play-btn::before{
   content:'▶';position:absolute;font-size:24px;color:#fff;margin-left:5px}
+.yt-iframe{position:absolute;inset:0;width:100%;height:100%;border:none;background:#000}
 
 /* 업체 정보 바 */
 .shop-bar{flex-shrink:0;padding:18px 14px 14px;
@@ -1198,9 +1199,21 @@ async function loadFeed(cat='all', q='') {
     scr._feedEvt = true;
     scr.addEventListener('click', (e) => {
       const area = e.target.closest('.yt-area');
-      if (area && !area.classList.contains('no-video') && area.dataset.ytid) {
-        window.open('https://www.youtube.com/watch?v=' + area.dataset.ytid, '_blank');
-      }
+      if (!area || area.classList.contains('no-video') || !area.dataset.ytid) return;
+      // 이미 재생 중이면 무시
+      if (area.querySelector('.yt-iframe')) return;
+      // 썸네일·플레이버튼 숨기고 iframe 삽입
+      const thumb = area.querySelector('.yt-thumb');
+      const btn   = area.querySelector('.yt-play-btn');
+      if (thumb) thumb.style.display = 'none';
+      if (btn)   btn.style.display   = 'none';
+      const ifr = document.createElement('iframe');
+      ifr.className = 'yt-iframe';
+      ifr.src = 'https://www.youtube.com/embed/' + area.dataset.ytid
+        + '?autoplay=1&playsinline=1&rel=0&modestbranding=1';
+      ifr.allow = 'autoplay; encrypted-media; fullscreen';
+      ifr.allowFullscreen = true;
+      area.appendChild(ifr);
     });
   }
 }
