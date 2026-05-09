@@ -1309,105 +1309,102 @@ function feedInitSlider() {
   if (feedSliderEventsAttached) return;
   feedSliderEventsAttached = true;
 
-  // click 이벤트: touchend 탭 처리 후 발화되는 유령 click 차단용 플래그
-  let feedTouchHandled = false;
+  const screen = document.getElementById('feedScreen');
 
-  document.getElementById('feedScreen').addEventListener('click', e => {
-    if (feedTouchHandled) {
-      // touchend에서 이미 처리됨 → 유령 click 무시
-      feedTouchHandled = false;
-      e.stopPropagation();
+  // ── 터치 상태 변수 ──
+  let tsX0 = 0, tsY0 = 0;   // touchstart 좌표
+  let tsDy = 0;              // 누적 Y 이동량
+  let tsTarget = null;       // touchstart 타겟 (탭 판단용)
+  let blockClick = false;    // 유령 click 차단 플래그
+
+  // ── touchstart ──
+  screen.addEventListener('touchstart', e => {
+    const t = e.touches[0];
+    tsX0 = t.clientX;
+    tsY0 = t.clientY;
+    tsDy = 0;
+    tsTarget = e.target;
+    blockClick = false;
+    feedTsDiff = 0;
+  }, {passive: true});
+
+  // ── touchmove: 세로 스와이프만 트랙 이동 ──
+  screen.addEventListener('touchmove', e => {
+    const dy = e.touches[0].clientY - tsY0;
+    const dx = e.touches[0].clientX - tsX0;
+    if (Math.abs(dy) >= Math.abs(dx)) {
+      tsDy = dy;
+      feedTsDiff = dy;
+      const track = document.getElementById('feedTrack');
+      if (track) {
+        track.style.transition = 'none';
+        track.style.transform  = 'translateY(' + (-feedIdx * feedSliderH + dy) + 'px)';
+      }
+    }
+  }, {passive: true});
+
+  // ── touchend: 탭 vs 스와이프 분기 ──
+  screen.addEventListener('touchend', e => {
+    const movedY = Math.abs(tsDy);
+    const movedX = Math.abs(e.changedTouches[0].clientX - tsX0);
+    // 탭: X·Y 모두 15px 미만
+    const isTap = movedY < 15 && movedX < 15;
+
+    if (!isTap) {
+      // 스와이프
+      if (movedY > 40) {
+        feedGoTo(tsDy < 0 ? feedIdx + 1 : feedIdx - 1, true);
+      } else {
+        feedGoTo(feedIdx, true, true); // 제자리 snap (pause 스킵)
+      }
+      tsDy = 0; feedTsDiff = 0; tsTarget = null;
       return;
     }
-    // 마우스 클릭만 여기서 처리
 
+    // 탭: track 위치 snap (pause 타이머 없이)
+    const track = document.getElementById('feedTrack');
+    if (track) {
+      track.style.transition = 'transform .35s cubic-bezier(.32,1,.23,1)';
+      track.style.transform  = 'translateY(' + (-feedIdx * feedSliderH) + 'px)';
+    }
+
+    // 탭 대상 처리
+    if (tsTarget) {
+      // yt-err-btn (유튜브 외부 열기)
+      const errBtn = tsTarget.closest('.yt-err-btn');
+      if (errBtn) {
+        blockClick = true;
+        const url = errBtn.dataset.yturl;
+        if (url) window.open(url, '_blank');
+        tsDy = 0; feedTsDiff = 0; tsTarget = null; return;
+      }
+      // btn-book: 기존 onclick 그대로 통과 (blockClick 안 함)
+      if (tsTarget.closest('.btn-book')) {
+        tsDy = 0; feedTsDiff = 0; tsTarget = null; return;
+      }
+      // yt-area 탭 → 재생
+      const area = tsTarget.closest('.yt-area');
+      if (area && !area.classList.contains('no-video')) {
+        blockClick = true; // 유령 click 차단
+        playYt(area);
+        tsDy = 0; feedTsDiff = 0; tsTarget = null; return;
+      }
+    }
+
+    tsDy = 0; feedTsDiff = 0; tsTarget = null;
+  }, {passive: true});
+
+  // ── click: 유령 click 차단 + PC 마우스 처리 ──
+  screen.addEventListener('click', e => {
+    if (blockClick) { blockClick = false; e.stopPropagation(); return; }
+    // PC 마우스 클릭
     const errBtn = e.target.closest('.yt-err-btn');
-    if (errBtn) { e.stopPropagation(); const url = errBtn.dataset.yturl; if (url) window.open(url, '_blank'); return; }
+    if (errBtn) { const url = errBtn.dataset.yturl; if (url) window.open(url, '_blank'); return; }
     const area = e.target.closest('.yt-area');
     if (area && !area.classList.contains('no-video')) playYt(area);
   });
 
-  // 터치 스와이프 + 탭 — feedScreen 레벨로 위임
-  const screen = document.getElementById('feedScreen');
-  let feedTsX = 0, feedTsY = 0, feedTsDiffLocal = 0, feedDragging = false;
-  let feedTsTarget = null;
-
-  screen.addEventListener('touchstart', e => {
-    feedTsX = e.touches[0].clientX;
-    feedTsY = e.touches[0].clientY;
-    feedTsDiffLocal = 0;
-    feedDragging = true;
-    feedTsDiff = 0;
-    feedTsTarget = e.target;
-    feedTouchHandled = false;
-  }, {passive: true});
-
-  screen.addEventListener('touchmove', e => {
-    if (!feedDragging) return;
-    const dy = e.touches[0].clientY - feedTsY;
-    const dx = e.touches[0].clientX - feedTsX;
-    // Y 이동이 X보다 클 때만 세로 스와이프로 처리
-    if (Math.abs(dy) > Math.abs(dx)) {
-      feedTsDiffLocal = dy;
-      feedTsDiff = dy;
-      const track2 = document.getElementById('feedTrack');
-      if (track2) {
-        track2.style.transition = 'none';
-        track2.style.transform  = 'translateY(' + (-feedIdx * feedSliderH + dy) + 'px)';
-      }
-    }
-  }, {passive: true});
-
-  screen.addEventListener('touchend', e => {
-    feedDragging = false;
-    const movedY = Math.abs(feedTsDiffLocal);
-    const isTap  = movedY < 10; // 10px 미만 = 탭
-
-    if (movedY > 40) {
-      // 스와이프: 카드 이동 (pause 타이머 정상 실행)
-      feedGoTo(feedTsDiffLocal < 0 ? feedIdx + 1 : feedIdx - 1, true);
-    } else if (!isTap) {
-      // 살짝 드래그 후 제자리 복귀: snap만, pause 타이머 스킵
-      feedGoTo(feedIdx, true, true);
-    }
-    // isTap일 때는 track 위치만 snap 복원 (pause 타이머 없이)
-    if (isTap) {
-      const track2 = document.getElementById('feedTrack');
-      if (track2) {
-        track2.style.transition = 'transform .35s cubic-bezier(.32,1,.23,1)';
-        track2.style.transform  = 'translateY(' + (-feedIdx * feedSliderH) + 'px)';
-      }
-    }
-
-    // 탭이면 touchend에서 직접 처리하고 유령 click 차단 플래그 세팅
-    if (isTap && feedTsTarget) {
-      const t = feedTsTarget;
-
-
-      const errBtn = t.closest('.yt-err-btn');
-      if (errBtn) {
-        feedTouchHandled = true;
-        const url = errBtn.dataset.yturl; if (url) window.open(url, '_blank');
-        feedTsTarget = null; feedTsDiffLocal = 0; feedTsDiff = 0; return;
-      }
-      // btn-book: onclick이 있으므로 click 이벤트 그대로 통과 (플래그 세팅 안 함)
-      if (t.closest('.btn-book')) {
-        feedTsTarget = null; feedTsDiffLocal = 0; feedTsDiff = 0; return;
-      }
-      const area = t.closest('.yt-area');
-      if (area && !area.classList.contains('no-video')) {
-        feedTouchHandled = true; // 유령 click 차단
-        playYt(area);
-        feedTsTarget = null; feedTsDiffLocal = 0; feedTsDiff = 0; return;
-      }
-    }
-
-    feedTsTarget = null;
-    feedTsDiff = 0;
-    feedTsDiffLocal = 0;
-  }, {passive: true});
-
-  // 마우스 휠 (PC)
+  // ── 마우스 휠 (PC) ──
   let wheelTmr;
   screen.addEventListener('wheel', e => {
     e.preventDefault();
@@ -1417,7 +1414,7 @@ function feedInitSlider() {
     }, 80);
   }, {passive: false});
 
-  // 화면 크기 변경 시 레이아웃 재계산
+  // ── 화면 크기 변경 ──
   window.addEventListener('resize', () => {
     if (document.getElementById('feedScreen').classList.contains('active')) {
       feedApplyLayout();
