@@ -1147,8 +1147,9 @@ async function loadFeed(cat='all', q='') {
   feedCat = cat;
   const screen = document.getElementById('feedScreen');
 
-  // PC 감지: hover 지원 + 터치 없음 + 최소 너비 768px 모두 만족해야 PC
-  const isPC = window.matchMedia('(hover:hover) and (pointer:fine)').matches && window.innerWidth >= 768;
+  // PC 감지: 터치 스크린이 없고 너비 1024px 이상인 경우만 PC
+  const hasTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+  const isPC = !hasTouch && window.innerWidth >= 1024;
 
   // ── PC: 기존 wrapper 제거 후 로딩 스피너를 wrapper 안에 표시 ──
   if (isPC) {
