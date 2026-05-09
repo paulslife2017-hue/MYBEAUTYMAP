@@ -1811,22 +1811,22 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0a;
   .card-close{top:14px;right:14px}
 }
 
-/* PC: padding-top hack으로 16:9 비율 안정적 확보 (overflow-y:auto 컨테이너 안에서도 정확) */
+/* PC: 360px 너비 고정 → 16:9 = 202px 높이 명시 (overflow-y:auto 안에서도 확실하게 동작) */
 @media(min-width:768px){
   .card-media{
-    aspect-ratio:unset;
-    height:auto;
+    height:202px !important;
+    padding-top:0 !important;
     flex-shrink:0;
   }
 }
 .card-handle{width:36px;height:4px;border-radius:2px;
   background:rgba(255,255,255,.18);margin:10px auto 0;flex-shrink:0}
 
-/* 미디어 영역 (유튜브 or 썸네일) — padding-top:56.25% hack으로 16:9 비율 안정 확보 */
+/* 미디어 영역 (유튜브 or 썸네일) */
 .card-media{
   position:relative;
   width:100%;
-  padding-top:56.25%;   /* 9/16 = 56.25% → 16:9 비율 */
+  aspect-ratio:16/9;   /* 모바일: aspect-ratio 정상 동작 */
   background:#000;
   overflow:hidden;
   flex-shrink:0;
