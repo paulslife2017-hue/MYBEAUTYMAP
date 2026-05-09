@@ -1326,44 +1326,116 @@ function mapPage() { return `<!DOCTYPE html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-html,body{width:100%;height:100%;overflow:hidden;background:#111}
+html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0a;
+  font-family:-apple-system,'Pretendard',sans-serif}
 #naverMap{width:100%;height:100%;}
-/* 마커 */
-.nv-pin{display:flex;flex-direction:column;align-items:center;cursor:pointer}
-.nv-pin-label{font-size:11px;font-weight:800;padding:5px 11px;border-radius:20px;
-  white-space:nowrap;box-shadow:0 3px 10px rgba(0,0,0,.45);
-  border:2px solid rgba(255,255,255,.35);font-family:-apple-system,sans-serif;
-  color:#fff;max-width:110px;overflow:hidden;text-overflow:ellipsis}
-.nv-pin-tail{width:0;height:0;border-left:6px solid transparent;
-  border-right:6px solid transparent;margin-top:-1px}
-/* 팝업 */
-#popup{position:fixed;bottom:16px;left:12px;right:12px;z-index:200;
-  background:#111;border-radius:20px;overflow:hidden;
-  box-shadow:0 8px 32px rgba(0,0,0,.7);border:1px solid rgba(255,255,255,.1);
-  transform:translateY(30px);opacity:0;pointer-events:none;
-  transition:transform .3s ease,opacity .25s;display:none}
-#popup.show{transform:translateY(0);opacity:1;pointer-events:auto;display:block}
-.pp-info{padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px}
-.pp-left{flex:1;min-width:0}
-.pp-badge{font-size:10px;font-weight:700;color:#FF4D7D;margin-bottom:4px}
-.pp-name{font-size:16px;font-weight:800;color:#fff;margin-bottom:4px;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pp-meta{font-size:12px;color:rgba(255,255,255,.5)}
-.pp-close{width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.1);
-  border:none;color:#fff;font-size:16px;cursor:pointer;flex-shrink:0;
-  display:flex;align-items:center;justify-content:center}
+
+/* ── 마커 라벨 ── */
+.nv-pin{display:inline-flex;flex-direction:column;align-items:center;cursor:pointer;
+  transition:transform .15s}
+.nv-pin:hover{transform:scale(1.08)}
+.nv-pin-label{font-size:11px;font-weight:800;padding:5px 12px;border-radius:999px;
+  white-space:nowrap;box-shadow:0 3px 12px rgba(0,0,0,.5);
+  border:2px solid rgba(255,255,255,.4);color:#fff;
+  max-width:120px;overflow:hidden;text-overflow:ellipsis;
+  letter-spacing:-.2px;line-height:1}
+.nv-pin-dot{width:6px;height:6px;border-radius:50%;margin-top:3px;
+  box-shadow:0 0 0 2px rgba(255,255,255,.3)}
+
+/* ── 하단 카드 팝업 ── */
+#card{
+  position:fixed;bottom:0;left:0;right:0;z-index:300;
+  background:#1a1a1a;
+  border-radius:22px 22px 0 0;
+  box-shadow:0 -4px 40px rgba(0,0,0,.7);
+  border-top:1px solid rgba(255,255,255,.08);
+  transform:translateY(100%);
+  transition:transform .32s cubic-bezier(.22,.68,0,1.2);
+  overflow:hidden;
+}
+#card.open{transform:translateY(0)}
+
+/* 드래그 핸들 */
+.card-handle{width:36px;height:4px;border-radius:2px;
+  background:rgba(255,255,255,.2);margin:10px auto 0}
+
+/* 썸네일 */
+.card-thumb{width:100%;height:160px;object-fit:cover;display:block}
+.card-thumb-wrap{position:relative}
+.card-cat-badge{
+  position:absolute;top:10px;left:10px;
+  font-size:10px;font-weight:800;padding:3px 9px;border-radius:999px;
+  color:#fff;letter-spacing:.3px;
+}
+.card-featured{
+  position:absolute;top:10px;right:10px;
+  background:#FF4D7D;color:#fff;font-size:10px;font-weight:800;
+  padding:3px 9px;border-radius:999px;
+}
+.card-close{
+  position:absolute;top:8px;right:10px;
+  width:28px;height:28px;border-radius:50%;
+  background:rgba(0,0,0,.55);backdrop-filter:blur(6px);
+  border:none;color:#fff;font-size:14px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+}
+
+/* 카드 바디 */
+.card-body{padding:14px 16px 20px}
+.card-name{font-size:18px;font-weight:800;color:#fff;margin-bottom:5px;
+  letter-spacing:-.4px}
+.card-row{display:flex;align-items:center;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+.card-district{font-size:12px;color:rgba(255,255,255,.45)}
+.card-price{font-size:12px;font-weight:700;color:#FF4D7D;
+  background:rgba(255,77,125,.12);padding:2px 8px;border-radius:999px}
+.card-desc{font-size:13px;color:rgba(255,255,255,.6);line-height:1.5;margin-bottom:12px}
+.card-tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+.card-tag{font-size:11px;color:rgba(255,255,255,.5);
+  background:rgba(255,255,255,.07);padding:3px 9px;border-radius:999px;
+  border:1px solid rgba(255,255,255,.1)}
+
+/* 액션 버튼 */
+.card-actions{display:flex;gap:8px}
+.card-btn{flex:1;height:42px;border-radius:12px;border:none;
+  font-size:13px;font-weight:700;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:6px;
+  font-family:inherit;transition:opacity .15s}
+.card-btn:hover{opacity:.85}
+.btn-reserve{background:#03C75A;color:#fff}
+.btn-call{background:rgba(255,255,255,.1);color:#fff;
+  border:1px solid rgba(255,255,255,.12)}
 </style>
 </head>
 <body>
 <div id="naverMap"></div>
-<div id="popup">
-  <div class="pp-info">
-    <div class="pp-left">
-      <div class="pp-badge" id="ppBadge"></div>
-      <div class="pp-name"  id="ppName"></div>
-      <div class="pp-meta"  id="ppMeta"></div>
+
+<!-- 하단 카드 -->
+<div id="card">
+  <div class="card-handle"></div>
+  <div class="card-thumb-wrap">
+    <img id="cardThumb" class="card-thumb" src="" alt="">
+    <span id="cardCatBadge" class="card-cat-badge"></span>
+    <span id="cardFeatured" class="card-featured" style="display:none">⭐ PICK</span>
+    <button class="card-close" onclick="closeCard()">✕</button>
+  </div>
+  <div class="card-body">
+    <div class="card-name" id="cardName"></div>
+    <div class="card-row">
+      <span class="card-district" id="cardDistrict"></span>
+      <span class="card-price" id="cardPrice"></span>
     </div>
-    <button class="pp-close" onclick="closePopup()">✕</button>
+    <div class="card-desc" id="cardDesc"></div>
+    <div class="card-tags" id="cardTags"></div>
+    <div class="card-actions">
+      <button class="card-btn btn-reserve" id="btnReserve" onclick="openReserve()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        예약하기
+      </button>
+      <button class="card-btn btn-call" id="btnCall" onclick="callShop()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
+        전화하기
+      </button>
+    </div>
   </div>
 </div>
 
@@ -1377,49 +1449,80 @@ const CAT_COLOR = {
 let map = null;
 let markers = [];
 let curCat = 'all';
+let curShop = null;
 
-// 부모에서 카테고리 변경 메시지 수신
+/* 부모 → 카테고리 필터 */
 window.addEventListener('message', e => {
-  if (e.data?.type === 'filterCat') {
-    curCat = e.data.cat;
-    renderMarkers();
-  }
+  if (e.data?.type === 'filterCat') { curCat = e.data.cat; renderMarkers(); }
 });
 
-// 팝업 닫기
-function closePopup() {
-  document.getElementById('popup').classList.remove('show');
+/* 카드 닫기 */
+function closeCard() {
+  document.getElementById('card').classList.remove('open');
+  curShop = null;
 }
 
-// 마커 생성
+/* 예약 / 전화 */
+function openReserve() {
+  if (curShop?.smartPlaceUrl) window.open(curShop.smartPlaceUrl, '_blank');
+}
+function callShop() {
+  if (curShop?.phone) window.location.href = 'tel:' + curShop.phone;
+}
+
+/* 카드 열기 */
+function openCard(shop) {
+  curShop = shop;
+  const color = CAT_COLOR[shop.category] || '#FF4D7D';
+
+  document.getElementById('cardThumb').src    = shop.thumbnail || '';
+  document.getElementById('cardName').textContent    = shop.name;
+  document.getElementById('cardDistrict').textContent = shop.district;
+  document.getElementById('cardPrice').textContent   = shop.price;
+  document.getElementById('cardDesc').textContent    = shop.desc || '';
+
+  const badge = document.getElementById('cardCatBadge');
+  badge.textContent = shop.category;
+  badge.style.background = color;
+
+  const feat = document.getElementById('cardFeatured');
+  feat.style.display = shop.featured ? 'block' : 'none';
+  // featured 일 때 close 버튼이 겹치므로 위치 조정
+  document.querySelector('.card-close').style.right = shop.featured ? '80px' : '10px';
+
+  const tagsEl = document.getElementById('cardTags');
+  tagsEl.innerHTML = (shop.tags || []).map(t =>
+    \`<span class="card-tag">#\${t}</span>\`
+  ).join('');
+
+  document.getElementById('card').classList.add('open');
+
+  // 부모에게 선택 알림
+  window.parent.postMessage({ type:'shopSelected', id: shop.id }, '*');
+  // 지도 부드럽게 이동
+  map.panTo(new naver.maps.LatLng(shop.lat, shop.lng));
+}
+
+/* 마커 생성 */
 function makeMarker(shop) {
   const color = CAT_COLOR[shop.category] || '#FF4D7D';
   const wrap  = document.createElement('div');
   wrap.className = 'nv-pin';
   wrap.innerHTML = \`
     <div class="nv-pin-label" style="background:\${color}">\${shop.name}</div>
-    <div class="nv-pin-tail"  style="border-top:8px solid \${color}"></div>
+    <div class="nv-pin-dot"   style="background:\${color}"></div>
   \`;
-  wrap.onclick = () => {
-    // 팝업 표시
-    document.getElementById('ppBadge').textContent = shop.category;
-    document.getElementById('ppName').textContent  = shop.name;
-    document.getElementById('ppMeta').textContent  = shop.district + ' · ' + shop.price;
-    document.getElementById('popup').classList.add('show');
-    map.panTo(new naver.maps.LatLng(shop.lat, shop.lng));
-    // 부모에게 샵 선택 알림
-    window.parent.postMessage({ type:'shopSelected', id: shop.id }, '*');
-  };
+  wrap.onclick = (e) => { e.stopPropagation(); openCard(shop); };
   return new naver.maps.CustomOverlay({
     position: new naver.maps.LatLng(shop.lat, shop.lng),
-    content: wrap,
-    anchor: new naver.maps.Point(50, 38),
-    map: map,
-    zIndex: shop.featured ? 100 : 10,
+    content:  wrap,
+    anchor:   new naver.maps.Point(50, 34),
+    map:      map,
+    zIndex:   shop.featured ? 100 : 10,
   });
 }
 
-// 마커 렌더링
+/* 마커 렌더링 */
 let allShops = [];
 function renderMarkers() {
   markers.forEach(m => m.setMap(null));
@@ -1428,32 +1531,21 @@ function renderMarkers() {
   list.forEach(s => markers.push(makeMarker(s)));
 }
 
-// 지도 초기화
+/* 지도 초기화 */
 window.onload = async () => {
   map = new naver.maps.Map('naverMap', {
-    center: new naver.maps.LatLng(37.5326, 127.0246),
+    center: new naver.maps.LatLng(37.5172, 127.0246),
     zoom: 12,
-    mapTypeControl: false,
-    scaleControl: false,
-    logoControl: false,
-    mapDataControl: false,
+    mapTypeControl:  false,
+    scaleControl:    false,
+    logoControl:     false,
+    mapDataControl:  false,
   });
-  map.addListener('click', closePopup);
+  // 지도 클릭 시 카드 닫기
+  map.addListener('click', closeCard);
 
-  // ── 테스트용 강남역 더미 핀 ──
-  new naver.maps.Marker({
-    position: new naver.maps.LatLng(37.4979, 127.0276),
-    map: map,
-    title: '강남역 테스트',
-    icon: {
-      content: '<div style="background:#FF4D7D;color:#fff;padding:6px 10px;border-radius:8px;font-size:13px;font-weight:700;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.4)">📍 강남역 테스트</div>',
-      anchor: new naver.maps.Point(60, 20),
-    }
-  });
-
-  // 샵 데이터 로드
   const res = await fetch('/api/shops/all');
-  allShops = await res.json();
+  allShops  = await res.json();
   renderMarkers();
 };
 </script>
