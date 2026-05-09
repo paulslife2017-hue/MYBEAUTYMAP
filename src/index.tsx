@@ -426,7 +426,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
 /* ── 지도 화면: 풀스크린 ── */
 #mapScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:var(--nav);display:none}
 #mapScreen.active{display:block}
-#naverMap{width:100%;height:100%}
+#naverMap{position:absolute;top:0;left:0;right:0;bottom:0;}
 
 /* 지도 위 카테고리 필터 (floating) */
 .map-cat-bar{
@@ -458,7 +458,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
 
 /* ── 지도 위 팝업 카드 (두바이쿠키맵 스타일) ── */
 .map-popup{
-  position:absolute;bottom:calc(var(--panel-h) + 12px);left:12px;right:12px;
+  position:absolute;bottom:16px;left:12px;right:12px;
   z-index:200;
   background:#111;border-radius:20px;
   overflow:hidden;
@@ -529,38 +529,8 @@ html,body{height:100%;background:var(--bg);color:#fff;
   font-size:10px;background:rgba(255,255,255,.07);
   color:rgba(255,255,255,.5);padding:3px 8px;border-radius:8px}
 
-/* ── 하단 미니카드 패널 ── */
-:root{--panel-h:110px}
-.shop-panel{
-  position:absolute;bottom:0;left:0;right:0;z-index:150;
-  height:var(--panel-h);
-  background:rgba(10,10,10,.94);backdrop-filter:blur(14px);
-  border-top:1px solid rgba(255,255,255,.07);
-  display:flex;align-items:center;gap:8px;
-  padding:10px 12px;
-  overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
-.shop-panel::-webkit-scrollbar{display:none}
-
-.spc{
-  flex-shrink:0;width:200px;height:88px;
-  background:rgba(255,255,255,.05);border:1.5px solid rgba(255,255,255,.09);
-  border-radius:14px;overflow:hidden;cursor:pointer;
-  display:flex;transition:border-color .2s,transform .15s;gap:0}
-.spc:active{transform:scale(.96)}
-.spc.sel{border-color:var(--pink);box-shadow:0 0 0 1px var(--pink)}
-.spc-img{width:72px;height:100%;object-fit:cover;display:block;flex-shrink:0}
-.spc-body{
-  padding:8px 10px;flex:1;display:flex;
-  flex-direction:column;justify-content:center;gap:3px;min-width:0}
-.spc-cat{font-size:9px;font-weight:700;color:var(--pink)}
-.spc-name{
-  font-size:12px;font-weight:800;line-height:1.25;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.spc-price{font-size:11px;font-weight:600;color:rgba(255,255,255,.45)}
-.spc-dist{
-  font-size:10px;color:rgba(255,255,255,.3);
-  display:flex;align-items:center;gap:3px}
-.spc-dist i{font-size:9px;color:var(--green)}
+/* ── 하단 미니카드 패널 제거 ── */
+:root{--panel-h:0px}
 
 /* 네이버 지도 커스텀 마커 → 인라인 스타일로 처리, CSS 불필요 */
 
@@ -744,8 +714,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
     </div>
   </div>
 
-  <!-- 하단 미니카드 패널 -->
-  <div class="shop-panel" id="shopPanel"></div>
+
 </section>
 
 <!-- 하단 탭바 -->
@@ -1111,10 +1080,7 @@ function selectShopOnMap(id) {
   // 지도 중심 이동 (팝업 높이만큼 위로 offset)
   naverMap.panTo(new naver.maps.LatLng(shop.lat, shop.lng));
 
-  // 하단 미니카드 하이라이트
-  document.querySelectorAll('.spc').forEach(c=>c.classList.remove('sel'));
-  const spcEl = document.getElementById('spc-'+id);
-  if (spcEl) { spcEl.classList.add('sel'); spcEl.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'}); }
+
 
   // ── 지도 위 팝업 카드 열기 ──
   openMapPopup(shop);
@@ -1187,7 +1153,6 @@ function closeMapPopup() {
     const s = allShops.find(x=>x.id===+sid);
     if (s) { overlay.setContent(buildMarkerEl(s,false)); overlay.setZIndex(s.featured?100:10); }
   });
-  document.querySelectorAll('.spc').forEach(c=>c.classList.remove('sel'));
   curShop = null;
 }
 
@@ -1198,33 +1163,6 @@ async function loadMapShops(cat, nearby, q='') {
   const res = await fetch(url);
   allShops  = await res.json();
   renderNaverMarkers(allShops);
-  renderPanel(allShops);
-}
-
-function renderPanel(shops) {
-  const panel = document.getElementById('shopPanel');
-  if (!shops.length) {
-    panel.innerHTML = '<div style="color:rgba(255,255,255,.2);font-size:13px;font-weight:600;padding:16px;white-space:nowrap">등록된 샵이 없어요 🥲</div>';
-    return;
-  }
-  panel.innerHTML = shops.map(s => {
-    const dist = s.dist!=null
-      ? (s.dist<1 ? Math.round(s.dist*1000)+'m' : s.dist.toFixed(1)+'km')
-      : '';
-    return \`<div class="spc" id="spc-\${s.id}" onclick="selectShopOnMap(\${s.id})">
-      <img class="spc-img" src="\${s.thumbnail}" alt="\${s.name}" loading="lazy"/>
-      <div class="spc-body">
-        <div>
-          <div class="spc-cat">\${s.category}</div>
-          <div class="spc-name">\${s.name}</div>
-        </div>
-        <div>
-          \${dist?'<div class="spc-dist"><i class="fas fa-location-arrow"></i>'+dist+'</div>':''}
-          <div class="spc-price">\${s.price}</div>
-        </div>
-      </div>
-    </div>\`;
-  }).join('');
 }
 
 function filterMap(btn, cat) {
