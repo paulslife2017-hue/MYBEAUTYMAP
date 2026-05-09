@@ -1982,11 +1982,13 @@ function closeCard() {
 
 /* ── 유튜브 재생 ── */
 function playVideo() {
+  // 유튜브 없으면 아무것도 안 함
   if (!curShop?.youtubeId) return;
   const iframe = document.getElementById('cardIframe');
-  iframe.src = \`https://www.youtube.com/embed/\${curShop.youtubeId}?autoplay=1&mute=0&playsinline=1&rel=0&modestbranding=1&color=white\`;
+  // mute=1 필수 → 모바일 autoplay 정책 통과 (앱으로 안 튕김)
+  // 소리는 사용자가 영상 탭해서 직접 켤 수 있음
+  iframe.src = \`https://www.youtube.com/embed/\${curShop.youtubeId}?autoplay=1&mute=1&playsinline=1&rel=0&modestbranding=1&color=white&iv_load_policy=3\`;
   iframe.style.display = 'block';
-  // thumbWrap 전체 숨김 (썸네일+플레이버튼 래퍼)
   document.getElementById('thumbWrap').style.display = 'none';
 }
 
@@ -2003,47 +2005,39 @@ function openCard(shop) {
   curShop = shop;
   const color = CAT_COLOR[shop.category] || '#FF4D7D';
 
-  // iframe 초기화 (about:blank로 정지)
-  const iframe = document.getElementById('cardIframe');
-  iframe.src = 'about:blank';
-  iframe.style.display = 'none';
+  const iframe   = document.getElementById('cardIframe');
+  const thumbWrap = document.getElementById('thumbWrap');
+  const thumb    = document.getElementById('cardThumb');
+  const playBtn  = document.getElementById('playBtn');
 
-  // thumbWrap 복원
-  document.getElementById('thumbWrap').style.display = 'block';
+  // ── 유튜브 있음 → 카드 열리자마자 바로 iframe 재생 (썸네일 단계 없음) ──
+  if (shop.youtubeId) {
+    // mute=1 로 autoplay 정책 통과 → 앱으로 안 튕김
+    iframe.src = \`https://www.youtube.com/embed/\${shop.youtubeId}?autoplay=1&mute=1&playsinline=1&rel=0&modestbranding=1&color=white&iv_load_policy=3\`;
+    iframe.style.display = 'block';
+    thumbWrap.style.display = 'none';
+    playBtn.style.display = 'none';
 
-  // 썸네일: 유튜브 우선 → 등록 썸네일 → 숨김
-  const thumb = document.getElementById('cardThumb');
-  const thumbSrc = shop.youtubeId
-    ? 'https://img.youtube.com/vi/' + shop.youtubeId + '/maxresdefault.jpg'
-    : (shop.thumbnail || '');
-  thumb.onerror = null;
-  thumb.src = 'about:blank';
-  if (thumbSrc) {
-    thumb.style.display = 'block';
-    thumb.onerror = function() {
-      if (shop.youtubeId && this.src.includes('maxresdefault')) {
-        this.onerror = function() {
-          if (shop.thumbnail) {
-            this.onerror = function() { this.style.display = 'none'; };
-            this.src = shop.thumbnail;
-          } else { this.style.display = 'none'; }
-        };
-        this.src = 'https://img.youtube.com/vi/' + shop.youtubeId + '/hqdefault.jpg';
-      } else if (shop.thumbnail && this.src !== shop.thumbnail) {
-        this.onerror = function() { this.style.display = 'none'; };
-        this.src = shop.thumbnail;
-      } else {
-        this.style.display = 'none';
-      }
-    };
-    thumb.src = thumbSrc;
+  // ── 유튜브 없음 → 사진(썸네일)만 표시, 클릭 불가 ──
   } else {
-    thumb.style.display = 'none';
-  }
+    iframe.src = 'about:blank';
+    iframe.style.display = 'none';
+    thumbWrap.style.display = 'block';
+    thumbWrap.style.cursor = 'default';
+    thumbWrap.onclick = null;  // 클릭 이벤트 제거 (사진만)
+    playBtn.style.display = 'none';
 
-  // 유튜브 있으면 플레이 버튼 오버레이 표시 (thumbWrap 클릭 전체가 재생 트리거)
-  const playBtn = document.getElementById('playBtn');
-  playBtn.style.display = shop.youtubeId ? 'flex' : 'none';
+    thumb.onerror = null;
+    thumb.src = 'about:blank';
+    const imgSrc = shop.thumbnail || '';
+    if (imgSrc) {
+      thumb.style.display = 'block';
+      thumb.onerror = function() { this.style.display = 'none'; };
+      thumb.src = imgSrc;
+    } else {
+      thumb.style.display = 'none';
+    }
+  }
 
   // 뱃지
   const catBadge = document.getElementById('cardCatBadge');
