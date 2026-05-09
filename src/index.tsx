@@ -1228,15 +1228,17 @@ function feedCardHTML(s) {
   + '</div>';
 }
 
-function feedGoTo(idx, animate) {
+function feedGoTo(idx, animate, skipPause) {
   const track = document.getElementById('feedTrack');
   if (!track) return;
   const n = feedShops.length;
   if (n === 0) return;
+  const prevIdx = feedIdx;
   feedIdx = Math.max(0, Math.min(idx, n - 1));
   track.style.transition = animate === false ? 'none' : 'transform .35s cubic-bezier(.32,1,.23,1)';
   track.style.transform  = 'translateY(' + (-feedIdx * feedSliderH) + 'px)';
-  // 카드 이동 시 재생 중인 영상 일시정지 + 썸네일 복원
+  // 실제로 카드가 바뀔 때만 pause + 썸네일 복원 (탭으로 제자리 snap 시엔 스킵)
+  if (skipPause || feedIdx === prevIdx) return;
   setTimeout(() => {
     Object.values(ytPlayers).forEach(p => { try { p.pauseVideo(); } catch(e){} });
     document.querySelectorAll('.yt-area.playing').forEach(a => {
@@ -1385,9 +1387,19 @@ function feedInitSlider() {
     const isTap  = movedY < 10; // 10px 미만 = 탭
 
     if (movedY > 40) {
+      // 스와이프: 카드 이동 (pause 타이머 정상 실행)
       feedGoTo(feedTsDiffLocal < 0 ? feedIdx + 1 : feedIdx - 1, true);
-    } else {
-      feedGoTo(feedIdx, true);
+    } else if (!isTap) {
+      // 살짝 드래그 후 제자리 복귀: snap만, pause 타이머 스킵
+      feedGoTo(feedIdx, true, true);
+    }
+    // isTap일 때는 track 위치만 snap 복원 (pause 타이머 없이)
+    if (isTap) {
+      const track2 = document.getElementById('feedTrack');
+      if (track2) {
+        track2.style.transition = 'transform .35s cubic-bezier(.32,1,.23,1)';
+        track2.style.transform  = 'translateY(' + (-feedIdx * feedSliderH) + 'px)';
+      }
     }
 
     // 탭이면 touchend에서 직접 처리하고 유령 click 차단 플래그 세팅
