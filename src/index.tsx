@@ -1113,7 +1113,7 @@ async function loadFeed(cat='all', q='') {
   }
   screen.innerHTML = shops.map((s) => {
     const thumb = s.youtubeId
-      ? \`https://img.youtube.com/vi/\${s.youtubeId}/hqdefault.jpg\`
+      ? \`https://img.youtube.com/vi/\${s.youtubeId}/maxresdefault.jpg\`
       : s.thumbnail;
     const ytArea = s.youtubeId
       ? \`<div class="yt-area" id="yta-\${s.id}" data-ytid="\${s.youtubeId}" onclick="playYt(event.currentTarget)">
@@ -1370,7 +1370,7 @@ function buildMarkerEl(shop, selected) {
 
   // 썸네일: 유튜브 우선 → 등록 썸네일 → 카테고리 색 배경
   const thumbUrl = shop.youtubeId
-    ? 'https://img.youtube.com/vi/' + shop.youtubeId + '/mqdefault.jpg'
+    ? 'https://img.youtube.com/vi/' + shop.youtubeId + '/maxresdefault.jpg'
     : shop.thumbnail || '';
 
   const wrap = document.createElement('div');
@@ -1398,7 +1398,12 @@ function buildMarkerEl(shop, selected) {
     const img = document.createElement('img');
     img.src = thumbUrl;
     img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
-    img.onerror = () => { imgWrap.style.background = ac; img.style.display='none'; };
+    img.onerror = function() {
+      if (this.src.includes('maxresdefault')) {
+        this.onerror = function() { imgWrap.style.background = ac; this.style.display='none'; };
+        this.src = 'https://img.youtube.com/vi/' + shop.youtubeId + '/hqdefault.jpg';
+      } else { imgWrap.style.background = ac; this.style.display='none'; }
+    };
     imgWrap.appendChild(img);
   } else {
     imgWrap.style.background = ac;
@@ -1523,12 +1528,12 @@ function openMapPopup(shop) {
 
   // 유튜브 or 썸네일
   if (shop.youtubeId) {
-    const ytThumb = 'https://img.youtube.com/vi/' + shop.youtubeId + '/mqdefault.jpg';
+    const ytThumb = 'https://img.youtube.com/vi/' + shop.youtubeId + '/maxresdefault.jpg';
     ytEl.innerHTML = \`
       <div class="mp-yt-thumb-wrap" style="position:relative;width:100%;padding-top:52%;background:#111;overflow:hidden">
         <img src="\${ytThumb}"
           style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;cursor:pointer"
-          onerror="this.style.display='none'"
+          onerror="if(this.src.includes('maxresdefault')){this.src=this.src.replace('maxresdefault','hqdefault')}else{this.style.display='none'}"
           onclick="loadYtInPopup('\${shop.youtubeId}')" alt=""/>
         <div onclick="loadYtInPopup('\${shop.youtubeId}')"
           style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
@@ -1988,15 +1993,21 @@ function openCard(shop) {
   // onerror를 src 할당 전에 등록해야 캐시된 broken 이미지도 정상 처리됨
   const thumb = document.getElementById('cardThumb');
   const thumbSrc = shop.youtubeId
-    ? 'https://img.youtube.com/vi/' + shop.youtubeId + '/mqdefault.jpg'
+    ? 'https://img.youtube.com/vi/' + shop.youtubeId + '/maxresdefault.jpg'
     : (shop.thumbnail || '');
   thumb.onerror = null;          // 기존 핸들러 먼저 초기화
   thumb.src = '';                // src 초기화 (캐시 리셋)
   if (thumbSrc) {
     thumb.style.display = 'block';
     thumb.onerror = function() { // src 할당 전에 onerror 등록
-      if (shop.youtubeId && this.src.includes('mqdefault')) {
-        this.onerror = function() { this.style.display = 'none'; };
+      if (shop.youtubeId && this.src.includes('maxresdefault')) {
+        // maxresdefault 없으면 hqdefault 시도
+        this.onerror = function() {
+          if (shop.thumbnail) {
+            this.onerror = function() { this.style.display = 'none'; };
+            this.src = shop.thumbnail;
+          } else { this.style.display = 'none'; }
+        };
         this.src = 'https://img.youtube.com/vi/' + shop.youtubeId + '/hqdefault.jpg';
       } else if (shop.thumbnail && this.src !== shop.thumbnail) {
         this.onerror = function() { this.style.display = 'none'; };
@@ -2581,7 +2592,7 @@ function renderShops(list) {
   const p = document.getElementById('panel-shops');
   if (!list.length) { p.innerHTML='<div class="empty">등록된 업체가 없어요</div>'; return; }
   const fallback = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 60'%3E%3Crect width='60' height='60' fill='%23222'/%3E%3Ctext x='30' y='38' font-size='24' text-anchor='middle'%3E💄%3C/text%3E%3C/svg%3E";
-  const thumb = s => s.thumbnail || (s.youtubeId ? 'https://img.youtube.com/vi/'+s.youtubeId+'/mqdefault.jpg' : fallback);
+  const thumb = s => s.thumbnail || (s.youtubeId ? 'https://img.youtube.com/vi/'+s.youtubeId+'/maxresdefault.jpg' : fallback);
   p.innerHTML = list.map(s => \`
     <div class="shop-card" id="card-\${s.id}">
       <div class="sc-top">
@@ -2622,7 +2633,7 @@ function renderStats(list) {
   const fallback = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 60'%3E%3Crect width='60' height='60' fill='%23222'/%3E%3Ctext x='30' y='38' font-size='24' text-anchor='middle'%3E💄%3C/text%3E%3C/svg%3E";
   p.innerHTML = sorted.map((s,i) => {
     const rc = i===0?'rank1':i===1?'rank2':i===2?'rank3':'rankN';
-    const img = s.thumbnail || (s.youtubeId?'https://img.youtube.com/vi/'+s.youtubeId+'/mqdefault.jpg':fallback);
+    const img = s.thumbnail || (s.youtubeId?'https://img.youtube.com/vi/'+s.youtubeId+'/maxresdefault.jpg':fallback);
     return \`
     <div class="stat-card">
       <img class="stat-thumb" src="\${img}" onerror="this.src='\${fallback}'"/>
@@ -2781,7 +2792,7 @@ async function openModal(id=null) {
     document.getElementById('f-active').value= String(s.active!==false);
     setMode(s.displayMode||'both');
     // 썸네일 미리보기
-    const th = s.thumbnail || (s.youtubeId ? 'https://img.youtube.com/vi/'+s.youtubeId+'/mqdefault.jpg' : FALLBACK_SVG);
+    const th = s.thumbnail || (s.youtubeId ? 'https://img.youtube.com/vi/'+s.youtubeId+'/maxresdefault.jpg' : FALLBACK_SVG);
     document.getElementById('thumbPreview').src = th;
     if (s.youtubeId) previewYt(s.youtubeId);
   }
