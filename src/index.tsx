@@ -381,8 +381,8 @@ html,body{height:100%;background:var(--bg);color:#fff;
 #feedScreen.active{display:block}
 #feedScreen::-webkit-scrollbar{display:none}
 #mapScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:var(--nav);
-  display:none;}
-#mapScreen.active{display:block}
+  visibility:hidden;pointer-events:none;}
+#mapScreen.active{visibility:visible;pointer-events:auto;}
 
 /* 하단탭 */
 .tabbar{position:fixed;bottom:0;left:0;right:0;z-index:300;height:var(--nav);
@@ -829,10 +829,6 @@ function switchTab(tab) {
   if (tab==='map') {
     closeMapPopup();
     // 컨테이너 크기 강제 지정 후 초기화
-    const ms = document.getElementById('mapScreen');
-    const nm = document.getElementById('naverMap');
-    nm.style.width  = ms.offsetWidth  + 'px';
-    nm.style.height = ms.offsetHeight + 'px';
     setTimeout(initMap, 100);
   }
   if (tab==='feed') closeMapPopup();
