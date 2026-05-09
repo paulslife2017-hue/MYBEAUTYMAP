@@ -378,12 +378,12 @@ html,body{height:100%;background:var(--bg);color:#fff;
   bottom:var(--nav);overflow-y:scroll;scroll-snap-type:y mandatory;
   -webkit-overflow-scrolling:touch;scrollbar-width:none;
   transition:top .3s cubic-bezier(.32,1,.23,1);
-  z-index:2;}
-#feedScreen.active{z-index:10;pointer-events:auto;}
-#feedScreen:not(.active){pointer-events:none;}
+  display:none;}
+#feedScreen.active{display:block;}
 #feedScreen::-webkit-scrollbar{display:none}
-#mapScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:var(--nav);z-index:1;}
-#mapScreen.active{z-index:5;}
+#mapScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:var(--nav);
+  display:none;}
+#mapScreen.active{display:block;}
 
 /* 하단탭 */
 .tabbar{position:fixed;bottom:0;left:0;right:0;z-index:300;height:var(--nav);
@@ -1339,8 +1339,6 @@ function showToast(msg) {
 }
 
 loadFeed('all');
-// 페이지 로드 즉시 지도 초기화 (항상 DOM에 존재하므로 크기 정상)
-initMap();
 </script>
 </body>
 </html>`
