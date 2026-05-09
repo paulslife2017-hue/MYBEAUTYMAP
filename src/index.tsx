@@ -582,6 +582,9 @@ html,body{height:100%;background:var(--bg);color:#fff;
 .shop-bar-loc{font-size:11px;color:rgba(255,255,255,.5);
   display:flex;align-items:center;gap:4px}
 .shop-bar-loc i{color:var(--green);font-size:10px;flex-shrink:0}
+.shop-bar-desc{font-size:11px;color:rgba(255,255,255,.4);line-height:1.5;
+  margin-top:6px;display:-webkit-box;-webkit-line-clamp:2;
+  -webkit-box-orient:vertical;overflow:hidden}
 .btn-book{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:3px;
   background:var(--green);color:#fff;border:none;border-radius:14px;
   padding:10px 14px;font-size:12px;font-weight:800;
@@ -1184,8 +1187,9 @@ async function loadFeed(cat='all', q='') {
             <div class="shop-bar-name">\${s.name}</div>
             <div class="shop-bar-loc">
               <i class="fas fa-map-marker-alt"></i>
-              <span>\${s.district} · \${s.price}</span>
+              <span>\${s.address || s.district} · \${s.price}</span>
             </div>
+            \${s.desc ? '<div class="shop-bar-desc">'+s.desc+'</div>' : ''}
           </div>
           \${s.smartPlaceUrl
             ? \`<button class="btn-book"
@@ -1257,8 +1261,9 @@ async function loadFeed(cat='all', q='') {
             <div class="shop-bar-name">\${s.name}</div>
             <div class="shop-bar-loc">
               <i class="fas fa-map-marker-alt"></i>
-              <span>\${s.district} · \${s.price}</span>
+              <span>\${s.address || s.district} · \${s.price}</span>
             </div>
+            \${s.desc ? '<div class="shop-bar-desc">'+s.desc+'</div>' : ''}
           </div>
           \${s.smartPlaceUrl
             ? \`<button class="btn-book"
