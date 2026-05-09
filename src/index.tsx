@@ -1359,42 +1359,94 @@ const CAT_COLOR = {
 };
 function pinColor(cat) { return CAT_COLOR[cat] || '#FF4D7D'; }
 
-// DOM 엘리먼트 방식으로 마커 생성 (인라인 스타일 → CSS 클래스 의존 없음)
+// DOM 엘리먼트 방식으로 마커 생성 (썸네일 카드형)
 function buildMarkerEl(shop, selected) {
-  const bg  = selected ? '#ffffff' : pinColor(shop.category);
-  const txt = selected ? pinColor(shop.category) : '#ffffff';
-  const scale = selected ? 'scale(1.18)' : 'scale(1)';
+  const ac   = pinColor(shop.category);
+  const scale = selected ? 'scale(1.12)' : 'scale(1)';
   const shadow = selected
-    ? '0 4px 18px rgba(255,255,255,.35)'
-    : '0 3px 10px rgba(0,0,0,.45)';
+    ? '0 6px 24px rgba(0,0,0,.7)'
+    : '0 3px 12px rgba(0,0,0,.5)';
+  const border = selected ? '2px solid #fff' : '2px solid rgba(255,255,255,.4)';
+
+  // 썸네일: 유튜브 우선 → 등록 썸네일 → 카테고리 색 배경
+  const thumbUrl = shop.youtubeId
+    ? 'https://img.youtube.com/vi/' + shop.youtubeId + '/mqdefault.jpg'
+    : shop.thumbnail || '';
 
   const wrap = document.createElement('div');
-  wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;cursor:pointer;transform:'+scale+';transition:transform .2s';
+  wrap.style.cssText = [
+    'display:flex;flex-direction:column;align-items:center;',
+    'cursor:pointer;',
+    'transform:' + scale + ';transition:transform .2s;',
+  ].join('');
 
-  const pin = document.createElement('div');
-  pin.style.cssText = \`
-    background:\${bg};color:\${txt};
-    font-size:11px;font-weight:800;
-    padding:5px 11px;border-radius:20px;
-    white-space:nowrap;max-width:110px;
-    overflow:hidden;text-overflow:ellipsis;
-    box-shadow:\${shadow};
-    border:2px solid rgba(255,255,255,\${selected?'.9':'.35'});
-    font-family:-apple-system,sans-serif;
-    letter-spacing:-.2px;
-  \`;
-  pin.textContent = shop.name;
+  // 카드 본체
+  const card = document.createElement('div');
+  card.style.cssText = [
+    'border-radius:10px;overflow:hidden;',
+    'box-shadow:' + shadow + ';',
+    'border:' + border + ';',
+    'width:90px;',
+    'background:#111;',
+  ].join('');
 
+  // 썸네일 영역
+  const imgWrap = document.createElement('div');
+  imgWrap.style.cssText = 'width:90px;height:56px;overflow:hidden;position:relative;';
+
+  if (thumbUrl) {
+    const img = document.createElement('img');
+    img.src = thumbUrl;
+    img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
+    img.onerror = () => { imgWrap.style.background = ac; img.style.display='none'; };
+    imgWrap.appendChild(img);
+  } else {
+    imgWrap.style.background = ac;
+    imgWrap.style.display = 'flex';
+    imgWrap.style.alignItems = 'center';
+    imgWrap.style.justifyContent = 'center';
+    imgWrap.innerHTML = '<span style="font-size:22px">💄</span>';
+  }
+
+  // 유튜브 아이콘 뱃지
+  if (shop.youtubeId) {
+    const ytBadge = document.createElement('div');
+    ytBadge.style.cssText = [
+      'position:absolute;bottom:3px;right:3px;',
+      'background:rgba(255,0,0,.85);border-radius:3px;',
+      'padding:1px 4px;font-size:9px;color:#fff;font-weight:700;',
+    ].join('');
+    ytBadge.textContent = '▶';
+    imgWrap.appendChild(ytBadge);
+  }
+
+  // 업체명 라벨
+  const label = document.createElement('div');
+  label.style.cssText = [
+    'font-size:10px;font-weight:800;color:#fff;',
+    'padding:4px 5px;',
+    'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;',
+    'text-align:center;',
+    'background:rgba(0,0,0,.75);',
+    'font-family:-apple-system,sans-serif;',
+    'border-top:1px solid rgba(255,255,255,.1);',
+  ].join('');
+  label.textContent = shop.name;
+
+  card.appendChild(imgWrap);
+  card.appendChild(label);
+
+  // 말풍선 꼬리
   const tail = document.createElement('div');
-  tail.style.cssText = \`
-    width:0;height:0;
-    border-left:6px solid transparent;
-    border-right:6px solid transparent;
-    border-top:8px solid \${bg};
-    margin-top:-1px;
-  \`;
+  tail.style.cssText = [
+    'width:0;height:0;',
+    'border-left:7px solid transparent;',
+    'border-right:7px solid transparent;',
+    'border-top:9px solid ' + (selected ? 'rgba(255,255,255,.9)' : 'rgba(255,255,255,.4)') + ';',
+    'margin-top:-1px;',
+  ].join('');
 
-  wrap.appendChild(pin);
+  wrap.appendChild(card);
   wrap.appendChild(tail);
   wrap.onclick = (e) => { e.stopPropagation(); selectShopOnMap(shop.id); };
   return wrap;
@@ -1406,7 +1458,7 @@ function createNaverMarker(shop, selected=false) {
   const overlay = new naver.maps.CustomOverlay({
     position: pos,
     content: el,
-    anchor: new naver.maps.Point(el.offsetWidth/2||50, 38),
+    anchor: new naver.maps.Point(45, 74),
     zIndex: selected ? 200 : (shop.featured ? 100 : 10),
     map: naverMap,
   });
