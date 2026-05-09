@@ -577,9 +577,8 @@ html,body{height:100%;background:var(--bg);color:#fff;
 .yt-play-btn::before{
   content:'▶';position:absolute;font-size:24px;
   color:#fff;margin-left:5px;z-index:1}
-/* 유튜브 iframe (재생 후 삽입) */
-.yt-iframe{position:absolute;inset:0;width:100%;height:100%;border:none;z-index:4;display:none}
-.yt-area.playing .yt-iframe{display:block}
+/* 유튜브 iframe (탭 시 동적 생성) */
+.yt-iframe{position:absolute;inset:0;width:100%;height:100%;border:none;z-index:4}
 .yt-area.playing .yt-thumb{opacity:0}
 .yt-area.playing .yt-play-btn{opacity:0;pointer-events:none}
 /* 임베드 불가 영상 안내 */
@@ -1185,7 +1184,7 @@ function feedCardHTML(s) {
         + '<img class="yt-thumb" id="ytt-' + s.id + '" src="' + thumb + '" loading="lazy"'
         + ' data-fb1="' + fb1 + '" data-fb2="' + fb2 + '" ' + onerrorAttr + '>'
         + '<div class="yt-play-btn" id="ypb-' + s.id + '"></div>'
-        + '<iframe class="yt-iframe" id="yti-' + s.id + '" allow="autoplay;encrypted-media;picture-in-picture" allowfullscreen></iframe>'
+        + '<div class="yt-iframe-wrap" id="yti-' + s.id + '"></div>'
         + '<div class="yt-error-overlay" id="yte-' + s.id + '">'
           + '<div class="yt-err-msg">이 영상은 외부 재생이<br>제한되어 있어요</div>'
           + '<button class="yt-err-btn" data-yturl="https://www.youtube.com/watch?v=' + s.youtubeId + '">'
@@ -1228,19 +1227,8 @@ function feedGoTo(idx, animate, skipPause) {
   track.style.transform  = 'translateY(' + (-feedIdx * feedSliderH) + 'px)';
   // 실제로 카드가 바뀔 때만 pause + 썸네일 복원 (탭으로 제자리 snap 시엔 스킵)
   if (skipPause || feedIdx === prevIdx) return;
-  // 카드 이동 시 재생 중인 iframe 중지 + 썸네일 복원
-  setTimeout(() => {
-    document.querySelectorAll('.yt-area.playing').forEach(a => {
-      a.classList.remove('playing');
-      const sid = a.dataset.sid;
-      const fr = document.getElementById('yti-' + sid);
-      if (fr) fr.src = '';
-      const t = document.getElementById('ytt-' + sid);
-      const b = document.getElementById('ypb-' + sid);
-      if (t) t.style.opacity = '1';
-      if (b) b.style.opacity = '1';
-    });
-  }, 380);
+  // 카드 이동 시 재생 중인 iframe 완전 제거 + 썸네일 복원
+  setTimeout(() => { stopAllYt(); }, 380);
 }
 
 function getFeedGeometry() {
@@ -1492,31 +1480,39 @@ async function loadFeed(cat='all', q='') {
 }
 
 // ── 유튜브 재생: iframe 직접 삽입 방식 ──────────────────────────────────
+function stopAllYt() {
+  document.querySelectorAll('.yt-area.playing').forEach(a => {
+    a.classList.remove('playing');
+    const s2  = a.dataset.sid;
+    const wrap = document.getElementById('yti-' + s2);
+    if (wrap) wrap.innerHTML = ''; // iframe 완전 제거
+    const t2 = document.getElementById('ytt-' + s2);
+    const b2 = document.getElementById('ypb-' + s2);
+    if (t2) t2.style.opacity = '1';
+    if (b2) b2.style.opacity = '1';
+  });
+}
+
 function playYt(area) {
   if (!area) return;
   const ytId = area.dataset.ytid;
   const sid  = area.dataset.sid;
   if (!ytId || area.classList.contains('playing')) return;
 
-  // 다른 재생 중인 카드 모두 중지
-  document.querySelectorAll('.yt-area.playing').forEach(a => {
-    a.classList.remove('playing');
-    const s2  = a.dataset.sid;
-    const fr2 = document.getElementById('yti-' + s2);
-    if (fr2) { fr2.src = ''; }  // iframe src 비워서 재생 중지
-    const t2 = document.getElementById('ytt-' + s2);
-    const b2 = document.getElementById('ypb-' + s2);
-    if (t2) t2.style.opacity = '1';
-    if (b2) b2.style.opacity = '1';
-  });
-
+  stopAllYt(); // 다른 재생 중인 카드 모두 중지
   area.classList.add('playing');
 
-  // iframe에 embed URL 세팅 → 즉시 재생
-  const fr = document.getElementById('yti-' + sid);
-  if (fr) {
+  // wrap div 안에 iframe 동적 생성 → 유튜브 앱 넘어가기 방지
+  const wrap = document.getElementById('yti-' + sid);
+  if (wrap) {
+    const fr = document.createElement('iframe');
+    fr.className = 'yt-iframe';
+    fr.allow    = 'autoplay; encrypted-media; picture-in-picture';
+    fr.setAttribute('allowfullscreen', '');
+    fr.setAttribute('playsinline', '');  // iOS 인라인 재생
     fr.src = 'https://www.youtube.com/embed/' + ytId
-           + '?autoplay=1&playsinline=1&rel=0&modestbranding=1&controls=1';
+           + '?autoplay=1&playsinline=1&rel=0&modestbranding=1&controls=1&enablejsapi=0';
+    wrap.appendChild(fr);
   }
 }
 
