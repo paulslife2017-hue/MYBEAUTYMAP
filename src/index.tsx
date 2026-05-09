@@ -1224,31 +1224,33 @@ function feedGoTo(idx, animate) {
   }, 380);
 }
 
-function getFeedHeight() {
-  // CSS와 동일한 계산식: 100dvh - hd - cat - sb - nav - safe
-  const style = getComputedStyle(document.documentElement);
-  const hd  = parseFloat(style.getPropertyValue('--hd'))  || 50;
-  const cat = parseFloat(style.getPropertyValue('--cat')) || 44;
-  const nav = parseFloat(style.getPropertyValue('--nav')) || 60;
-  const sb  = parseFloat(style.getPropertyValue('--sb'))  || 0;
-  // safe-area: feedScreen의 실제 높이를 직접 읽는 것이 가장 정확
-  const screen = document.getElementById('feedScreen');
-  if (screen && screen.getBoundingClientRect().height > 50) {
-    return screen.getBoundingClientRect().height;
-  }
-  // fallback: tabbar 실측 높이로 계산
+function getFeedGeometry() {
+  // DOM 실측값으로 top/height 계산 (CSS 변수 파싱 우회)
+  const catBar = document.getElementById('catBar');
   const tabbar = document.querySelector('.tabbar');
-  const tabH = tabbar ? tabbar.getBoundingClientRect().height : nav;
-  const h = window.innerHeight - hd - cat - sb - tabH;
-  return Math.max(h, 200);
+  const catBottom = catBar ? catBar.getBoundingClientRect().bottom : 94;
+  const tabTop    = tabbar ? tabbar.getBoundingClientRect().top    : (window.innerHeight - 60);
+  const top    = Math.round(catBottom);
+  const height = Math.round(tabTop - catBottom);
+  return { top, height: Math.max(height, 200) };
+}
+
+function getFeedHeight() {
+  return getFeedGeometry().height;
 }
 
 // 이벤트 리스너 중복 등록 방지용 플래그
 let feedSliderEventsAttached = false;
 
 function feedApplyLayout() {
-  // 항상 getFeedHeight() 직접 사용 (clientHeight 의존 제거)
-  feedSliderH = getFeedHeight();
+  // DOM 실측값으로 feedScreen top/height 강제 설정
+  const { top, height } = getFeedGeometry();
+  feedSliderH = height;
+  const screen = document.getElementById('feedScreen');
+  if (screen) {
+    screen.style.top    = top + 'px';
+    screen.style.height = height + 'px';
+  }
   const track = document.getElementById('feedTrack');
   if (!track) return;
   track.style.height = (feedSliderH * feedShops.length) + 'px';
