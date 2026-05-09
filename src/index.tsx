@@ -285,6 +285,7 @@ function favicon(c: any) {
 }
 
 app.get('/admin', (c) => c.html(adminPage()))
+app.get('/map-admin', (c) => c.html(mapAdminPage()))
 app.get('/map', (c) => c.html(mapPage()))
 app.get('/', (c) => c.html(mainPage()))
 
@@ -1330,80 +1331,104 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0a;
   font-family:-apple-system,'Pretendard',sans-serif}
 #naverMap{width:100%;height:100%;}
 
-/* ── 마커 라벨 ── */
-.nv-pin{display:inline-flex;flex-direction:column;align-items:center;cursor:pointer;
-  transition:transform .15s}
-.nv-pin:hover{transform:scale(1.08)}
-.nv-pin-label{font-size:11px;font-weight:800;padding:5px 12px;border-radius:999px;
-  white-space:nowrap;box-shadow:0 3px 12px rgba(0,0,0,.5);
-  border:2px solid rgba(255,255,255,.4);color:#fff;
-  max-width:120px;overflow:hidden;text-overflow:ellipsis;
-  letter-spacing:-.2px;line-height:1}
-.nv-pin-dot{width:6px;height:6px;border-radius:50%;margin-top:3px;
-  box-shadow:0 0 0 2px rgba(255,255,255,.3)}
-
-/* ── 하단 카드 팝업 ── */
+/* ── 하단 카드 ── */
 #card{
   position:fixed;bottom:0;left:0;right:0;z-index:300;
-  background:#1a1a1a;
+  background:#141414;
   border-radius:22px 22px 0 0;
-  box-shadow:0 -4px 40px rgba(0,0,0,.7);
+  box-shadow:0 -4px 40px rgba(0,0,0,.8);
   border-top:1px solid rgba(255,255,255,.08);
   transform:translateY(100%);
   transition:transform .32s cubic-bezier(.22,.68,0,1.2);
   overflow:hidden;
+  max-height:80vh;
+  overflow-y:auto;
 }
 #card.open{transform:translateY(0)}
-
-/* 드래그 핸들 */
 .card-handle{width:36px;height:4px;border-radius:2px;
-  background:rgba(255,255,255,.2);margin:10px auto 0}
+  background:rgba(255,255,255,.18);margin:10px auto 0;flex-shrink:0}
 
-/* 썸네일 */
-.card-thumb{width:100%;height:160px;object-fit:cover;display:block}
-.card-thumb-wrap{position:relative}
-.card-cat-badge{
-  position:absolute;top:10px;left:10px;
-  font-size:10px;font-weight:800;padding:3px 9px;border-radius:999px;
-  color:#fff;letter-spacing:.3px;
+/* 미디어 영역 (유튜브 or 썸네일) */
+.card-media{position:relative;width:100%;aspect-ratio:16/9;background:#000;overflow:hidden}
+.card-media img{width:100%;height:100%;object-fit:cover;display:block}
+.card-media iframe{position:absolute;inset:0;width:100%;height:100%;border:none}
+/* 썸네일 위 플레이 버튼 */
+.play-btn{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.3);cursor:pointer;transition:background .2s;
 }
-.card-featured{
-  position:absolute;top:10px;right:10px;
-  background:#FF4D7D;color:#fff;font-size:10px;font-weight:800;
-  padding:3px 9px;border-radius:999px;
+.play-btn:hover{background:rgba(0,0,0,.15)}
+.play-icon{
+  width:52px;height:52px;border-radius:50%;
+  background:rgba(255,0,0,.9);display:flex;align-items:center;justify-content:center;
+  box-shadow:0 4px 20px rgba(0,0,0,.5);
+}
+.play-icon svg{margin-left:3px}
+/* 카드 상단 뱃지 오버레이 */
+.card-overlay{
+  position:absolute;top:10px;left:10px;right:10px;
+  display:flex;justify-content:space-between;align-items:flex-start;
+  pointer-events:none;
+}
+.card-cat-badge{
+  font-size:10px;font-weight:800;padding:4px 10px;border-radius:999px;
+  color:#fff;letter-spacing:.3px;backdrop-filter:blur(4px);
+  background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.2);
+}
+.card-feat-badge{
+  font-size:10px;font-weight:800;padding:4px 10px;border-radius:999px;
+  color:#fff;background:#FF4D7D;
 }
 .card-close{
-  position:absolute;top:8px;right:10px;
-  width:28px;height:28px;border-radius:50%;
-  background:rgba(0,0,0,.55);backdrop-filter:blur(6px);
-  border:none;color:#fff;font-size:14px;cursor:pointer;
-  display:flex;align-items:center;justify-content:center;
+  position:absolute;top:10px;right:10px;
+  width:30px;height:30px;border-radius:50%;
+  background:rgba(0,0,0,.6);backdrop-filter:blur(6px);
+  border:1px solid rgba(255,255,255,.15);color:#fff;font-size:14px;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  pointer-events:auto;
 }
 
 /* 카드 바디 */
-.card-body{padding:14px 16px 20px}
-.card-name{font-size:18px;font-weight:800;color:#fff;margin-bottom:5px;
-  letter-spacing:-.4px}
-.card-row{display:flex;align-items:center;gap:6px;margin-bottom:10px;flex-wrap:wrap}
-.card-district{font-size:12px;color:rgba(255,255,255,.45)}
-.card-price{font-size:12px;font-weight:700;color:#FF4D7D;
-  background:rgba(255,77,125,.12);padding:2px 8px;border-radius:999px}
-.card-desc{font-size:13px;color:rgba(255,255,255,.6);line-height:1.5;margin-bottom:12px}
-.card-tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
-.card-tag{font-size:11px;color:rgba(255,255,255,.5);
-  background:rgba(255,255,255,.07);padding:3px 9px;border-radius:999px;
-  border:1px solid rgba(255,255,255,.1)}
-
-/* 액션 버튼 */
-.card-actions{display:flex;gap:8px}
-.card-btn{flex:1;height:42px;border-radius:12px;border:none;
-  font-size:13px;font-weight:700;cursor:pointer;
-  display:flex;align-items:center;justify-content:center;gap:6px;
-  font-family:inherit;transition:opacity .15s}
-.card-btn:hover{opacity:.85}
-.btn-reserve{background:#03C75A;color:#fff}
-.btn-call{background:rgba(255,255,255,.1);color:#fff;
-  border:1px solid rgba(255,255,255,.12)}
+.card-body{padding:14px 16px 28px}
+.card-name{
+  font-size:18px;font-weight:800;color:#fff;
+  margin-bottom:8px;letter-spacing:-.4px;
+}
+/* 위치 + 가격 한 줄 */
+.card-meta{
+  display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;
+}
+.card-location{
+  display:flex;align-items:center;gap:4px;
+  font-size:12px;color:rgba(255,255,255,.45);
+}
+.card-location svg{flex-shrink:0}
+.card-price{
+  font-size:12px;font-weight:700;color:#FF4D7D;
+  background:rgba(255,77,125,.12);padding:3px 9px;
+  border-radius:999px;border:1px solid rgba(255,77,125,.2);
+}
+/* 설명 */
+.card-desc{
+  font-size:13px;color:rgba(255,255,255,.55);
+  line-height:1.55;margin-bottom:12px;
+}
+/* 태그 */
+.card-tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
+.card-tag{
+  font-size:11px;color:rgba(255,255,255,.45);
+  background:rgba(255,255,255,.06);padding:3px 9px;
+  border-radius:999px;border:1px solid rgba(255,255,255,.09);
+}
+/* 예약 버튼 */
+.btn-reserve{
+  width:100%;height:46px;border-radius:14px;border:none;
+  background:#03C75A;color:#fff;
+  font-size:14px;font-weight:800;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  font-family:inherit;letter-spacing:-.2px;transition:opacity .15s;
+}
+.btn-reserve:hover{opacity:.88}
 </style>
 </head>
 <body>
@@ -1412,30 +1437,40 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0a;
 <!-- 하단 카드 -->
 <div id="card">
   <div class="card-handle"></div>
-  <div class="card-thumb-wrap">
-    <img id="cardThumb" class="card-thumb" src="" alt="">
-    <span id="cardCatBadge" class="card-cat-badge"></span>
-    <span id="cardFeatured" class="card-featured" style="display:none">⭐ PICK</span>
+  <!-- 미디어 -->
+  <div class="card-media" id="cardMedia">
+    <img id="cardThumb" src="" alt="">
+    <!-- 유튜브 있을 때 플레이 버튼 -->
+    <div class="play-btn" id="playBtn" style="display:none" onclick="playVideo()">
+      <div class="play-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><polygon points="5,3 19,12 5,21"/></svg>
+      </div>
+    </div>
+    <!-- 실제 유튜브 iframe (클릭 후 로드) -->
+    <iframe id="cardIframe" src="" allow="autoplay;encrypted-media;picture-in-picture" allowfullscreen style="display:none"></iframe>
+    <!-- 오버레이 뱃지 -->
+    <div class="card-overlay">
+      <span id="cardCatBadge" class="card-cat-badge"></span>
+      <span id="cardFeatBadge" class="card-feat-badge" style="display:none">⭐ PICK</span>
+    </div>
     <button class="card-close" onclick="closeCard()">✕</button>
   </div>
+  <!-- 바디 -->
   <div class="card-body">
     <div class="card-name" id="cardName"></div>
-    <div class="card-row">
-      <span class="card-district" id="cardDistrict"></span>
+    <div class="card-meta">
+      <span class="card-location">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.4)" stroke-width="2"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
+        <span id="cardAddress"></span>
+      </span>
       <span class="card-price" id="cardPrice"></span>
     </div>
     <div class="card-desc" id="cardDesc"></div>
     <div class="card-tags" id="cardTags"></div>
-    <div class="card-actions">
-      <button class="card-btn btn-reserve" id="btnReserve" onclick="openReserve()">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-        예약하기
-      </button>
-      <button class="card-btn btn-call" id="btnCall" onclick="callShop()">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
-        전화하기
-      </button>
-    </div>
+    <button class="btn-reserve" id="btnReserve" onclick="openReserve()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+      네이버 예약하기
+    </button>
   </div>
 </div>
 
@@ -1446,60 +1481,80 @@ const CAT_COLOR = {
   '헤어':'#F59E0B','왁싱':'#EC4899','반영구':'#06B6D4','병원':'#3B82F6'
 };
 
-let map = null;
-let markers = [];
-let curCat = 'all';
-let curShop = null;
+let map = null, markers = [], curCat = 'all', curShop = null;
 
-/* 부모 → 카테고리 필터 */
 window.addEventListener('message', e => {
   if (e.data?.type === 'filterCat') { curCat = e.data.cat; renderMarkers(); }
 });
 
-/* 카드 닫기 */
+/* ── 카드 닫기 ── */
 function closeCard() {
   document.getElementById('card').classList.remove('open');
+  // iframe 정지
+  document.getElementById('cardIframe').src = '';
+  document.getElementById('cardIframe').style.display = 'none';
+  document.getElementById('cardThumb').style.display = 'block';
+  document.getElementById('playBtn').style.display = 'none';
   curShop = null;
 }
 
-/* 예약 / 전화 */
+/* ── 유튜브 재생 ── */
+function playVideo() {
+  if (!curShop?.youtubeId) return;
+  const iframe = document.getElementById('cardIframe');
+  iframe.src = \`https://www.youtube.com/embed/\${curShop.youtubeId}?autoplay=1&playsinline=1&rel=0&modestbranding=1\`;
+  iframe.style.display = 'block';
+  document.getElementById('playBtn').style.display = 'none';
+  document.getElementById('cardThumb').style.display = 'none';
+}
+
+/* ── 예약 ── */
 function openReserve() {
   if (curShop?.smartPlaceUrl) window.open(curShop.smartPlaceUrl, '_blank');
 }
-function callShop() {
-  if (curShop?.phone) window.location.href = 'tel:' + curShop.phone;
-}
 
-/* 카드 열기 */
+/* ── 카드 열기 ── */
 function openCard(shop) {
   curShop = shop;
   const color = CAT_COLOR[shop.category] || '#FF4D7D';
 
-  document.getElementById('cardThumb').src    = shop.thumbnail || '';
-  document.getElementById('cardName').textContent    = shop.name;
-  document.getElementById('cardDistrict').textContent = shop.district;
-  document.getElementById('cardPrice').textContent   = shop.price;
-  document.getElementById('cardDesc').textContent    = shop.desc || '';
+  // 미디어: iframe 초기화
+  const iframe = document.getElementById('cardIframe');
+  iframe.src = '';
+  iframe.style.display = 'none';
 
-  const badge = document.getElementById('cardCatBadge');
-  badge.textContent = shop.category;
-  badge.style.background = color;
+  // 썸네일
+  const thumb = document.getElementById('cardThumb');
+  thumb.src = shop.thumbnail || 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=600&q=80';
+  thumb.style.display = 'block';
 
-  const feat = document.getElementById('cardFeatured');
-  feat.style.display = shop.featured ? 'block' : 'none';
-  // featured 일 때 close 버튼이 겹치므로 위치 조정
-  document.querySelector('.card-close').style.right = shop.featured ? '80px' : '10px';
+  // 유튜브 있으면 플레이 버튼 표시
+  const playBtn = document.getElementById('playBtn');
+  playBtn.style.display = shop.youtubeId ? 'flex' : 'none';
 
-  const tagsEl = document.getElementById('cardTags');
-  tagsEl.innerHTML = (shop.tags || []).map(t =>
-    \`<span class="card-tag">#\${t}</span>\`
-  ).join('');
+  // 뱃지
+  const catBadge = document.getElementById('cardCatBadge');
+  catBadge.textContent = shop.category;
+  catBadge.style.background = color + '99';
+
+  document.getElementById('cardFeatBadge').style.display = shop.featured ? 'block' : 'none';
+
+  // 텍스트
+  document.getElementById('cardName').textContent = shop.name;
+  document.getElementById('cardAddress').textContent = shop.address || shop.district || '';
+  document.getElementById('cardPrice').textContent = shop.price;
+  document.getElementById('cardDesc').textContent = shop.desc || '';
+
+  // 태그
+  document.getElementById('cardTags').innerHTML =
+    (shop.tags || []).map(t => \`<span class="card-tag">#\${t}</span>\`).join('');
+
+  // 예약 버튼
+  const reserveBtn = document.getElementById('btnReserve');
+  reserveBtn.style.display = shop.smartPlaceUrl ? 'flex' : 'none';
 
   document.getElementById('card').classList.add('open');
-
-  // 부모에게 선택 알림
   window.parent.postMessage({ type:'shopSelected', id: shop.id }, '*');
-  // 지도 부드럽게 이동
   map.panTo(new naver.maps.LatLng(shop.lat, shop.lng));
 }
 
@@ -2029,6 +2084,510 @@ async function delShop(id, name) {
 
 loadAll();
 setInterval(loadAll, 30000);
+</script>
+</body>
+</html>`
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// 지도 전용 관리자 페이지  /map-admin
+// ══════════════════════════════════════════════════════════════════════════
+function mapAdminPage() { return `<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>지도 관리자 – 마이뷰티맵</title>
+<link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--pink:#FF4D7D;--green:#03C75A;--bg:#0a0a0a;--card:#141414;--border:rgba(255,255,255,.08)}
+body{font-family:'Pretendard',sans-serif;background:var(--bg);color:#fff;min-height:100vh}
+
+/* 상단바 */
+.top{background:rgba(16,16,16,.98);border-bottom:1px solid var(--border);
+  padding:0 16px;height:56px;display:flex;align-items:center;gap:12px;
+  position:sticky;top:0;z-index:50;backdrop-filter:blur(12px)}
+.back{font-size:20px;color:rgba(255,255,255,.5);text-decoration:none;transition:color .15s}
+.back:hover{color:#fff}
+.ttl{font-size:17px;font-weight:800;flex:1}
+.ttl span{font-size:11px;font-weight:600;color:rgba(255,255,255,.35);
+  background:rgba(255,255,255,.07);padding:2px 8px;border-radius:6px;margin-left:8px}
+.add-btn{background:var(--pink);color:#fff;border:none;border-radius:10px;
+  padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;
+  display:flex;align-items:center;gap:6px;font-family:inherit;transition:opacity .15s}
+.add-btn:hover{opacity:.88}
+
+/* 통계 바 */
+.stat-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:14px 16px}
+.sb{background:var(--card);border:1px solid var(--border);border-radius:14px;
+  padding:12px;text-align:center}
+.sb-n{font-size:22px;font-weight:800;color:#FF8FA3}
+.sb-l{font-size:10px;color:rgba(255,255,255,.3);margin-top:3px;font-weight:600;letter-spacing:.3px}
+
+/* 필터 바 */
+.filter-bar{padding:0 16px 12px;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+.filter-bar::-webkit-scrollbar{display:none}
+.fb{border:1.5px solid var(--border);border-radius:999px;padding:6px 14px;
+  font-size:12px;font-weight:700;color:rgba(255,255,255,.45);
+  background:transparent;cursor:pointer;white-space:nowrap;font-family:inherit;transition:all .2s}
+.fb.on{background:var(--pink);border-color:var(--pink);color:#fff}
+
+/* 업체 리스트 */
+.list{padding:0 16px 100px}
+.shop-item{background:var(--card);border:1px solid var(--border);border-radius:16px;
+  margin-bottom:10px;overflow:hidden;transition:border-color .2s}
+.shop-item:hover{border-color:rgba(255,255,255,.15)}
+
+/* 미디어 영역 */
+.si-media{position:relative;width:100%;aspect-ratio:16/9;background:#000;overflow:hidden}
+.si-media img{width:100%;height:100%;object-fit:cover;display:block}
+.si-media-badge{position:absolute;top:8px;left:8px;
+  font-size:9px;font-weight:800;padding:3px 8px;border-radius:999px;
+  color:#fff;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);
+  border:1px solid rgba(255,255,255,.15)}
+.si-yt-badge{position:absolute;top:8px;right:8px;
+  background:rgba(255,0,0,.85);color:#fff;
+  font-size:9px;font-weight:800;padding:3px 8px;border-radius:999px;
+  display:flex;align-items:center;gap:4px}
+.si-feat{position:absolute;bottom:8px;left:8px;
+  background:var(--pink);color:#fff;
+  font-size:9px;font-weight:800;padding:3px 8px;border-radius:999px}
+
+/* 바디 */
+.si-body{padding:12px 14px 14px}
+.si-row1{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px}
+.si-name{font-size:15px;font-weight:800;flex:1;letter-spacing:-.3px}
+.si-status{display:flex;gap:4px}
+.badge-on{font-size:9px;font-weight:700;padding:2px 7px;border-radius:5px;
+  background:rgba(3,199,90,.12);color:var(--green);border:1px solid rgba(3,199,90,.2)}
+.badge-off{font-size:9px;font-weight:700;padding:2px 7px;border-radius:5px;
+  background:rgba(255,255,255,.07);color:rgba(255,255,255,.3);border:1px solid var(--border)}
+.si-meta{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+.si-cat{font-size:11px;font-weight:700;color:var(--pink)}
+.si-price{font-size:11px;color:rgba(255,255,255,.4)}
+.si-addr{font-size:11px;color:rgba(255,255,255,.35);margin-bottom:10px;
+  display:flex;align-items:center;gap:4px}
+.si-desc{font-size:11px;color:rgba(255,255,255,.35);line-height:1.45;margin-bottom:10px}
+.si-tags{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px}
+.si-tag{font-size:10px;color:rgba(255,255,255,.35);
+  background:rgba(255,255,255,.05);padding:2px 7px;border-radius:999px;
+  border:1px solid var(--border)}
+.si-btns{display:flex;gap:6px}
+.btn-edit{flex:1;background:rgba(255,255,255,.07);border:1px solid var(--border);
+  color:#fff;border-radius:10px;padding:9px;font-size:12px;font-weight:700;
+  cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:5px;
+  transition:background .15s}
+.btn-edit:hover{background:rgba(255,255,255,.13)}
+.btn-del{background:rgba(255,77,125,.08);border:1px solid rgba(255,77,125,.2);
+  color:var(--pink);border-radius:10px;padding:9px 14px;font-size:12px;font-weight:700;
+  cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:5px;
+  transition:background .15s}
+.btn-del:hover{background:rgba(255,77,125,.15)}
+
+/* 빈 상태 */
+.empty{text-align:center;padding:60px 20px;color:rgba(255,255,255,.2)}
+.empty i{font-size:40px;margin-bottom:12px;display:block}
+
+/* 모달 */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;
+  display:flex;align-items:flex-end;justify-content:center}
+.modal-bg.hidden{display:none}
+.modal{background:#1a1a1a;border-radius:22px 22px 0 0;width:100%;max-width:640px;
+  max-height:92vh;overflow-y:auto;padding:0 18px 48px}
+.modal-handle{width:36px;height:4px;background:rgba(255,255,255,.12);
+  border-radius:4px;margin:12px auto 0}
+.modal-head{display:flex;align-items:center;justify-content:space-between;
+  padding:16px 0 14px;border-bottom:1px solid var(--border);margin-bottom:16px}
+.modal-ttl{font-size:18px;font-weight:800}
+.modal-close{background:rgba(255,255,255,.07);border:1px solid var(--border);
+  color:rgba(255,255,255,.6);border-radius:8px;padding:6px 12px;
+  font-size:12px;cursor:pointer;font-family:inherit}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:10px;font-weight:700;letter-spacing:.5px;
+  color:rgba(255,255,255,.35);margin-bottom:5px;text-transform:uppercase}
+.field input,.field select,.field textarea{
+  width:100%;background:rgba(255,255,255,.06);
+  border:1.5px solid rgba(255,255,255,.09);
+  border-radius:10px;padding:10px 12px;color:#fff;
+  font-size:14px;font-family:inherit;outline:none;transition:border-color .15s}
+.field input:focus,.field textarea:focus{border-color:var(--pink)}
+.field select option{background:#1a1a1a}
+.field textarea{resize:vertical;min-height:72px;line-height:1.5}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+/* 지오코딩 버튼 */
+.geo-wrap{display:flex;gap:8px}
+.geo-btn{flex-shrink:0;background:var(--pink);color:#fff;border:none;border-radius:10px;
+  padding:0 16px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;
+  white-space:nowrap;height:42px;display:flex;align-items:center;gap:5px;transition:opacity .15s}
+.geo-btn:hover{opacity:.88}
+.geo-status{margin-top:5px;font-size:11px;display:none}
+/* 유튜브 미리보기 */
+.yt-preview{margin-top:8px;border-radius:10px;overflow:hidden;
+  background:#000;aspect-ratio:16/9;display:none}
+.yt-preview iframe{width:100%;height:100%;border:none}
+/* 저장 */
+.modal-foot{display:flex;gap:10px;margin-top:20px}
+.btn-cancel{background:rgba(255,255,255,.07);color:rgba(255,255,255,.5);
+  border:1.5px solid var(--border);border-radius:12px;
+  padding:14px 20px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
+.btn-save{flex:1;background:var(--pink);color:#fff;border:none;border-radius:12px;
+  padding:14px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit;transition:opacity .15s}
+.btn-save:hover{opacity:.88}
+/* 섹션 구분 */
+.section-label{font-size:10px;font-weight:700;letter-spacing:.8px;
+  color:rgba(255,255,255,.25);text-transform:uppercase;
+  margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <a class="back" href="/"><i class="fas fa-arrow-left"></i></a>
+  <div class="ttl">지도 관리자 <span>MAP ADMIN</span></div>
+  <button class="add-btn" onclick="openModal()">
+    <i class="fas fa-plus"></i> 업체 추가
+  </button>
+</div>
+
+<!-- 통계 바 -->
+<div class="stat-bar">
+  <div class="sb"><div class="sb-n" id="stTotal">-</div><div class="sb-l">📍 전체 업체</div></div>
+  <div class="sb"><div class="sb-n" id="stActive">-</div><div class="sb-l">✅ 공개중</div></div>
+  <div class="sb"><div class="sb-n" id="stFeat">-</div><div class="sb-l">⭐ 추천</div></div>
+</div>
+
+<!-- 카테고리 필터 -->
+<div class="filter-bar" id="filterBar">
+  <button class="fb on" onclick="setFilter('all',this)">전체</button>
+  <button class="fb" onclick="setFilter('피부관리',this)">피부관리</button>
+  <button class="fb" onclick="setFilter('마사지',this)">마사지</button>
+  <button class="fb" onclick="setFilter('헤드스파',this)">헤드스파</button>
+  <button class="fb" onclick="setFilter('헤어',this)">헤어</button>
+  <button class="fb" onclick="setFilter('왁싱',this)">왁싱</button>
+  <button class="fb" onclick="setFilter('반영구',this)">반영구</button>
+  <button class="fb" onclick="setFilter('병원',this)">병원</button>
+</div>
+
+<!-- 업체 목록 -->
+<div class="list" id="shopList"></div>
+
+<!-- 추가/수정 모달 -->
+<div class="modal-bg hidden" id="modalBg" onclick="bgClick(event)">
+  <div class="modal" id="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-head">
+      <div class="modal-ttl" id="modalTtl">업체 추가</div>
+      <button class="modal-close" onclick="closeModal()">닫기</button>
+    </div>
+
+    <div class="section-label">기본 정보</div>
+    <div class="field">
+      <label>업체명 *</label>
+      <input id="f-name" type="text" placeholder="예: 글로우 스킨 강남"/>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>카테고리 *</label>
+        <select id="f-cat">
+          <option>피부관리</option><option>마사지</option><option>헤드스파</option>
+          <option>헤어</option><option>왁싱</option><option>반영구</option><option>병원</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>가격대</label>
+        <input id="f-price" type="text" placeholder="예: 5만원~"/>
+      </div>
+    </div>
+    <div class="field">
+      <label>업체 소개</label>
+      <textarea id="f-desc" placeholder="업체 간단 소개 (지도 카드에 표시됩니다)"></textarea>
+    </div>
+    <div class="field">
+      <label>태그 (쉼표로 구분)</label>
+      <input id="f-tags" type="text" placeholder="리프팅, 보습, 트러블케어"/>
+    </div>
+
+    <div class="section-label">위치 정보</div>
+    <div class="field">
+      <label>주소 *</label>
+      <div class="geo-wrap">
+        <input id="f-addr" type="text" placeholder="예: 서울 강남구 논현로 123"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();geocodeAddr()}"/>
+        <button class="geo-btn" onclick="geocodeAddr()" id="geoBtn">
+          <i class="fas fa-crosshairs"></i> 좌표찾기
+        </button>
+      </div>
+      <div class="geo-status" id="geoStatus"></div>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>구/지역 <span style="color:rgba(255,255,255,.2)">(자동)</span></label>
+        <input id="f-dist" type="text" placeholder="강남구"/>
+      </div>
+      <div class="field">
+        <label>전화번호</label>
+        <input id="f-phone" type="tel" placeholder="02-1234-5678"/>
+      </div>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>위도 (lat) <span style="color:rgba(255,255,255,.2)">(자동)</span></label>
+        <input id="f-lat" type="number" step="0.000001" placeholder="자동입력"/>
+      </div>
+      <div class="field">
+        <label>경도 (lng) <span style="color:rgba(255,255,255,.2)">(자동)</span></label>
+        <input id="f-lng" type="number" step="0.000001" placeholder="자동입력"/>
+      </div>
+    </div>
+
+    <div class="section-label">미디어</div>
+    <div class="field">
+      <label>🎬 유튜브 영상 ID <span style="color:rgba(255,255,255,.2)">URL 마지막 부분</span></label>
+      <input id="f-yt" type="text" placeholder="예: mldig2ZiRwA" oninput="previewYt(this.value)"/>
+      <div class="yt-preview" id="ytPreview">
+        <iframe id="ytFrame" src="" allow="autoplay;encrypted-media" allowfullscreen></iframe>
+      </div>
+    </div>
+    <div class="field">
+      <label>썸네일 이미지 URL <span style="color:rgba(255,255,255,.2)">(유튜브 없을 때 표시)</span></label>
+      <input id="f-thumb" type="text" placeholder="https://...jpg"/>
+    </div>
+
+    <div class="section-label">예약 & 노출</div>
+    <div class="field">
+      <label>📅 네이버 예약 URL</label>
+      <input id="f-url" type="text" placeholder="https://naver.me/xxxxx"/>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>상단 추천 노출</label>
+        <select id="f-feat">
+          <option value="false">일반</option>
+          <option value="true">⭐ 추천 (상단)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>공개 여부</label>
+        <select id="f-active">
+          <option value="true">✅ 공개</option>
+          <option value="false">🔒 비공개</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="modal-foot">
+      <button class="btn-cancel" onclick="closeModal()">취소</button>
+      <button class="btn-save" onclick="saveShop()">저장하기</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const CAT_COLOR = {
+  '마사지':'#10B981','헤드스파':'#6366F1','피부관리':'#FF4D7D',
+  '헤어':'#F59E0B','왁싱':'#EC4899','반영구':'#06B6D4','병원':'#3B82F6'
+};
+let allShops = [], curFilter = 'all', editId = null;
+
+/* ── 로드 ── */
+async function loadShops() {
+  const res  = await fetch('/api/shops/all');
+  allShops   = await res.json();
+  updateStats();
+  renderList();
+}
+
+function updateStats() {
+  document.getElementById('stTotal').textContent  = allShops.length;
+  document.getElementById('stActive').textContent = allShops.filter(s=>s.active).length;
+  document.getElementById('stFeat').textContent   = allShops.filter(s=>s.featured).length;
+}
+
+/* ── 필터 ── */
+function setFilter(cat, btn) {
+  curFilter = cat;
+  document.querySelectorAll('.fb').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  renderList();
+}
+
+/* ── 렌더링 ── */
+function renderList() {
+  const list = curFilter === 'all'
+    ? allShops : allShops.filter(s => s.category === curFilter);
+  const el = document.getElementById('shopList');
+  if (!list.length) {
+    el.innerHTML = \`<div class="empty"><i class="fas fa-store-slash"></i>업체가 없어요</div>\`;
+    return;
+  }
+  el.innerHTML = list.map(s => {
+    const color = CAT_COLOR[s.category] || '#FF4D7D';
+    const thumb = s.thumbnail || 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=600&q=80';
+    return \`
+    <div class="shop-item">
+      <div class="si-media">
+        <img src="\${s.youtubeId
+          ? 'https://img.youtube.com/vi/'+s.youtubeId+'/hqdefault.jpg'
+          : thumb}" onerror="this.src='\${thumb}'" alt="">
+        <span class="si-media-badge" style="background:\${color}99">\${s.category}</span>
+        \${s.youtubeId ? '<span class="si-yt-badge"><i class="fab fa-youtube"></i> 영상있음</span>' : ''}
+        \${s.featured  ? '<span class="si-feat">⭐ 추천</span>' : ''}
+      </div>
+      <div class="si-body">
+        <div class="si-row1">
+          <div class="si-name">\${s.name}</div>
+          <div class="si-status">
+            \${s.active
+              ? '<span class="badge-on">공개</span>'
+              : '<span class="badge-off">비공개</span>'}
+          </div>
+        </div>
+        <div class="si-meta">
+          <span class="si-cat">\${s.category}</span>
+          <span class="si-price">\${s.price||''}</span>
+        </div>
+        \${s.address ? \`<div class="si-addr"><i class="fas fa-map-marker-alt" style="font-size:9px;color:rgba(255,255,255,.25)"></i> \${s.address}</div>\` : ''}
+        \${s.desc ? \`<div class="si-desc">\${s.desc}</div>\` : ''}
+        \${(s.tags||[]).length ? \`<div class="si-tags">\${s.tags.map(t=>'<span class="si-tag">#'+t+'</span>').join('')}</div>\` : ''}
+        <div class="si-btns">
+          <button class="btn-edit" onclick="openModal(\${s.id})">
+            <i class="fas fa-edit"></i> 수정
+          </button>
+          <button class="btn-del" onclick="delShop(\${s.id},'\${s.name.replace(/'/g,"\\\\'")}')">
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+      </div>
+    </div>\`;
+  }).join('');
+}
+
+/* ── 모달 ── */
+async function openModal(id=null) {
+  editId = id;
+  document.getElementById('modalTtl').textContent = id ? '업체 수정' : '업체 추가';
+  // 초기화
+  ['name','addr','dist','phone','yt','url','thumb','tags','desc'].forEach(k=>
+    document.getElementById('f-'+k).value='');
+  document.getElementById('f-price').value='';
+  document.getElementById('f-lat').value='';
+  document.getElementById('f-lng').value='';
+  document.getElementById('f-feat').value='false';
+  document.getElementById('f-active').value='true';
+  document.getElementById('f-cat').value='피부관리';
+  document.getElementById('ytPreview').style.display='none';
+  document.getElementById('geoStatus').style.display='none';
+
+  if (id) {
+    const s = await (await fetch('/api/shops/'+id)).json();
+    document.getElementById('f-name').value  = s.name||'';
+    document.getElementById('f-cat').value   = s.category||'피부관리';
+    document.getElementById('f-price').value = s.price||'';
+    document.getElementById('f-addr').value  = s.address||'';
+    document.getElementById('f-dist').value  = s.district||'';
+    document.getElementById('f-phone').value = s.phone||'';
+    document.getElementById('f-lat').value   = s.lat||'';
+    document.getElementById('f-lng').value   = s.lng||'';
+    document.getElementById('f-yt').value    = s.youtubeId||'';
+    document.getElementById('f-url').value   = s.smartPlaceUrl||'';
+    document.getElementById('f-thumb').value = s.thumbnail||'';
+    document.getElementById('f-tags').value  = (s.tags||[]).join(', ');
+    document.getElementById('f-desc').value  = s.desc||'';
+    document.getElementById('f-feat').value  = String(s.featured);
+    document.getElementById('f-active').value= String(s.active);
+    if (s.youtubeId) previewYt(s.youtubeId);
+  }
+  document.getElementById('modalBg').classList.remove('hidden');
+  document.getElementById('modal').scrollTop = 0;
+}
+
+function closeModal() {
+  document.getElementById('modalBg').classList.add('hidden');
+}
+function bgClick(e) {
+  if (e.target === document.getElementById('modalBg')) closeModal();
+}
+
+/* ── 지오코딩 ── */
+async function geocodeAddr() {
+  const addr = document.getElementById('f-addr').value.trim();
+  if (!addr) { alert('주소를 먼저 입력하세요'); return; }
+  const btn = document.getElementById('geoBtn');
+  const st  = document.getElementById('geoStatus');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 검색중...';
+  st.style.display = 'block';
+  st.style.color = 'rgba(255,255,255,.4)';
+  st.textContent = '주소를 검색하고 있어요...';
+  try {
+    const res  = await fetch('/api/geocode?query='+encodeURIComponent(addr));
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error||'찾을 수 없어요');
+    document.getElementById('f-lat').value  = data.lat;
+    document.getElementById('f-lng').value  = data.lng;
+    document.getElementById('f-addr').value = data.address;
+    if (data.district && !document.getElementById('f-dist').value)
+      document.getElementById('f-dist').value = data.district;
+    st.style.color = '#03C75A';
+    st.textContent = '✅ 좌표 자동입력 완료! 위도 '+data.lat.toFixed(6)+' / 경도 '+data.lng.toFixed(6);
+  } catch(err) {
+    st.style.color = '#FF4D7D';
+    st.textContent = '❌ '+err.message;
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fas fa-crosshairs"></i> 좌표찾기';
+}
+
+/* ── 유튜브 미리보기 ── */
+function previewYt(id) {
+  const clean = id.trim();
+  const box = document.getElementById('ytPreview');
+  if (!clean) { box.style.display='none'; return; }
+  box.style.display = 'block';
+  document.getElementById('ytFrame').src =
+    'https://www.youtube.com/embed/'+clean+'?mute=1&controls=1';
+}
+
+/* ── 저장 ── */
+async function saveShop() {
+  const name = document.getElementById('f-name').value.trim();
+  const lat  = document.getElementById('f-lat').value.trim();
+  const lng  = document.getElementById('f-lng').value.trim();
+  if (!name) { alert('업체명을 입력하세요'); return; }
+  if (!lat || !lng) { alert('주소를 입력하고 [좌표찾기] 버튼을 눌러주세요'); return; }
+  const body = {
+    name, lat: parseFloat(lat), lng: parseFloat(lng),
+    category:     document.getElementById('f-cat').value,
+    price:        document.getElementById('f-price').value.trim(),
+    address:      document.getElementById('f-addr').value.trim(),
+    district:     document.getElementById('f-dist').value.trim(),
+    phone:        document.getElementById('f-phone').value.trim(),
+    youtubeId:    document.getElementById('f-yt').value.trim(),
+    smartPlaceUrl:document.getElementById('f-url').value.trim(),
+    thumbnail:    document.getElementById('f-thumb').value.trim(),
+    tags:         document.getElementById('f-tags').value.split(',').map(t=>t.trim()).filter(Boolean),
+    desc:         document.getElementById('f-desc').value.trim(),
+    featured:     document.getElementById('f-feat').value==='true',
+    active:       document.getElementById('f-active').value==='true',
+  };
+  const url    = editId ? '/api/admin/shops/'+editId : '/api/admin/shops';
+  const method = editId ? 'PUT' : 'POST';
+  const r = await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if (r.ok) { closeModal(); loadShops(); }
+  else alert('저장 실패: '+r.status);
+}
+
+/* ── 삭제 ── */
+async function delShop(id, name) {
+  if (!confirm(\`[\${name}] 업체를 삭제할까요?\`)) return;
+  const r = await fetch('/api/admin/shops/'+id,{method:'DELETE'});
+  if (r.ok) loadShops();
+  else alert('삭제 실패');
+}
+
+loadShops();
 </script>
 </body>
 </html>`
