@@ -458,13 +458,16 @@ html,body{height:100%;background:var(--bg);color:#fff;
   box-shadow:0 2px 10px rgba(255,77,125,.35)}
 
 /* 화면 */
-#feedScreen{position:fixed;top:calc(var(--hd)+var(--cat)+var(--sb,0px));left:0;right:0;
-  bottom:var(--nav);overflow:hidden;
-  transition:top .3s cubic-bezier(.32,1,.23,1);
+#feedScreen{position:fixed;
+  top:calc(var(--hd)+var(--cat)+var(--sb,0px));
+  left:0;right:0;
+  height:calc(100dvh - var(--hd) - var(--cat) - var(--nav) - var(--sb,0px));
+  overflow:hidden;
+  transition:top .3s cubic-bezier(.32,1,.23,1), height .3s cubic-bezier(.32,1,.23,1);
   display:none;}
 #feedScreen.active{display:block;}
 /* 피드 내부 슬라이더 컨테이너 */
-#feedSlider{position:absolute;inset:0;overflow:hidden;}
+#feedSlider{position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;overflow:hidden;}
 /* 피드 트랙: 세로로 카드들이 나열되는 실제 컨테이너 */
 #feedTrack{position:absolute;top:0;left:0;right:0;
   transition:transform .35s cubic-bezier(.32,1,.23,1);will-change:transform;}
@@ -1212,17 +1215,24 @@ function feedGoTo(idx, animate) {
   }, 380);
 }
 
+function getFeedHeight() {
+  // CSS 변수로 직접 계산 (clientHeight 의존 제거)
+  const style = getComputedStyle(document.documentElement);
+  const hd  = parseFloat(style.getPropertyValue('--hd'))  || 50;
+  const cat = parseFloat(style.getPropertyValue('--cat')) || 44;
+  const nav = parseFloat(style.getPropertyValue('--nav')) || 60;
+  const sb  = parseFloat(style.getPropertyValue('--sb'))  || 0;
+  const safe= parseFloat(style.getPropertyValue('--safe'))|| 0;
+  return window.innerHeight - hd - cat - nav - sb - safe;
+}
+
 function feedInitSlider() {
   const slider = document.getElementById('feedSlider');
   if (!slider) return;
-  feedSliderH = slider.clientHeight;
-  // clientHeight가 0이면 feedScreen 실제 높이로 fallback
-  if (feedSliderH === 0) {
-    const sc = document.getElementById('feedScreen');
-    feedSliderH = sc ? sc.clientHeight : window.innerHeight;
-  }
+  // clientHeight 대신 CSS 변수로 직접 계산 (display:block 직후 0 문제 해결)
+  feedSliderH = slider.clientHeight || getFeedHeight();
   // 그래도 0이면 재시도
-  if (feedSliderH === 0) {
+  if (feedSliderH <= 0) {
     setTimeout(feedInitSlider, 50);
     return;
   }
