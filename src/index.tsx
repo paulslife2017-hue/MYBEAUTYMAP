@@ -644,7 +644,9 @@ html,body{height:100%;background:var(--bg);color:#fff;
 }
 .yt-area{flex:1;position:relative;overflow:hidden;background:#000}
 .yt-area iframe{
-  position:absolute;inset:0;width:100%;height:100%;border:none;}
+  position:absolute;inset:0;width:100%;height:100%;border:none;
+  pointer-events:none;}
+.yt-area iframe.playing{pointer-events:auto;}
 
 /* 업체 정보 바 */
 .shop-bar{flex-shrink:0;padding:18px 14px 14px;
@@ -1263,8 +1265,10 @@ async function loadFeed(cat='all', q='') {
       if (!ifr) return;
       if (en.isIntersecting) {
         if (ifr.src !== ifr.dataset.src) ifr.src = ifr.dataset.src;
+        ifr.classList.add('playing');    // 보일 때만 터치 허용
       } else {
         if (ifr.src !== 'about:blank') ifr.src = 'about:blank';
+        ifr.classList.remove('playing'); // 안 보이면 터치 차단
       }
     });
   }, { root: null, threshold: 0.5 });
