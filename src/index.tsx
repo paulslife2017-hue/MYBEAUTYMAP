@@ -578,7 +578,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
   content:'▶';position:absolute;font-size:24px;
   color:#fff;margin-left:5px;z-index:1}
 /* 유튜브 player div */
-.yt-player{position:absolute;inset:0;width:100%;height:100%;z-index:1}
+.yt-player{position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none}
 .yt-area.playing .yt-thumb{opacity:0;pointer-events:none}
 .yt-area.playing .yt-play-btn{opacity:0;pointer-events:none}
 /* 음소거 해제 버튼 */
@@ -1249,6 +1249,9 @@ function feedGoTo(idx, animate, skipPause) {
       if (t) t.style.opacity = '1';
       if (b) b.style.opacity = '1';
       document.getElementById('unm-' + sid)?.classList.remove('show');
+      // 중지 시 yt-player 터치 차단 복원
+      const pd = document.getElementById('ytp-' + sid);
+      if (pd) pd.style.pointerEvents = 'none';
     });
   }, 380);
 }
@@ -1537,9 +1540,15 @@ function playYt(area) {
     if (t2) t2.style.opacity = '1';
     if (b2) b2.style.opacity = '1';
     document.getElementById('unm-' + s2)?.classList.remove('show');
+    // 중지 시 yt-player 터치 차단 복원
+    const pd2 = document.getElementById('ytp-' + s2);
+    if (pd2) pd2.style.pointerEvents = 'none';
   });
 
   area.classList.add('playing');
+  // 재생 시작 시 yt-player pointer-events 활성화 (터치 가로채기 방지)
+  const playerDiv = document.getElementById('ytp-' + sid);
+  if (playerDiv) playerDiv.style.pointerEvents = 'auto';
 
   const containerId = 'ytp-' + sid;
 
