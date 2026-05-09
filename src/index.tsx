@@ -440,6 +440,11 @@ html,body{height:100%;background:var(--bg);color:#fff;
   display:none;}
 #feedScreen.active{display:block;}
 #feedScreen::-webkit-scrollbar{display:none}
+/* PC(hover 가능 장치)에서는 snap 해제 → 자유 스크롤 */
+@media(hover:hover){
+  #feedScreen{scroll-snap-type:none;overflow-y:scroll;}
+  .fi{scroll-snap-align:none;scroll-snap-stop:normal;}
+}
 #mapScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:var(--nav);
   display:none;}
 #mapScreen.active{display:block;}
