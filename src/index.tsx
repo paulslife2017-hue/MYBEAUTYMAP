@@ -289,8 +289,8 @@ app.post('/api/inquiry', async (c) => {
   const body = await c.req.json()
   if (!body.name || !body.phone) return c.json({ error: 'required' }, 400)
   await sql`
-    INSERT INTO inquiries (name, category, area, phone, url, youtube_url, message)
-    VALUES (${body.name}, ${body.category??''}, ${body.area??''}, ${body.phone},
+    INSERT INTO inquiries (name, owner, category, area, phone, url, youtube_url, message)
+    VALUES (${body.name}, ${body.owner??''}, ${body.category??''}, ${body.area??''}, ${body.phone},
             ${body.url??''}, ${body.youtubeUrl??''}, ${body.message??''})
   `
   return c.json({ ok: true })
@@ -419,21 +419,39 @@ html,body{height:100%;background:var(--bg);color:#fff;
 #inquiryScreen.active{display:block;}
 
 /* 입점문의 스타일 */
-.iq-wrap{max-width:480px;margin:0 auto;padding:24px 16px 40px}
-.iq-hero{text-align:center;padding:32px 0 24px}
+.iq-wrap{max-width:480px;margin:0 auto;padding:24px 16px 48px}
+.iq-hero{text-align:center;padding:28px 0 20px}
 .iq-badge{display:inline-block;background:rgba(255,77,125,.12);
   border:1px solid rgba(255,77,125,.3);color:var(--pink);
   font-size:11px;font-weight:700;padding:4px 12px;border-radius:99px;margin-bottom:14px}
 .iq-title{font-size:26px;font-weight:900;line-height:1.25;margin-bottom:8px}
 .iq-sub{font-size:13px;color:rgba(255,255,255,.4);line-height:1.6}
-.iq-benefits{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:24px}
+.iq-benefits{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
 .iq-benefit{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);
   border-radius:14px;padding:14px 12px;text-align:center}
 .iq-benefit .icon{font-size:24px;margin-bottom:6px}
 .iq-benefit .bl{font-size:12px;font-weight:700;margin-bottom:2px}
-.iq-benefit .bs{font-size:10px;color:rgba(255,255,255,.35)}
+.iq-benefit .bs{font-size:10px;color:rgba(255,255,255,.35);line-height:1.4}
+/* 요금 안내 */
+.iq-pricing{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px}
+.iq-plan{border-radius:16px;padding:16px 14px;text-align:center;position:relative;overflow:hidden}
+.iq-plan.free{background:linear-gradient(135deg,rgba(3,199,90,.15),rgba(3,199,90,.05));
+  border:1.5px solid rgba(3,199,90,.35)}
+.iq-plan.paid{background:linear-gradient(135deg,rgba(255,77,125,.15),rgba(255,77,125,.05));
+  border:1.5px solid rgba(255,77,125,.3)}
+.iq-plan .plan-tag{font-size:10px;font-weight:800;letter-spacing:.5px;
+  padding:2px 8px;border-radius:99px;display:inline-block;margin-bottom:10px}
+.iq-plan.free .plan-tag{background:rgba(3,199,90,.2);color:#03C75A}
+.iq-plan.paid .plan-tag{background:rgba(255,77,125,.2);color:var(--pink)}
+.iq-plan .plan-icon{font-size:28px;margin-bottom:8px}
+.iq-plan .plan-price{font-size:20px;font-weight:900;margin-bottom:4px}
+.iq-plan.free .plan-price{color:#03C75A}
+.iq-plan.paid .plan-price{color:var(--pink)}
+.iq-plan .plan-name{font-size:12px;font-weight:700;margin-bottom:6px}
+.iq-plan .plan-desc{font-size:10px;color:rgba(255,255,255,.4);line-height:1.5}
+/* 폼 */
 .iq-form{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);
-  border-radius:20px;padding:20px 16px;margin-bottom:16px}
+  border-radius:20px;padding:20px 16px;margin-bottom:12px}
 .iq-form h3{font-size:15px;font-weight:800;margin-bottom:16px}
 .iq-field{margin-bottom:12px}
 .iq-field label{display:block;font-size:11px;font-weight:700;
@@ -442,21 +460,33 @@ html,body{height:100%;background:var(--bg);color:#fff;
   width:100%;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.1);
   border-radius:10px;padding:11px 13px;font-size:14px;color:#fff;
   font-family:inherit;outline:none;transition:border-color .2s;resize:none}
-.iq-field input:focus,.iq-field select:focus,.iq-field textarea:focus{
-  border-color:var(--pink)}
+.iq-field input:focus,.iq-field select:focus,.iq-field textarea:focus{border-color:var(--pink)}
 .iq-field select option{background:#1a1a1a}
-.iq-field textarea{height:90px;line-height:1.5}
+.iq-field textarea{height:80px;line-height:1.5}
 .iq-row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+/* 개인정보 동의 */
+.iq-agree{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);
+  border-radius:14px;padding:14px;margin-bottom:12px}
+.iq-agree-title{font-size:12px;font-weight:800;margin-bottom:8px;
+  display:flex;align-items:center;gap:6px}
+.iq-agree-body{font-size:10px;color:rgba(255,255,255,.3);line-height:1.7;
+  max-height:80px;overflow-y:auto;margin-bottom:10px;
+  padding:8px;background:rgba(0,0,0,.2);border-radius:8px}
+.iq-agree-check{display:flex;align-items:center;gap:8px;cursor:pointer}
+.iq-agree-check input[type=checkbox]{
+  width:18px;height:18px;accent-color:var(--pink);cursor:pointer;flex-shrink:0}
+.iq-agree-check span{font-size:12px;font-weight:700;color:rgba(255,255,255,.7)}
+.iq-agree-check span b{color:var(--pink)}
 .iq-submit{width:100%;background:var(--pink);color:#fff;border:none;
   border-radius:14px;padding:16px;font-size:15px;font-weight:800;
   cursor:pointer;font-family:inherit;transition:opacity .15s;margin-top:4px}
 .iq-submit:hover{opacity:.88}
 .iq-submit:active{opacity:.75}
-.iq-notice{font-size:11px;color:rgba(255,255,255,.25);text-align:center;line-height:1.7}
-.iq-done{display:none;text-align:center;padding:40px 20px}
+.iq-notice{font-size:11px;color:rgba(255,255,255,.2);text-align:center;line-height:1.7;margin-top:12px}
+.iq-done{display:none;text-align:center;padding:48px 20px}
 .iq-done .done-icon{font-size:56px;margin-bottom:16px}
 .iq-done .done-title{font-size:20px;font-weight:800;margin-bottom:8px}
-.iq-done .done-sub{font-size:13px;color:rgba(255,255,255,.4);line-height:1.6}
+.iq-done .done-sub{font-size:13px;color:rgba(255,255,255,.4);line-height:1.7}
 
 /* 하단탭 */
 .tabbar{position:fixed;bottom:0;left:0;right:0;z-index:300;height:var(--nav);
@@ -806,19 +836,20 @@ html,body{height:100%;background:var(--bg);color:#fff;
 <!-- 입점문의 화면 -->
 <section id="inquiryScreen">
   <div class="iq-wrap">
+
     <!-- 히어로 -->
     <div class="iq-hero">
       <div class="iq-badge">✨ 파트너 모집 중</div>
       <div class="iq-title">마이뷰티맵에<br>내 샵을 등록하세요</div>
-      <div class="iq-sub">영상·지도 피드에 노출되어<br>더 많은 고객에게 닿을 수 있어요</div>
+      <div class="iq-sub">유튜브 영상으로 홍보하고<br>더 많은 고객에게 닿을 수 있어요</div>
     </div>
 
     <!-- 혜택 카드 -->
     <div class="iq-benefits">
       <div class="iq-benefit">
-        <div class="icon">📹</div>
-        <div class="bl">영상 피드 노출</div>
-        <div class="bs">쇼츠형 홍보 영상<br>자동 노출</div>
+        <div class="icon">▶️</div>
+        <div class="bl">유튜브 영상 홍보</div>
+        <div class="bs">업체 유튜브 영상을<br>피드에 자동 노출</div>
       </div>
       <div class="iq-benefit">
         <div class="icon">🗺️</div>
@@ -833,13 +864,41 @@ html,body{height:100%;background:var(--bg);color:#fff;
       <div class="iq-benefit">
         <div class="icon">📊</div>
         <div class="bl">통계 제공</div>
-        <div class="bs">조회수·예약클릭<br>실시간 확인</div>
+        <div class="bs">영상조회·예약클릭<br>실시간 확인</div>
       </div>
     </div>
 
-    <!-- 문의 폼 -->
+    <!-- 요금 안내 -->
+    <div class="iq-pricing">
+      <div class="iq-plan free">
+        <div class="plan-tag">FREE</div>
+        <div class="plan-icon">🎬</div>
+        <div class="plan-price">무료</div>
+        <div class="plan-name">영상촬영 입점</div>
+        <div class="plan-desc">저희가 직접 촬영해드리면<br>입점 비용 <b style="color:#03C75A">완전 무료!</b></div>
+      </div>
+      <div class="iq-plan paid">
+        <div class="plan-tag">SELF</div>
+        <div class="plan-icon">📱</div>
+        <div class="plan-price">월 1만원</div>
+        <div class="plan-name">자체영상 입점</div>
+        <div class="plan-desc">보유 영상으로 직접 등록 시<br>월 <b style="color:var(--pink)">10,000원</b></div>
+      </div>
+    </div>
+
+    <!-- 신청 폼 -->
     <div class="iq-form" id="iqForm">
       <h3>📝 입점 신청서</h3>
+      <div class="iq-row2">
+        <div class="iq-field">
+          <label>대표님 성함 *</label>
+          <input type="text" id="iq-owner" placeholder="홍길동">
+        </div>
+        <div class="iq-field">
+          <label>연락처 *</label>
+          <input type="tel" id="iq-phone" placeholder="010-0000-0000">
+        </div>
+      </div>
       <div class="iq-field">
         <label>샵 이름 *</label>
         <input type="text" id="iq-name" placeholder="예) 글로우 스킨 강남점">
@@ -860,36 +919,45 @@ html,body{height:100%;background:var(--bg);color:#fff;
         </div>
       </div>
       <div class="iq-field">
-        <label>담당자 연락처 *</label>
-        <input type="tel" id="iq-phone" placeholder="010-0000-0000">
-      </div>
-      <div class="iq-field">
         <label>스마트플레이스 URL</label>
         <input type="url" id="iq-url" placeholder="https://naver.me/...">
       </div>
       <div class="iq-field">
-        <label>유튜브 영상 URL (있으면)</label>
-        <input type="url" id="iq-yt" placeholder="https://youtu.be/...">
+        <label>문의사항</label>
+        <textarea id="iq-msg" placeholder="궁금한 점이나 요청사항을 적어주세요"></textarea>
       </div>
-      <div class="iq-field">
-        <label>추가 문의사항</label>
-        <textarea id="iq-msg" placeholder="궁금한 점이나 요청사항을 자유롭게 적어주세요"></textarea>
-      </div>
-      <button class="iq-submit" onclick="submitInquiry()">
-        <i class="fas fa-paper-plane" style="margin-right:6px"></i>입점 신청하기
-      </button>
     </div>
+
+    <!-- 개인정보 수집·이용 동의 -->
+    <div class="iq-agree">
+      <div class="iq-agree-title">🔒 개인정보 수집·이용 동의</div>
+      <div class="iq-agree-body">
+        <b>수집 항목:</b> 성함, 연락처, 샵명, 업종, 지역, 스마트플레이스 URL, 문의사항<br>
+        <b>수집 목적:</b> 입점 검토 및 상담 연락<br>
+        <b>보유 기간:</b> 입점 검토 완료 후 1년 또는 동의 철회 시까지<br>
+        <b>제3자 제공:</b> 없음 (내부 검토 목적으로만 사용)<br><br>
+        귀하는 개인정보 수집·이용에 동의를 거부할 권리가 있으며, 동의 거부 시 입점 신청이 제한될 수 있습니다.
+      </div>
+      <label class="iq-agree-check">
+        <input type="checkbox" id="iq-agree-chk">
+        <span>위 개인정보 수집·이용에 <b>(필수)</b> 동의합니다</span>
+      </label>
+    </div>
+
+    <button class="iq-submit" onclick="submitInquiry()">
+      <i class="fas fa-paper-plane" style="margin-right:6px"></i>입점 신청하기
+    </button>
 
     <!-- 완료 메시지 -->
     <div class="iq-done" id="iqDone">
       <div class="done-icon">🎉</div>
       <div class="done-title">신청이 접수됐어요!</div>
-      <div class="done-sub">담당자가 확인 후<br>1~2일 내로 연락드릴게요.<br><br>문의: beautymap@kakao.com</div>
+      <div class="done-sub">담당자가 확인 후<br>1~2일 내로 연락드릴게요.</div>
     </div>
 
     <div class="iq-notice">
       입력하신 정보는 입점 검토 목적으로만 사용되며<br>
-      제3자에게 제공되지 않아요.
+      제3자에게 제공되지 않습니다. (개인정보보호법 준수)
     </div>
   </div>
 </section>
@@ -1616,24 +1684,32 @@ function showToast(msg) {
 }
 
 function submitInquiry() {
+  const owner = document.getElementById('iq-owner').value.trim();
+  const phone = document.getElementById('iq-phone').value.trim();
   const name  = document.getElementById('iq-name').value.trim();
   const cat   = document.getElementById('iq-cat').value;
   const area  = document.getElementById('iq-area').value.trim();
-  const phone = document.getElementById('iq-phone').value.trim();
-  if (!name || !cat || !area || !phone) {
+  const agreed = document.getElementById('iq-agree-chk').checked;
+  if (!owner || !phone || !name || !cat || !area) {
     showToast('⚠️ 필수 항목을 모두 입력해 주세요');
     return;
   }
-  const url   = document.getElementById('iq-url').value.trim();
-  const yt    = document.getElementById('iq-yt').value.trim();
-  const msg   = document.getElementById('iq-msg').value.trim();
+  if (!agreed) {
+    showToast('⚠️ 개인정보 수집·이용에 동의해 주세요');
+    return;
+  }
+  const url = document.getElementById('iq-url').value.trim();
+  const msg = document.getElementById('iq-msg').value.trim();
   fetch('/api/inquiry', {
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ name, category:cat, area, phone, url, youtubeUrl:yt, message:msg })
+    body: JSON.stringify({ name, owner, category:cat, area, phone, url, message:msg })
   }).then(r => r.json()).then(() => {
     document.getElementById('iqForm').style.display = 'none';
+    document.querySelector('.iq-agree').style.display = 'none';
+    document.querySelector('.iq-submit').style.display = 'none';
     document.getElementById('iqDone').style.display = 'block';
+    document.getElementById('iqDone').scrollIntoView({behavior:'smooth'});
   }).catch(() => {
     showToast('❌ 전송에 실패했어요. 다시 시도해 주세요');
   });
