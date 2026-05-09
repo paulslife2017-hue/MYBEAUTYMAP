@@ -350,9 +350,9 @@ app.get('/', (c) => c.html(mainPage()))
 // 메인 페이지
 // ══════════════════════════════════════════════════════════════════════════
 const NAVER_CLIENT_ID = 'xjjg4490h8'
-const CATEGORIES = ['전체', '마사지', '헤드스파', '피부관리', '헤어', '왁싱', '반영구', '병원', '그외']
+const CATEGORIES = ['전체', '마사지', '헤드스파', '피부관리', '헤어', '메이크업', '왁싱', '반영구', '병원', '그외']
 const CAT_EMOJI:  Record<string, string> = {
-  '전체': '🏠', '마사지': '💆', '헤드스파': '🧖', '피부관리': '✨', '헤어': '💇', '왁싱': '🌸', '반영구': '👁', '병원': '🏥', '그외': '🌟',
+  '전체': '🏠', '마사지': '💆', '헤드스파': '🧖', '피부관리': '✨', '헤어': '💇', '메이크업': '💄', '왁싱': '🌸', '반영구': '👁', '병원': '🏥', '그외': '🌟',
 }
 
 function mainPage() { return `<!DOCTYPE html>
@@ -934,7 +934,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
           <select id="iq-cat">
             <option value="">선택</option>
             <option>마사지</option><option>헤드스파</option><option>피부관리</option>
-            <option>헤어</option><option>왁싱</option><option>반영구</option>
+            <option>헤어</option><option>메이크업</option><option>왁싱</option><option>반영구</option>
             <option>병원</option><option>그외</option>
           </select>
         </div>
@@ -1056,7 +1056,7 @@ let userMarker = null;
 
 const CAT_CLASS = {
   '마사지':'cat-massage', '헤드스파':'cat-headspa',
-  '피부관리':'cat-skin', '헤어':'cat-hair',
+  '피부관리':'cat-skin', '헤어':'cat-hair', '메이크업':'cat-makeup',
   '왁싱':'cat-wax', '반영구':'cat-perm', '병원':'cat-hospital', '그외':'cat-etc',
 };
 
@@ -1490,7 +1490,7 @@ function catClass(cat) { return CAT_CLASS[cat] || ''; }
 // 카테고리별 배경색 (인라인 스타일용)
 const CAT_COLOR = {
   '마사지':'#10B981', '헤드스파':'#6366F1',
-  '피부관리':'#FF4D7D', '헤어':'#F59E0B',
+  '피부관리':'#FF4D7D', '헤어':'#F59E0B', '메이크업':'#C084FC',
   '왁싱':'#EC4899', '반영구':'#06B6D4', '병원':'#3B82F6', '그외':'#8B5CF6',
 };
 function pinColor(cat) { return CAT_COLOR[cat] || '#FF4D7D'; }
@@ -2077,7 +2077,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0a;
 <script>
 const CAT_COLOR = {
   '마사지':'#10B981','헤드스파':'#6366F1','피부관리':'#FF4D7D',
-  '헤어':'#F59E0B','왁싱':'#EC4899','반영구':'#06B6D4','병원':'#3B82F6','그외':'#8B5CF6'
+  '헤어':'#F59E0B','메이크업':'#C084FC','왁싱':'#EC4899','반영구':'#06B6D4','병원':'#3B82F6','그외':'#8B5CF6'
 };
 
 let map = null, markers = [], curCat = 'all', curShop = null;
@@ -2538,7 +2538,7 @@ body{font-family:'Pretendard',sans-serif;background:var(--bg);color:#fff;min-hei
       <label>카테고리 *</label>
       <select id="f-cat">
         <option>마사지</option><option>헤드스파</option><option>피부관리</option>
-        <option>헤어</option><option>왁싱</option><option>반영구</option>
+        <option>헤어</option><option>메이크업</option><option>왁싱</option><option>반영구</option>
         <option>병원</option><option>그외</option>
       </select>
     </div>
