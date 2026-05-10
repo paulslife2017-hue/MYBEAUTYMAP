@@ -571,7 +571,7 @@ function mainPage(baseUrl = 'https://mybeautymap.pages.dev') { return `<!DOCTYPE
   --pink:#FF4D7D; --pink2:#FF8FA3;
   --green:#03C75A; --green2:#02a84e;
   --bg:#0a0a0a;
-  --hd:50px; --cat:44px; --nav:60px;
+  --hd:50px; --cat:44px; --nav:60px; --ad:50px;
   --safe:env(safe-area-inset-bottom,0px);
 }
 html,body{height:100%;background:var(--bg);color:#fff;
@@ -637,7 +637,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
   position:fixed;
   top:calc(var(--hd) + var(--cat) + var(--sb,0px));
   left:0;right:0;
-  height:calc(100dvh - var(--hd) - var(--cat) - var(--sb,0px) - var(--nav) - env(safe-area-inset-bottom,0px));
+  height:calc(100dvh - var(--hd) - var(--cat) - var(--sb,0px) - var(--ad) - var(--nav) - env(safe-area-inset-bottom,0px));
   overflow-y:scroll;
   scroll-snap-type:y mandatory;
   -webkit-overflow-scrolling:touch;
@@ -645,10 +645,10 @@ html,body{height:100%;background:var(--bg);color:#fff;
   display:none;background:#000;}
 #feedScreen::-webkit-scrollbar{display:none;}
 #feedScreen.active{display:block;}
-#mapScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:var(--nav);
+#mapScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:calc(var(--ad) + var(--nav));
   display:none;}
 #mapScreen.active{display:block;}
-#inquiryScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:var(--nav);
+#inquiryScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:calc(var(--ad) + var(--nav));
   overflow-y:auto;display:none;background:var(--bg);}
 #inquiryScreen.active{display:block;}
 
@@ -723,6 +723,20 @@ html,body{height:100%;background:var(--bg);color:#fff;
 .iq-done .done-sub{font-size:13px;color:rgba(255,255,255,.4);line-height:1.7}
 
 /* 하단탭 */
+/* 쿠팡 광고 배너 */
+#coupang-ad{
+  position:fixed;
+  bottom:calc(var(--nav) + var(--safe));
+  left:0;right:0;
+  height:var(--ad);
+  z-index:299;
+  background:#000;
+  overflow:hidden;
+  display:flex;align-items:center;justify-content:center;
+}
+#coupang-ad iframe,
+#coupang-ad > div{width:100%!important;height:var(--ad)!important;}
+
 .tabbar{position:fixed;bottom:0;left:0;right:0;z-index:300;height:var(--nav);
   background:rgba(10,10,10,.98);backdrop-filter:blur(20px);
   border-top:1px solid rgba(255,255,255,.08);
@@ -739,7 +753,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
 .fi{
   scroll-snap-align:start;
   scroll-snap-stop:always;
-  height:calc(100dvh - var(--hd) - var(--cat) - var(--sb,0px) - var(--nav) - env(safe-area-inset-bottom,0px));
+  height:calc(100dvh - var(--hd) - var(--cat) - var(--sb,0px) - var(--ad) - var(--nav) - env(safe-area-inset-bottom,0px));
   flex-shrink:0;
   display:flex;flex-direction:column;overflow:hidden;background:#000;
 }
@@ -1203,6 +1217,14 @@ html,body{height:100%;background:var(--bg);color:#fff;
     </div>
   </div>
 </section>
+
+<!-- 쿠팡 파트너스 광고 배너 -->
+<div id="coupang-ad">
+  <script src="https://ads-partners.coupang.com/g.js"></script>
+  <script>
+    new PartnersCoupang.G({"id":212396,"template":"carousel","trackingCode":"AF5989144","width":"100%","height":"50","tsource":""});
+  </script>
+</div>
 
 <!-- 하단 탭바 -->
 <nav class="tabbar">
