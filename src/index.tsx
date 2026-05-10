@@ -1880,6 +1880,14 @@ function closeReserve() {
   }, {passive:true});
 })();
 
+// ── 지도 iframe → 메인 페이지 예약 모달 트리거 ─────────────────────────────
+window.addEventListener('message', e => {
+  if (e.data?.type === 'openInapp' && e.data.shop) {
+    curShop = e.data.shop;
+    openInapp();
+  }
+});
+
 // 스와이프 다운으로 피드 시트 닫기
 let tsY=0;
 const sh=document.getElementById('sheet');
@@ -2228,19 +2236,18 @@ function playVideo() {
 }
 
 /* ── 예약 버튼 ── */
-// /map 은 iframe 안 → window.top 의 모달 시트 열기
+// /reserve iframe → 메인 페이지로 postMessage → openInapp() 실행
 function openReserve() {
   if (!curShop?.smartPlaceUrl) return;
   fetch('/api/track/mapsp/' + curShop.id, { method: 'POST' }).catch(()=>{});
-  try {
-    // 부모(메인) 페이지의 openInapp 호출 → 모달 시트로 예약 페이지 표시
-    const top = window.top;
-    top.curShop = curShop;
-    top.openInapp();
-  } catch(e) {
-    // cross-origin 접근 불가 시 → 직접 새 탭으로 열기
-    window.open(curShop.smartPlaceUrl, '_blank', 'noopener,noreferrer');
-  }
+  window.parent.postMessage({
+    type: 'openInapp',
+    shop: {
+      id:            curShop.id,
+      name:          curShop.name,
+      smartPlaceUrl: curShop.smartPlaceUrl
+    }
+  }, '*');
 }
 
 /* ── 카드 열기 ── */
