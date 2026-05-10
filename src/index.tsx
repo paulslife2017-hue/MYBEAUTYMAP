@@ -1,5 +1,7 @@
 import { Hono } from 'hono'
 import { neon } from '@neondatabase/serverless'
+import fs from 'fs'
+import path from 'path'
 
 const app = new Hono()
 
@@ -364,6 +366,23 @@ function favicon(c: any) {
   )
 }
 
+// OG 이미지 (SVG → PNG처럼 사용, 1200×630)
+// OG 이미지 (JPG 파일 직접 서빙)
+app.get('/og-image.jpg', (c) => {
+  try {
+    const imgPath = path.join(process.cwd(), 'public', 'og-image.jpg')
+    const buf = fs.readFileSync(imgPath)
+    return new Response(buf, {
+      headers: {
+        'Content-Type': 'image/jpeg',
+        'Cache-Control': 'public,max-age=86400',
+      }
+    })
+  } catch {
+    return c.notFound()
+  }
+})
+
 // 썸네일 파일 업로드 API (base64 → Data URL 저장)
 app.post('/api/admin/upload-thumbnail', async (c) => {
   const body = await c.req.json()
@@ -488,7 +507,26 @@ function mainPage() { return `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
-<title>마이뷰티맵</title>
+<title>마이뷰티맵 – 내 주변 뷰티샵 한눈에</title>
+<meta name="description" content="마사지·헤드스파·피부관리·헤어·메이크업 – 내 주변 뷰티샵을 지도와 피드로 한눈에 찾아보세요."/>
+
+<!-- Open Graph -->
+<meta property="og:type"        content="website"/>
+<meta property="og:site_name"   content="마이뷰티맵"/>
+<meta property="og:title"       content="마이뷰티맵 – 내 주변 뷰티샵 한눈에"/>
+<meta property="og:description" content="마사지·헤드스파·피부관리·헤어·메이크업 – 내 주변 뷰티샵을 지도와 피드로 한눈에 찾아보세요."/>
+<meta property="og:image"       content="https://mybeautymap.vercel.app/og-image.jpg"/>
+<meta property="og:image:width"  content="1200"/>
+<meta property="og:image:height" content="630"/>
+<meta property="og:url"         content="https://mybeautymap.vercel.app"/>
+<meta property="og:locale"      content="ko_KR"/>
+
+<!-- Twitter Card -->
+<meta name="twitter:card"        content="summary_large_image"/>
+<meta name="twitter:title"       content="마이뷰티맵 – 내 주변 뷰티샵 한눈에"/>
+<meta name="twitter:description" content="마사지·헤드스파·피부관리·헤어·메이크업 – 내 주변 뷰티샵을 지도와 피드로 한눈에 찾아보세요."/>
+<meta name="twitter:image"       content="https://mybeautymap.vercel.app/og-image.jpg"/>
+
 <link rel="icon" href="/favicon.svg" type="image/svg+xml"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
