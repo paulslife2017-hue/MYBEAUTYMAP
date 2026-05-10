@@ -2289,9 +2289,8 @@ function playVideo() {
   // 지도 하단 카드 썸네일 클릭 → 영상조회 카운팅
   fetch('/api/track/view/'+curShop.id, {method:'POST'});
   const iframe = document.getElementById('cardIframe');
-  // mute=1 필수 → 모바일 autoplay 정책 통과 (앱으로 안 튕김)
-  // 소리는 사용자가 영상 탭해서 직접 켤 수 있음
-  iframe.src = \`https://www.youtube.com/embed/\${curShop.youtubeId}?autoplay=1&mute=1&playsinline=1&rel=0&modestbranding=1&color=white&iv_load_policy=3\`;
+  // 썸네일 직접 클릭 → mute 없이 재생 (광고 수익 활성화)
+  iframe.src = \`https://www.youtube.com/embed/\${curShop.youtubeId}?autoplay=1&playsinline=1&rel=0&modestbranding=1&color=white\`;
   iframe.style.display = 'block';
   document.getElementById('thumbWrap').style.display = 'none';
 }
@@ -2321,10 +2320,10 @@ function openCard(shop) {
   const thumb    = document.getElementById('cardThumb');
   const playBtn  = document.getElementById('playBtn');
 
-  // ── 유튜브 있음 → 카드 열리자마자 바로 iframe 재생 (썸네일 단계 없음) ──
+  // ── 유튜브 있음 → 카드 열리자마자 바로 iframe 재생 ──
   if (shop.youtubeId) {
-    // mute=1 로 autoplay 정책 통과 → 앱으로 안 튕김
-    iframe.src = \`https://www.youtube.com/embed/\${shop.youtubeId}?autoplay=1&mute=1&playsinline=1&rel=0&modestbranding=1&color=white&iv_load_policy=3\`;
+    // 썸네일 클릭 재생 → mute 없이 (광고 수익 활성화)
+    iframe.src = \`https://www.youtube.com/embed/\${shop.youtubeId}?autoplay=1&playsinline=1&rel=0&modestbranding=1&color=white\`;
     iframe.style.display = 'block';
     thumbWrap.style.display = 'none';
     playBtn.style.display = 'none';
