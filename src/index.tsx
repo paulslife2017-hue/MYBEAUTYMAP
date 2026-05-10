@@ -376,6 +376,35 @@ app.post('/api/admin/upload-thumbnail', async (c) => {
 app.get('/admin', (c) => c.html(adminPage()))
 app.get('/map-admin', (c) => c.redirect('/admin'))
 app.get('/map', (c) => c.html(mapPage()))
+
+// naver.me 단축URL → m.place.naver.com URL로 변환
+app.get('/api/resolve-naver', async (c) => {
+  const url = c.req.query('url') || ''
+  if (!url) return c.json({ error: 'no url' }, 400)
+  try {
+    // 이미 place ID 포함된 URL이면 바로 변환
+    const directMatch = url.match(/place\/([0-9]+)/)
+    if (directMatch) {
+      return c.json({ resolved: `https://m.place.naver.com/place/${directMatch[1]}/home` })
+    }
+    // naver.me 단축URL → HEAD 요청으로 리다이렉트 추적
+    const res = await fetch(url, {
+      method: 'HEAD',
+      redirect: 'manual',
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; bot)' }
+    })
+    const location = res.headers.get('location') || ''
+    const m = location.match(/place\/([0-9]+)/)
+    if (m) {
+      return c.json({ resolved: `https://m.place.naver.com/place/${m[1]}/home` })
+    }
+    // 변환 실패 → 원본 URL 반환
+    return c.json({ resolved: url })
+  } catch {
+    return c.json({ resolved: url })
+  }
+})
+
 app.get('/reserve', (c) => {
   const url  = c.req.query('url')  || ''
   const name = c.req.query('name') || ''
@@ -844,7 +873,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
   border-radius:14px;padding:15px 16px;cursor:pointer;
   font-size:18px;color:rgba(255,255,255,.6)}
 
-/* ── 예약 바텀시트 ── */
+/* ── 예약 모달 (iframe) ── */
 .rsv-dim{
   position:fixed;inset:0;z-index:800;
   background:rgba(0,0,0,0);
@@ -859,100 +888,59 @@ html,body{height:100%;background:var(--bg);color:#fff;
   position:fixed;
   left:0;right:0;bottom:0;
   z-index:801;
-  background:#1a1a1a;
-  border-radius:24px 24px 0 0;
+  height:90vh;
+  background:#fff;
+  border-radius:20px 20px 0 0;
   display:flex;flex-direction:column;
   transform:translateY(100%);
   transition:transform .38s cubic-bezier(.32,1,.23,1);
   overflow:hidden;
-  box-shadow:0 -6px 40px rgba(0,0,0,.6);
-  padding-bottom:calc(20px + env(safe-area-inset-bottom,0px));
+  box-shadow:0 -6px 40px rgba(0,0,0,.5);
 }
 .rsv-modal.show{transform:translateY(0)}
-.rsv-handle{
-  width:36px;height:4px;border-radius:4px;
-  background:rgba(255,255,255,.15);
-  margin:14px auto 0;
-  flex-shrink:0;
-}
-.rsv-head{
+.rsv-topbar{
+  flex-shrink:0;height:50px;
+  background:#fff;
+  border-bottom:1px solid #eee;
   display:flex;align-items:center;
-  padding:16px 18px 0;
-  gap:12px;
+  padding:0 12px;gap:8px;
+  position:relative;
 }
-.rsv-thumb{
-  width:54px;height:54px;border-radius:14px;
-  object-fit:cover;background:#2a2a2a;flex-shrink:0;
+.rsv-topbar-handle{
+  position:absolute;top:7px;left:50%;transform:translateX(-50%);
+  width:34px;height:4px;border-radius:4px;
+  background:rgba(0,0,0,.1);
 }
-.rsv-thumb-placeholder{
-  width:54px;height:54px;border-radius:14px;
-  background:linear-gradient(135deg,#2a2a2a,#333);
-  display:flex;align-items:center;justify-content:center;
-  font-size:22px;flex-shrink:0;
-}
-.rsv-head-info{flex:1;min-width:0}
-.rsv-head-cat{
-  font-size:10px;font-weight:700;color:var(--pink);
-  margin-bottom:3px;
-}
-.rsv-head-name{
-  font-size:17px;font-weight:800;color:#fff;
+.rsv-topbar-title{
+  flex:1;font-size:14px;font-weight:700;color:#111;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  line-height:1.2;
+  padding-top:4px;
 }
-.rsv-head-addr{
-  font-size:11px;color:rgba(255,255,255,.4);
-  margin-top:3px;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-}
-.rsv-close-btn{
+.rsv-topbar-close{
   flex-shrink:0;width:34px;height:34px;
-  background:rgba(255,255,255,.08);border:none;
-  border-radius:50%;cursor:pointer;
+  background:#fff0f4;border:none;border-radius:10px;
+  cursor:pointer;
   display:flex;align-items:center;justify-content:center;
-  color:rgba(255,255,255,.5);
-  align-self:flex-start;
 }
-.rsv-close-btn:active{background:rgba(255,255,255,.15)}
-.rsv-divider{
-  height:1px;background:rgba(255,255,255,.07);
-  margin:16px 18px;
-}
-.rsv-notice{
-  margin:0 18px;
-  background:rgba(3,199,90,.08);
-  border:1px solid rgba(3,199,90,.2);
-  border-radius:12px;
-  padding:12px 14px;
-  display:flex;align-items:flex-start;gap:10px;
-}
-.rsv-notice-icon{font-size:18px;flex-shrink:0;margin-top:1px}
-.rsv-notice-text{
-  font-size:12px;color:rgba(255,255,255,.6);line-height:1.6;
-}
-.rsv-notice-text strong{color:rgba(255,255,255,.9);font-weight:700}
-.rsv-actions{
-  padding:14px 18px 0;
-  display:flex;flex-direction:column;gap:10px;
-}
-.rsv-main-btn{
-  display:flex;align-items:center;justify-content:center;gap:10px;
-  background:#03C75A;color:#fff;border:none;
-  border-radius:16px;padding:17px;
-  font-size:16px;font-weight:800;cursor:pointer;
-  font-family:inherit;
-  box-shadow:0 4px 20px rgba(3,199,90,.4);
-}
-.rsv-main-btn:active{opacity:.88;transform:scale(.98)}
-.rsv-main-btn img{width:20px;height:20px}
-.rsv-cancel-btn{
+.rsv-topbar-ext{
+  flex-shrink:0;width:34px;height:34px;
+  background:#f4f4f4;border:none;border-radius:10px;
+  cursor:pointer;
   display:flex;align-items:center;justify-content:center;
-  background:rgba(255,255,255,.06);color:rgba(255,255,255,.5);
-  border:none;border-radius:16px;padding:14px;
-  font-size:14px;font-weight:600;cursor:pointer;
-  font-family:inherit;
 }
-.rsv-cancel-btn:active{background:rgba(255,255,255,.1)}
+.rsv-loading{
+  flex-shrink:0;height:3px;background:#f0f0f0;overflow:hidden;
+}
+.rsv-loading-bar{
+  height:100%;width:35%;
+  background:#03C75A;
+  animation:rsvLoad 1.1s ease-in-out infinite alternate;
+}
+@keyframes rsvLoad{from{transform:translateX(-100%)}to{transform:translateX(350%)}}
+.rsv-loading.hide{display:none;}
+.rsv-iframe{
+  flex:1;border:none;width:100%;background:#fff;
+}
 
 /* 토스트 */
 .toast{position:fixed;bottom:calc(var(--nav)+12px);left:50%;
@@ -1179,36 +1167,23 @@ html,body{height:100%;background:var(--bg);color:#fff;
 </div>
 <div class="toast" id="toast"></div>
 
-<!-- 예약 바텀시트 -->
+<!-- 예약 모달 (iframe) -->
 <div class="rsv-dim" id="rsvDim" onclick="closeReserve()"></div>
 <div class="rsv-modal" id="rsvModal">
-  <div class="rsv-handle"></div>
-  <div class="rsv-head">
-    <div class="rsv-thumb-placeholder" id="rsvThumb">💆</div>
-    <div class="rsv-head-info">
-      <div class="rsv-head-cat" id="rsvCat"></div>
-      <div class="rsv-head-name" id="rsvName"></div>
-      <div class="rsv-head-addr" id="rsvAddr"></div>
-    </div>
-    <button class="rsv-close-btn" onclick="closeReserve()">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+  <div class="rsv-topbar">
+    <div class="rsv-topbar-handle"></div>
+    <span class="rsv-topbar-title" id="rsvTitle"></span>
+    <button class="rsv-topbar-ext" id="rsvExtBtn" title="브라우저로 열기">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2.2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+    </button>
+    <button class="rsv-topbar-close" onclick="closeReserve()" title="닫기">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FF4D7D" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>
   </div>
-  <div class="rsv-divider"></div>
-  <div class="rsv-notice">
-    <div class="rsv-notice-icon">📋</div>
-    <div class="rsv-notice-text">
-      <strong>네이버 예약</strong>으로 연결됩니다.<br>
-      예약 완료 후 <strong>뒤로가기</strong>를 누르면 앱으로 돌아올 수 있어요.
-    </div>
-  </div>
-  <div class="rsv-actions">
-    <button class="rsv-main-btn" id="rsvMainBtn">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
-      네이버로 예약하기
-    </button>
-    <button class="rsv-cancel-btn" onclick="closeReserve()">취소</button>
-  </div>
+  <div class="rsv-loading" id="rsvLoading"><div class="rsv-loading-bar"></div></div>
+  <iframe class="rsv-iframe" id="rsvFrame" src=""
+    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-top-navigation"
+    allowfullscreen></iframe>
 </div>
 
 <script>
@@ -1810,39 +1785,56 @@ function trackSP() { if(curShop) fetch('/api/track/sp/'+curShop.id,{method:'POST
 function trackMapSP(id) { fetch('/api/track/mapsp/'+id,{method:'POST'}); }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// 예약 바텀시트
+// 예약 모달 (m.place.naver.com iframe)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-const CAT_EMOJI_MAP = {'마사지':'💆','헤드스파':'🧖','피부관리':'✨','헤어':'💇','메이크업':'💄','왁싱':'🌸','반영구':'👁️','병원':'🏥','그외':'🌟'};
-let _rsvUrl = '';
+let _rsvOrigUrl = '';
 function openInapp() {
   if (!curShop || !curShop.smartPlaceUrl) { showToast('예약 링크가 없어요'); return; }
   trackSP();
-  _rsvUrl = curShop.smartPlaceUrl;
-  // 썸네일 이모지
-  const emoji = CAT_EMOJI_MAP[curShop.category] || '💆';
-  document.getElementById('rsvThumb').textContent = emoji;
-  document.getElementById('rsvCat').textContent   = curShop.category || '';
-  document.getElementById('rsvName').textContent  = curShop.name || '';
-  document.getElementById('rsvAddr').textContent  = curShop.address || curShop.district || '';
-  // 예약 버튼 동작: 네이버 앱/브라우저로 이동
-  document.getElementById('rsvMainBtn').onclick = function() {
-    window.open(_rsvUrl, '_blank', 'noopener,noreferrer');
-  };
+  _rsvOrigUrl = curShop.smartPlaceUrl;
+  const name = curShop.name || '';
+  document.getElementById('rsvTitle').textContent = name + ' 예약하기';
+  // 외부열기 버튼 → 원본 naver.me URL 유지
+  document.getElementById('rsvExtBtn').onclick = () =>
+    window.open(_rsvOrigUrl, '_blank', 'noopener,noreferrer');
+  // 모달 먼저 열고
+  const frame   = document.getElementById('rsvFrame');
+  const loading = document.getElementById('rsvLoading');
+  frame.src = '';
+  loading.classList.remove('hide');
   document.getElementById('rsvDim').classList.add('show');
   document.getElementById('rsvModal').classList.add('show');
   document.body.style.overflow = 'hidden';
+  // 서버에서 naver.me → m.place.naver.com 변환
+  fetch('/api/resolve-naver?url=' + encodeURIComponent(_rsvOrigUrl))
+    .then(r => r.json())
+    .then(d => {
+      frame.src = d.resolved;
+      frame.onload = () => loading.classList.add('hide');
+    })
+    .catch(() => {
+      // 실패 시 원본 URL 직접 사용
+      frame.src = _rsvOrigUrl;
+      frame.onload = () => loading.classList.add('hide');
+    });
 }
 function closeReserve() {
   document.getElementById('rsvDim').classList.remove('show');
   document.getElementById('rsvModal').classList.remove('show');
   document.body.style.overflow = '';
+  setTimeout(() => { document.getElementById('rsvFrame').src = ''; }, 400);
 }
-// 바텀시트 스와이프 다운 닫기
+// 스와이프 다운으로 닫기
 (function(){
   const modal = document.getElementById('rsvModal');
   let sy = 0;
-  modal.addEventListener('touchstart', e => { sy = e.touches[0].clientY; }, {passive:true});
-  modal.addEventListener('touchend',   e => { if (e.changedTouches[0].clientY - sy > 70) closeReserve(); }, {passive:true});
+  modal.addEventListener('touchstart', e => {
+    if (e.target.closest('iframe')) return;
+    sy = e.touches[0].clientY;
+  }, {passive:true});
+  modal.addEventListener('touchend', e => {
+    if (e.changedTouches[0].clientY - sy > 80) closeReserve();
+  }, {passive:true});
 })();
 
 // 스와이프 다운으로 피드 시트 닫기
