@@ -23,6 +23,13 @@ function extractYoutubeId(input: string): string {
   return m ? m[1] : s
 }
 
+// 프리미엄 여부 판단: plan='shoot' + paid_until이 오늘 이후
+function calcIsPremium(r: any): boolean {
+  if (r.plan !== 'shoot') return false
+  if (!r.paid_until) return false
+  return new Date(r.paid_until) >= new Date()
+}
+
 // DB 행 → 앱 객체 변환
 function rowToShop(r: any) {
   return {
@@ -50,6 +57,7 @@ function rowToShop(r: any) {
     views:           parseInt(r.view_cnt) || 0,
     feedSP:          parseInt(r.feed_sp)  || 0,
     mapSP:           parseInt(r.map_sp)   || 0,
+    isPremium:       calcIsPremium(r),
   }
 }
 
@@ -113,13 +121,33 @@ app.get('/api/shops', async (c) => {
     list = list
       .map((s:any) => ({ ...s, dist: calcDist(lat, lng, s.lat, s.lng) }))
       .filter((s:any) => s.dist <= 20)
-      .sort((a:any, b:any) => a.dist - b.dist)
+      .sort((a:any, b:any) => {
+        // 프리미엄 먼저, 그 다음 거리순
+        if (a.isPremium && !b.isPremium) return -1
+        if (!a.isPremium && b.isPremium) return 1
+        return a.dist - b.dist
+      })
   } else if (shuffle) {
-    // Fisher-Yates 완전 랜덤 셔플
-    for (let i = list.length - 1; i > 0; i--) {
+    // 프리미엄/일반 분리 후 각각 셔플, 프리미엄 앞 배치
+    const premiums = list.filter((s:any) => s.isPremium)
+    const normals  = list.filter((s:any) => !s.isPremium)
+    // Fisher-Yates 셔플
+    for (let i = premiums.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [list[i], list[j]] = [list[j], list[i]];
+      [premiums[i], premiums[j]] = [premiums[j], premiums[i]];
     }
+    for (let i = normals.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [normals[i], normals[j]] = [normals[j], normals[i]];
+    }
+    list = [...premiums, ...normals]
+  } else {
+    // 기본 정렬도 프리미엄 먼저
+    list.sort((a:any, b:any) => {
+      if (a.isPremium && !b.isPremium) return -1
+      if (!a.isPremium && b.isPremium) return 1
+      return 0
+    })
   }
   return c.json(list)
 })
@@ -1036,6 +1064,49 @@ html,body{height:100%;background:var(--bg);color:#fff;
   z-index:600;opacity:0;transition:opacity .25s,transform .25s;
   pointer-events:none;white-space:nowrap}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ── 프리미엄 피드 카드 ── */
+.fi-premium{
+  position:relative;
+}
+.fi-premium::before{
+  content:'';
+  position:absolute;inset:0;z-index:1;pointer-events:none;
+  box-shadow:inset 0 0 0 2px rgba(255,200,50,.45);
+  border-radius:0;
+}
+.feed-premium-badge{
+  position:absolute;top:12px;left:12px;z-index:10;
+  background:linear-gradient(90deg,#FFD700,#FFA500);
+  color:#000;font-size:10px;font-weight:900;
+  padding:4px 10px;border-radius:20px;
+  letter-spacing:.5px;
+  box-shadow:0 2px 12px rgba(255,200,0,.55);
+  display:flex;align-items:center;gap:4px;
+}
+.feed-premium-badge span{font-size:9px}
+.shop-bar-premium{
+  background:linear-gradient(to bottom,transparent,rgba(10,8,0,.99));
+}
+.shop-bar-cat-premium{
+  color:#FFD700!important;
+  background:rgba(255,200,0,.15)!important;
+  border-color:rgba(255,200,0,.35)!important;
+}
+.btn-book-premium{
+  background:linear-gradient(135deg,#FFD700,#FF8C00)!important;
+  box-shadow:0 4px 16px rgba(255,180,0,.5)!important;
+  color:#000!important;
+}
+.btn-book-premium:active{
+  background:linear-gradient(135deg,#FFC200,#FF7700)!important;
+}
+
+/* 프리미엄 마커 글로우 애니메이션 */
+@keyframes premGlow{
+  0%,100%{opacity:.6;transform:scale(1)}
+  50%{opacity:1;transform:scale(1.06)}
+}
 </style>
 </head>
 <body>
@@ -1087,6 +1158,38 @@ html,body{height:100%;background:var(--bg);color:#fff;
   </div>
   <!-- 지도 iframe -->
   <iframe id="mapFrame" src="/map" style="position:absolute;inset:0;width:100%;height:100%;border:none;"></iframe>
+
+  <!-- ── 지도 위 팝업 카드 ── -->
+  <div class="map-popup" id="mapPopup">
+    <!-- 미디어 영역 -->
+    <div id="mpYt"></div>
+    <!-- 정보 영역 -->
+    <div class="mp-info">
+      <div class="mp-info-main">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;flex-wrap:wrap;">
+          <div class="mp-badge" id="mpBadge"></div>
+          <div id="mpPremiumBadge" style="display:none;align-items:center;gap:3px;
+            font-size:10px;font-weight:900;padding:3px 8px;border-radius:20px;
+            background:linear-gradient(90deg,#FFD700,#FFA500);color:#000;
+            box-shadow:0 1px 8px rgba(255,180,0,.5);letter-spacing:.3px;">
+            ✦ PREMIUM
+          </div>
+        </div>
+        <div class="mp-name" id="mpName"></div>
+        <div class="mp-meta" id="mpMeta"></div>
+        <div class="mp-desc" id="mpDesc"></div>
+        <div class="mp-tags" id="mpTags"></div>
+      </div>
+      <div class="mp-actions">
+        <button class="mp-book" id="mpBook"
+          onclick="if(curShop){fetch('/api/track/mapsp/'+curShop.id,{method:'POST'});curShop&&(()=>{const e=document.getElementById('rsvDim');const m=document.getElementById('rsvModal');const t=document.getElementById('rsvTitle');const f=document.getElementById('rsvFrame');const l=document.getElementById('rsvLoading');document.getElementById('rsvExtBtn').onclick=()=>window.open(curShop.smartPlaceUrl,'_blank','noopener');t.textContent=curShop.name+' 예약하기';f.src='';l.classList.remove('hide');e.classList.add('show');m.classList.add('show');fetch('/api/resolve-naver?url='+encodeURIComponent(curShop.smartPlaceUrl)).then(r=>r.json()).then(d=>{f.src=d.resolved;f.onload=()=>l.classList.add('hide');}).catch(()=>{f.src=curShop.smartPlaceUrl;f.onload=()=>l.classList.add('hide');});})()}">
+          <i class="fas fa-calendar-check" style="font-size:12px"></i>
+          네이버 예약
+        </button>
+        <button class="mp-close" onclick="closeMapPopup()">✕</button>
+      </div>
+    </div>
+  </div>
 </section>
 
 <!-- 입점문의 화면 -->
@@ -1371,12 +1474,12 @@ function feedCardHTML(s) {
         + ' allow="autoplay; encrypted-media; picture-in-picture; fullscreen"'
         + ' allowfullscreen></iframe>'
       + '</div>'
-    : '<div class="yt-area"></div>';
+    : '<div class="yt-area" style="background:linear-gradient(135deg,#1a1a1a,#111)"></div>';
   // data-shop JSON 이스케이프 버그 → data-id/url/name 개별 속성으로 분리
   const safeUrl  = (s.smartPlaceUrl||'').replace(/"/g,'&quot;');
   const safeName = (s.name||'').replace(/"/g,'&quot;');
   const bookBtn = s.smartPlaceUrl
-    ? '<button class="btn-book"'
+    ? '<button class="btn-book' + (s.isPremium ? ' btn-book-premium' : '') + '"'
         + ' data-id="' + s.id + '"'
         + ' data-url="' + safeUrl + '"'
         + ' data-name="' + safeName + '"'
@@ -1385,11 +1488,19 @@ function feedCardHTML(s) {
             + 'openInapp()">'
         + '<i class="fas fa-calendar-check"></i><span>예약하기</span></button>'
     : '';
-  return '<div class="fi" data-id="' + s.id + '">'
+  // 프리미엄 뱃지
+  const premiumBadge = s.isPremium
+    ? '<div class="feed-premium-badge"><span>✦</span> PREMIUM</div>'
+    : '';
+  // 프리미엄 테두리 글로우
+  const premiumClass = s.isPremium ? ' fi-premium' : '';
+  return '<div class="fi' + premiumClass + '" data-id="' + s.id + '">'
     + ytArea
-    + '<div class="shop-bar">'
+    + premiumBadge
+    + '<div class="shop-bar' + (s.isPremium ? ' shop-bar-premium' : '') + '">'
       + '<div class="shop-bar-info">'
-        + '<div class="shop-bar-cat">' + (s.category||'') + '</div>'
+        + '<div class="shop-bar-cat' + (s.isPremium ? ' shop-bar-cat-premium' : '') + '">'
+          + (s.isPremium ? '✦ ' : '') + (s.category||'') + '</div>'
         + '<div class="shop-bar-name">' + (s.name||'') + '</div>'
         + '<div class="shop-bar-loc"><i class="fas fa-map-marker-alt"></i><span>'
           + (s.address || s.district || '') + (s.price ? ' · ' + s.price : '') + '</span></div>'
@@ -1423,8 +1534,30 @@ async function loadFeed(cat='all', q='') {
     return;
   }
 
+  // ── 프리미엄 업체 5장마다 재삽입 ──
+  // API에서 이미 프리미엄 앞 배치됨 → 일반 목록에 5장마다 끼워넣기
+  const premiums = shops.filter(s => s.isPremium);
+  const normals  = shops.filter(s => !s.isPremium);
+  const INTERVAL = 5; // 일반 카드 N장마다 프리미엄 1개 재삽입
+  const merged = [];
+  let pi = 0; // 프리미엄 순환 인덱스
+  // 앞부분: 프리미엄 전체 먼저
+  premiums.forEach(s => merged.push(s));
+  // 나머지: 일반 5장 + 프리미엄 1장(순환)
+  if (premiums.length > 0) {
+    normals.forEach((s, i) => {
+      merged.push(s);
+      if ((i + 1) % INTERVAL === 0) {
+        merged.push(premiums[pi % premiums.length]);
+        pi++;
+      }
+    });
+  } else {
+    normals.forEach(s => merged.push(s));
+  }
+
   // 카드 렌더
-  scr.innerHTML = shops.map(feedCardHTML).join('');
+  scr.innerHTML = merged.map(feedCardHTML).join('');
   scr.scrollTop = 0;
 
   // 이전 Observer 해제
@@ -1567,12 +1700,20 @@ function pinColor(cat) { return CAT_COLOR[cat] || '#FF4D7D'; }
 
 // DOM 엘리먼트 방식으로 마커 생성 (썸네일 카드형)
 function buildMarkerEl(shop, selected) {
-  const ac   = pinColor(shop.category);
-  const scale = selected ? 'scale(1.12)' : 'scale(1)';
+  const isPrem = !!shop.isPremium;
+  const ac   = isPrem ? '#FFD700' : pinColor(shop.category);
+  const scale = selected ? 'scale(1.18)' : (isPrem ? 'scale(1.08)' : 'scale(1)');
   const shadow = selected
-    ? '0 6px 24px rgba(0,0,0,.7)'
-    : '0 3px 12px rgba(0,0,0,.5)';
-  const border = selected ? '2px solid #fff' : '2px solid rgba(255,255,255,.4)';
+    ? '0 6px 28px rgba(0,0,0,.8)'
+    : isPrem
+      ? '0 4px 20px rgba(255,200,0,.6), 0 2px 12px rgba(0,0,0,.5)'
+      : '0 3px 12px rgba(0,0,0,.5)';
+  const border = selected
+    ? '2.5px solid #fff'
+    : isPrem
+      ? '2.5px solid #FFD700'
+      : '2px solid rgba(255,255,255,.4)';
+  const cardWidth = isPrem ? '108px' : '90px';
 
   // 썸네일: 유튜브 우선 → 등록 썸네일 → 카테고리 색 배경
   const thumbUrl = shop.youtubeId
@@ -1586,19 +1727,51 @@ function buildMarkerEl(shop, selected) {
     'transform:' + scale + ';transition:transform .2s;',
   ].join('');
 
+  // 프리미엄 글로우 링 (애니메이션)
+  if (isPrem && !selected) {
+    const glow = document.createElement('div');
+    glow.style.cssText = [
+      'position:absolute;',
+      'width:' + cardWidth + ';height:70px;',
+      'border-radius:12px;',
+      'background:transparent;',
+      'border:2px solid rgba(255,215,0,.5);',
+      'animation:premGlow 2s ease-in-out infinite;',
+      'pointer-events:none;',
+      'z-index:-1;',
+    ].join('');
+    wrap.appendChild(glow);
+  }
+
   // 카드 본체
   const card = document.createElement('div');
   card.style.cssText = [
     'border-radius:10px;overflow:hidden;',
     'box-shadow:' + shadow + ';',
     'border:' + border + ';',
-    'width:90px;',
-    'background:#111;',
+    'width:' + cardWidth + ';',
+    'background:' + (isPrem ? '#1a1500' : '#111') + ';',
+    'position:relative;',
   ].join('');
+
+  // 프리미엄 뱃지 (카드 위)
+  if (isPrem) {
+    const badge = document.createElement('div');
+    badge.style.cssText = [
+      'position:absolute;top:3px;left:4px;z-index:5;',
+      'background:linear-gradient(90deg,#FFD700,#FFA500);',
+      'color:#000;font-size:8px;font-weight:900;',
+      'padding:2px 6px;border-radius:8px;',
+      'letter-spacing:.3px;',
+      'box-shadow:0 1px 6px rgba(255,180,0,.6);',
+    ].join('');
+    badge.textContent = '✦ PREMIUM';
+    card.appendChild(badge);
+  }
 
   // 썸네일 영역
   const imgWrap = document.createElement('div');
-  imgWrap.style.cssText = 'width:90px;height:56px;overflow:hidden;position:relative;';
+  imgWrap.style.cssText = 'width:' + cardWidth + ';height:' + (isPrem ? '68px' : '56px') + ';overflow:hidden;position:relative;';
 
   if (thumbUrl) {
     const img = document.createElement('img');
@@ -1612,11 +1785,13 @@ function buildMarkerEl(shop, selected) {
     };
     imgWrap.appendChild(img);
   } else {
-    imgWrap.style.background = ac;
+    imgWrap.style.background = isPrem
+      ? 'linear-gradient(135deg,#2a1f00,#1a1200)'
+      : ac;
     imgWrap.style.display = 'flex';
     imgWrap.style.alignItems = 'center';
     imgWrap.style.justifyContent = 'center';
-    imgWrap.innerHTML = '<span style="font-size:22px">💄</span>';
+    imgWrap.innerHTML = '<span style="font-size:' + (isPrem ? '26px' : '22px') + '">💄</span>';
   }
 
   // 유튜브 아이콘 뱃지
@@ -1634,13 +1809,14 @@ function buildMarkerEl(shop, selected) {
   // 업체명 라벨
   const label = document.createElement('div');
   label.style.cssText = [
-    'font-size:10px;font-weight:800;color:#fff;',
-    'padding:4px 5px;',
+    'font-size:' + (isPrem ? '11px' : '10px') + ';font-weight:800;',
+    'color:' + (isPrem ? '#FFD700' : '#fff') + ';',
+    'padding:' + (isPrem ? '5px 6px' : '4px 5px') + ';',
     'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;',
     'text-align:center;',
-    'background:rgba(0,0,0,.75);',
+    'background:' + (isPrem ? 'rgba(30,20,0,.92)' : 'rgba(0,0,0,.75)') + ';',
     'font-family:-apple-system,sans-serif;',
-    'border-top:1px solid rgba(255,255,255,.1);',
+    'border-top:1px solid ' + (isPrem ? 'rgba(255,200,0,.3)' : 'rgba(255,255,255,.1)') + ';',
   ].join('');
   label.textContent = shop.name;
 
@@ -1648,12 +1824,15 @@ function buildMarkerEl(shop, selected) {
   card.appendChild(label);
 
   // 말풍선 꼬리
+  const tailColor = selected
+    ? 'rgba(255,255,255,.9)'
+    : isPrem ? '#FFD700' : 'rgba(255,255,255,.4)';
   const tail = document.createElement('div');
   tail.style.cssText = [
     'width:0;height:0;',
-    'border-left:7px solid transparent;',
-    'border-right:7px solid transparent;',
-    'border-top:9px solid ' + (selected ? 'rgba(255,255,255,.9)' : 'rgba(255,255,255,.4)') + ';',
+    'border-left:' + (isPrem ? '8px' : '7px') + ' solid transparent;',
+    'border-right:' + (isPrem ? '8px' : '7px') + ' solid transparent;',
+    'border-top:' + (isPrem ? '10px' : '9px') + ' solid ' + tailColor + ';',
     'margin-top:-1px;',
   ].join('');
 
@@ -1670,7 +1849,7 @@ function createNaverMarker(shop, selected=false) {
     position: pos,
     content: el,
     anchor: new naver.maps.Point(45, 74),
-    zIndex: selected ? 200 : (shop.featured ? 100 : 10),
+    zIndex: selected ? 200 : (shop.isPremium ? 150 : shop.featured ? 100 : 10),
     map: naverMap,
   });
   return overlay;
@@ -1716,7 +1895,7 @@ function selectShopOnMap(id) {
     const s = allShops.find(x=>x.id===+sid);
     if (!s) return;
     overlay.setContent(buildMarkerEl(s, +sid===id));
-    overlay.setZIndex(+sid===id ? 200 : (s.featured?100:10));
+    overlay.setZIndex(+sid===id ? 200 : (s.isPremium ? 150 : s.featured ? 100 : 10));
   });
 
   // 지도 중심 이동 (팝업 높이만큼 위로 offset)
@@ -1774,9 +1953,33 @@ function openMapPopup(shop) {
   document.getElementById('mpTags').innerHTML    =
     shop.tags.map(t=>\`<span class="mp-tag">\${t}</span>\`).join('');
 
+  // 프리미엄 뱃지
+  const mpPremEl = document.getElementById('mpPremiumBadge');
+  if (mpPremEl) {
+    mpPremEl.style.display = shop.isPremium ? 'inline-flex' : 'none';
+  }
+  // 프리미엄 팝업 테두리 강조
+  if (shop.isPremium) {
+    popup.style.border = '1.5px solid rgba(255,200,0,.45)';
+    popup.style.boxShadow = '0 8px 32px rgba(0,0,0,.7), 0 0 0 1px rgba(255,200,0,.2)';
+  } else {
+    popup.style.border = '1px solid rgba(255,255,255,.1)';
+    popup.style.boxShadow = '0 8px 32px rgba(0,0,0,.7)';
+  }
+
   const bookEl = document.getElementById('mpBook');
   bookEl.style.opacity      = shop.smartPlaceUrl ? '1' : '.35';
   bookEl.style.pointerEvents= shop.smartPlaceUrl ? 'auto' : 'none';
+  // 프리미엄 예약 버튼 스타일
+  if (shop.isPremium && shop.smartPlaceUrl) {
+    bookEl.style.background = 'linear-gradient(135deg,#FFD700,#FF8C00)';
+    bookEl.style.color = '#000';
+    bookEl.style.boxShadow = '0 3px 12px rgba(255,180,0,.4)';
+  } else {
+    bookEl.style.background = '';
+    bookEl.style.color = '';
+    bookEl.style.boxShadow = '';
+  }
 
   popup.classList.add('show');
 }
@@ -1800,7 +2003,7 @@ function closeMapPopup() {
   // 마커 선택 해제
   Object.entries(nvMarkers).forEach(([sid, overlay])=>{
     const s = allShops.find(x=>x.id===+sid);
-    if (s) { overlay.setContent(buildMarkerEl(s,false)); overlay.setZIndex(s.featured?100:10); }
+    if (s) { overlay.setContent(buildMarkerEl(s,false)); overlay.setZIndex(s.isPremium ? 150 : s.featured ? 100 : 10); }
   });
   curShop = null;
 }
