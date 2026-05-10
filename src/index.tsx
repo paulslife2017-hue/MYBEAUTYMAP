@@ -491,7 +491,12 @@ iframe{
 </body>
 </html>`)
 })
-app.get('/', (c) => c.html(mainPage()))
+app.get('/', (c) => {
+  const proto   = c.req.header('x-forwarded-proto') || 'https'
+  const host    = c.req.header('x-forwarded-host') || c.req.header('host') || 'localhost:3000'
+  const baseUrl = `${proto}://${host}`
+  return c.html(mainPage(baseUrl))
+})
 
 // ══════════════════════════════════════════════════════════════════════════
 // 메인 페이지
@@ -502,30 +507,30 @@ const CAT_EMOJI:  Record<string, string> = {
   '전체': '🏠', '마사지': '💆', '헤드스파': '🧖', '피부관리': '✨', '헤어': '💇', '메이크업': '💄', '왁싱': '🌸', '반영구': '👁', '병원': '🏥', '그외': '🌟',
 }
 
-function mainPage() { return `<!DOCTYPE html>
+function mainPage(baseUrl = 'https://mybeautymap.pages.dev') { return `<!DOCTYPE html>
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
 <title>마이뷰티맵 – 내 주변 뷰티샵 한눈에</title>
-<meta name="description" content="마사지·헤드스파·피부관리·헤어·메이크업 – 내 주변 뷰티샵을 지도와 피드로 한눈에 찾아보세요."/>
+<meta name="description" content="마사지·헤드스파·피부관리·헤어·메이크업·왁싱·반영구 – 내 주변 뷰티샵을 지도와 피드로 한눈에! 위치 기반으로 가까운 샵을 찾고, 리뷰·가격·예약까지 바로 확인하세요."/>
 
 <!-- Open Graph -->
 <meta property="og:type"        content="website"/>
 <meta property="og:site_name"   content="마이뷰티맵"/>
 <meta property="og:title"       content="마이뷰티맵 – 내 주변 뷰티샵 한눈에"/>
-<meta property="og:description" content="마사지·헤드스파·피부관리·헤어·메이크업 – 내 주변 뷰티샵을 지도와 피드로 한눈에 찾아보세요."/>
-<meta property="og:image"       content="https://mybeautymap.vercel.app/og-image.jpg"/>
+<meta property="og:description" content="마사지·헤드스파·피부관리·헤어·메이크업·왁싱·반영구 – 내 주변 뷰티샵을 지도와 피드로 한눈에! 위치 기반으로 가까운 샵을 찾고, 리뷰·가격·예약까지 바로 확인하세요."/>
+<meta property="og:image"       content="${baseUrl}/og-image.jpg"/>
 <meta property="og:image:width"  content="1200"/>
 <meta property="og:image:height" content="630"/>
-<meta property="og:url"         content="https://mybeautymap.vercel.app"/>
+<meta property="og:url"         content="${baseUrl}"/>
 <meta property="og:locale"      content="ko_KR"/>
 
 <!-- Twitter Card -->
 <meta name="twitter:card"        content="summary_large_image"/>
 <meta name="twitter:title"       content="마이뷰티맵 – 내 주변 뷰티샵 한눈에"/>
-<meta name="twitter:description" content="마사지·헤드스파·피부관리·헤어·메이크업 – 내 주변 뷰티샵을 지도와 피드로 한눈에 찾아보세요."/>
-<meta name="twitter:image"       content="https://mybeautymap.vercel.app/og-image.jpg"/>
+<meta name="twitter:description" content="마사지·헤드스파·피부관리·헤어·메이크업·왁싱·반영구 – 내 주변 뷰티샵을 지도와 피드로 한눈에! 위치 기반으로 가까운 샵을 찾고, 리뷰·가격·예약까지 바로 확인하세요."/>
+<meta name="twitter:image"       content="${baseUrl}/og-image.jpg"/>
 
 <link rel="icon" href="/favicon.svg" type="image/svg+xml"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
