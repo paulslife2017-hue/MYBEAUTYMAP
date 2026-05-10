@@ -1363,7 +1363,7 @@ function feedCardHTML(s) {
             + 'openInapp()">'
         + '<i class="fas fa-calendar-check"></i><span>예약하기</span></button>'
     : '';
-  return '<div class="fi">'
+  return '<div class="fi" data-id="' + s.id + '">'
     + ytArea
     + '<div class="shop-bar">'
       + '<div class="shop-bar-info">'
@@ -1416,7 +1416,12 @@ async function loadFeed(cat='all', q='') {
       const ifr = en.target.querySelector('iframe[data-src]');
       if (!ifr) return;
       if (en.isIntersecting) {
-        if (ifr.src !== ifr.dataset.src) ifr.src = ifr.dataset.src;
+        if (ifr.src !== ifr.dataset.src) {
+          ifr.src = ifr.dataset.src;
+          // 피드 영상이 화면에 처음 등장할 때 → 영상조회 카운팅
+          const shopId = en.target.dataset.id;
+          if (shopId) fetch('/api/track/view/'+shopId, {method:'POST'});
+        }
         ifr.classList.add('playing');    // 보일 때만 터치 허용
       } else {
         if (ifr.src !== 'about:blank') ifr.src = 'about:blank';
@@ -1683,7 +1688,6 @@ function selectShopOnMap(id) {
   const shop = allShops.find(s=>s.id===id);
   if (!shop) return;
   curShop = shop;
-  fetch('/api/track/view/'+id, {method:'POST'});
 
   // 마커 선택 상태 갱신
   Object.entries(nvMarkers).forEach(([sid, overlay])=>{
@@ -1756,6 +1760,8 @@ function openMapPopup(shop) {
 }
 
 function loadYtInPopup(ytId) {
+  // 지도 팝업 썸네일 클릭 → 영상조회 카운팅
+  if (curShop?.id) fetch('/api/track/view/'+curShop.id, {method:'POST'});
   document.getElementById('mpYt').innerHTML = \`
     <div style="position:relative;width:100%;padding-top:52%;background:#000">
       <iframe style="position:absolute;inset:0;width:100%;height:100%;border:none"
@@ -1832,7 +1838,6 @@ function openFeedSheet(id) {
   const s = allShops.find(x=>x.id===id);
   if (!s) return;
   curShop = s;
-  fetch('/api/track/view/'+id,{method:'POST'});
   document.getElementById('sImg').src            = s.thumbnail;
   document.getElementById('sCat').textContent    = s.category;
   document.getElementById('sName').textContent   = s.name;
@@ -2259,6 +2264,8 @@ function closeCard() {
 function playVideo() {
   // 유튜브 없으면 아무것도 안 함
   if (!curShop?.youtubeId) return;
+  // 지도 하단 카드 썸네일 클릭 → 영상조회 카운팅
+  fetch('/api/track/view/'+curShop.id, {method:'POST'});
   const iframe = document.getElementById('cardIframe');
   // mute=1 필수 → 모바일 autoplay 정책 통과 (앱으로 안 튕김)
   // 소리는 사용자가 영상 탭해서 직접 켤 수 있음
