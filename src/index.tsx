@@ -291,6 +291,34 @@ app.post('/api/track/mapsp/:id', async (c) => {
   return c.json({ ok: true })
 })
 
+// ── 방문자 카운팅 (앱 진입 시 호출) ──────────────────────────────────────
+app.post('/api/track/visit', async (c) => {
+  const today = new Date().toISOString().slice(0, 10) // 'YYYY-MM-DD' KST 보정
+  await sql`
+    INSERT INTO daily_visits (visit_date, visit_cnt) VALUES (${today}, 1)
+    ON CONFLICT (visit_date) DO UPDATE SET visit_cnt = daily_visits.visit_cnt + 1
+  `
+  return c.json({ ok: true })
+})
+
+// ── 일별 방문자 통계 (최근 30일) ─────────────────────────────────────────
+app.get('/api/admin/daily-visits', async (c) => {
+  const rows = await sql`
+    SELECT visit_date::text as visit_date, visit_cnt
+    FROM daily_visits
+    ORDER BY visit_date DESC
+    LIMIT 30
+  `
+  return c.json(rows)
+})
+
+// ── 통계 전체 초기화 (관리자용) ──────────────────────────────────────────
+app.post('/api/admin/reset-stats', async (c) => {
+  await sql`UPDATE stats SET view_cnt=0, feed_sp=0, map_sp=0`
+  await sql`DELETE FROM daily_visits`
+  return c.json({ ok: true })
+})
+
 // 어드민 통계
 app.get('/api/admin/stats', async (c) => {
   const rows = await sql`
@@ -1935,6 +1963,9 @@ function submitInquiry() {
   });
 }
 
+// 앱 진입 시 방문자 카운팅 (새로고침·최초진입 모두 포함)
+fetch('/api/track/visit', { method: 'POST' }).catch(() => {});
+
 loadFeed('all');
 </script>
 </body>
@@ -2459,11 +2490,30 @@ body{font-family:'Pretendard',sans-serif;background:var(--bg);color:#fff;min-hei
 .wrap{max-width:640px;margin:0 auto;padding:14px 14px 80px}
 
 /* ── 요약 카드 ── */
-.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
+.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
 .sv{background:var(--card);border:1px solid var(--border);border-radius:14px;
   padding:14px 8px;text-align:center}
-.sv-n{font-size:24px;font-weight:800;color:#FF8FA3}
+.sv-n{font-size:22px;font-weight:800;color:#FF8FA3}
 .sv-l{font-size:10px;color:rgba(255,255,255,.3);margin-top:3px;font-weight:600}
+/* ── 일별 방문자 차트 ── */
+.dv-section{background:var(--card);border:1px solid var(--border);border-radius:16px;
+  padding:16px;margin-bottom:14px}
+.dv-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.dv-title{font-size:13px;font-weight:700;color:rgba(255,255,255,.8)}
+.dv-reset-btn{font-size:11px;font-weight:700;padding:5px 12px;
+  background:rgba(255,77,125,.12);color:var(--pink);
+  border:1px solid rgba(255,77,125,.3);border-radius:8px;cursor:pointer;
+  transition:all .2s}
+.dv-reset-btn:active{background:rgba(255,77,125,.25)}
+.dv-bars{display:flex;align-items:flex-end;gap:3px;height:80px;overflow-x:auto;overflow-y:hidden;
+  padding-bottom:2px}
+.dv-bar-wrap{display:flex;flex-direction:column;align-items:center;gap:3px;flex-shrink:0;min-width:26px}
+.dv-bar{background:linear-gradient(180deg,#FF8FA3,#FF4D7D);border-radius:4px 4px 0 0;
+  width:18px;min-height:3px;transition:height .3s}
+.dv-bar-date{font-size:8px;color:rgba(255,255,255,.3);white-space:nowrap}
+.dv-bar-cnt{font-size:8px;color:rgba(255,255,255,.5);font-weight:700}
+.dv-today{background:linear-gradient(180deg,#6ee7b7,#03C75A)!important}
+.dv-empty{color:rgba(255,255,255,.3);font-size:12px;text-align:center;padding:20px 0}
 
 /* ── 업체 카드 ── */
 .shop-card{background:var(--card);border:1px solid var(--border);
@@ -2709,6 +2759,7 @@ body{font-family:'Pretendard',sans-serif;background:var(--bg);color:#fff;min-hei
   <!-- 요약 (업체/통계 탭 공통) -->
   <div class="summary" id="summaryBox">
     <div class="sv"><div class="sv-n" id="sv-shops">-</div><div class="sv-l">💄 등록 샵</div></div>
+    <div class="sv"><div class="sv-n" id="sv-visits">-</div><div class="sv-l">🙋 오늘 방문</div></div>
     <div class="sv"><div class="sv-n" id="sv-views">-</div><div class="sv-l">👁 영상조회</div></div>
     <div class="sv"><div class="sv-n" id="sv-clicks">-</div><div class="sv-l">📍 예약클릭</div></div>
   </div>
@@ -3153,13 +3204,22 @@ function showPayToast(msg) {
    데이터 로드
 ═══════════════════════════════════════════════════════ */
 async function loadAll() {
-  const d = await (await fetch('/api/admin/stats')).json();
+  const [d, dvRows] = await Promise.all([
+    fetch('/api/admin/stats').then(r=>r.json()),
+    fetch('/api/admin/daily-visits').then(r=>r.json()),
+  ]);
+  // 오늘 방문자 (daily_visits 첫 번째가 오늘이거나 없으면 0)
+  const todayStr = new Date().toISOString().slice(0,10);
+  const todayRow = dvRows.find(r => r.visit_date === todayStr);
+  const todayVisits = todayRow ? (parseInt(todayRow.visit_cnt)||0) : 0;
+
   document.getElementById('sv-shops').textContent  = d.totalShops;
+  document.getElementById('sv-visits').textContent = todayVisits.toLocaleString();
   document.getElementById('sv-views').textContent  = (d.totalViews||0).toLocaleString();
   document.getElementById('sv-clicks').textContent = ((d.totalFeedSP||0)+(d.totalMapSP||0)).toLocaleString();
   shopData = d.stats;
   renderShops(d.stats);
-  renderStats(d.stats);
+  renderStats(d.stats, dvRows);
 }
 
 async function loadInquiries() {
@@ -3271,40 +3331,102 @@ function renderShops(list) {
 /* ═══════════════════════════════════════════════════════
    통계 렌더
 ═══════════════════════════════════════════════════════ */
-function renderStats(list) {
+function renderStats(list, dvRows) {
   const p = document.getElementById('panel-stats');
-  if (!list.length) { p.innerHTML='<div class="empty">데이터가 없어요</div>'; return; }
-  const sorted = [...list].sort((a,b)=>
-    (b.views+b.feedSP+b.mapSP)-(a.views+a.feedSP+a.mapSP));
+  // ── 일별 방문자 차트 + 초기화 버튼 ──
+  const dvHtml = buildVisitChart(dvRows || []);
+  // ── 업체별 통계 랭킹 ──
   const fallback = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 60'%3E%3Crect width='60' height='60' fill='%23222'/%3E%3Ctext x='30' y='38' font-size='24' text-anchor='middle'%3E💄%3C/text%3E%3C/svg%3E";
-  p.innerHTML = sorted.map((s,i) => {
-    const rc = i===0?'rank1':i===1?'rank2':i===2?'rank3':'rankN';
-    const img = s.thumbnail || (s.youtubeId?'https://img.youtube.com/vi/'+s.youtubeId+'/maxresdefault.jpg':fallback);
-    return \`
-    <div class="stat-card">
-      <img class="stat-thumb" src="\${img}" onerror="this.src='\${fallback}'"/>
-      <div class="stat-body">
-        <div class="stat-top">
-          <div class="stat-rank \${rc}">\${i+1}</div>
-          <div class="stat-name">\${s.name}</div>
+  const rankHtml = list.length ? [...list]
+    .sort((a,b)=>(b.views+b.feedSP+b.mapSP)-(a.views+a.feedSP+a.mapSP))
+    .map((s,i) => {
+      const rc = i===0?'rank1':i===1?'rank2':i===2?'rank3':'rankN';
+      const img = s.thumbnail || (s.youtubeId?'https://img.youtube.com/vi/'+s.youtubeId+'/maxresdefault.jpg':fallback);
+      return \`
+      <div class="stat-card">
+        <img class="stat-thumb" src="\${img}" onerror="this.src='\${fallback}'"/>
+        <div class="stat-body">
+          <div class="stat-top">
+            <div class="stat-rank \${rc}">\${i+1}</div>
+            <div class="stat-name">\${s.name}</div>
+          </div>
+          <div class="stat-nums">
+            <div class="stat-num c-view">
+              <div class="sn-n">\${(s.views||0).toLocaleString()}</div>
+              <div class="sn-l">👁 영상조회</div>
+            </div>
+            <div class="stat-num c-feed">
+              <div class="sn-n">\${(s.feedSP||0).toLocaleString()}</div>
+              <div class="sn-l">📹 피드예약</div>
+            </div>
+            <div class="stat-num c-map">
+              <div class="sn-n">\${(s.mapSP||0).toLocaleString()}</div>
+              <div class="sn-l">🗺 지도예약</div>
+            </div>
+          </div>
         </div>
-        <div class="stat-nums">
-          <div class="stat-num c-view">
-            <div class="sn-n">\${(s.views||0).toLocaleString()}</div>
-            <div class="sn-l">👁 영상조회</div>
-          </div>
-          <div class="stat-num c-feed">
-            <div class="sn-n">\${(s.feedSP||0).toLocaleString()}</div>
-            <div class="sn-l">📹 피드예약</div>
-          </div>
-          <div class="stat-num c-map">
-            <div class="sn-n">\${(s.mapSP||0).toLocaleString()}</div>
-            <div class="sn-l">🗺 지도예약</div>
-          </div>
-        </div>
-      </div>
+      </div>\`;
+    }).join('')
+  : '<div class="empty" style="margin-top:0">아직 조회 데이터가 없어요</div>';
+
+  p.innerHTML = dvHtml + rankHtml;
+}
+
+/* ── 일별 방문자 막대 차트 빌더 ── */
+function buildVisitChart(rows) {
+  // rows: [{visit_date:'2025-05-10', visit_cnt:42}, ...] 최신순
+  // 최근 14일 날짜 배열 생성 (오늘 포함, 과거→오늘 순)
+  const today = new Date();
+  const days = [];
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    days.push(d.toISOString().slice(0,10));
+  }
+  const map = {};
+  rows.forEach(r => { map[r.visit_date] = parseInt(r.visit_cnt)||0; });
+  const counts = days.map(d => map[d] || 0);
+  const maxCnt = Math.max(...counts, 1);
+  const todayStr = today.toISOString().slice(0,10);
+  // 전체 합계
+  const total = rows.reduce((s,r)=>s+(parseInt(r.visit_cnt)||0), 0);
+
+  const barsHtml = days.map((d, i) => {
+    const cnt  = counts[i];
+    const pct  = Math.round((cnt / maxCnt) * 72); // max 72px
+    const h    = Math.max(pct, cnt>0?4:2);
+    const isToday = d === todayStr;
+    const label = d.slice(5); // 'MM-DD'
+    return \`<div class="dv-bar-wrap">
+      <div class="dv-bar-cnt">\${cnt > 0 ? cnt : ''}</div>
+      <div class="dv-bar\${isToday?' dv-today':''}" style="height:\${h}px"></div>
+      <div class="dv-bar-date">\${isToday?'오늘':label}</div>
     </div>\`;
   }).join('');
+
+  return \`
+  <div class="dv-section">
+    <div class="dv-header">
+      <span class="dv-title">📅 방문자 추이 (최근 14일)&nbsp;<span style="color:rgba(255,255,255,.4);font-weight:500;font-size:11px">누적 \${total.toLocaleString()}명</span></span>
+      <button class="dv-reset-btn" onclick="confirmReset()">🗑 통계 초기화</button>
+    </div>
+    \${counts.every(c=>c===0)
+      ? '<div class="dv-empty">아직 방문 데이터가 없어요</div>'
+      : \`<div class="dv-bars">\${barsHtml}</div>\`
+    }
+  </div>\`;
+}
+
+/* ── 통계 초기화 확인 ── */
+async function confirmReset() {
+  if (!confirm('⚠️ 지금까지의 모든 통계(영상조회·예약클릭·방문자)를 초기화합니다.\\n정말 초기화하시겠어요?')) return;
+  const r = await fetch('/api/admin/reset-stats', { method: 'POST' });
+  if (r.ok) {
+    showPayToast('✅ 통계가 초기화되었습니다');
+    loadAll();
+  } else {
+    showPayToast('❌ 초기화 실패');
+  }
 }
 
 /* ═══════════════════════════════════════════════════════
