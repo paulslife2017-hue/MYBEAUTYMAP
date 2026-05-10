@@ -844,45 +844,73 @@ html,body{height:100%;background:var(--bg);color:#fff;
   border-radius:14px;padding:15px 16px;cursor:pointer;
   font-size:18px;color:rgba(255,255,255,.6)}
 
-/* 인앱 브라우저 */
-/* ── 예약 배너 ── */
-.rsv-banner{
-  position:fixed;bottom:calc(var(--nav) + env(safe-area-inset-bottom,0px));
-  left:12px;right:12px;z-index:900;
-  background:#1a1a1a;
-  border:1px solid rgba(255,255,255,.1);
-  border-radius:20px;
-  padding:14px 16px;
-  display:flex;align-items:center;gap:12px;
-  box-shadow:0 -4px 30px rgba(0,0,0,.6);
-  transform:translateY(calc(100% + 24px));
-  transition:transform .35s cubic-bezier(.32,1,.23,1);
+/* ── 예약 모달 시트 ── */
+.rsv-dim{
+  position:fixed;inset:0;z-index:800;
+  background:rgba(0,0,0,0);
+  transition:background .3s;
+  pointer-events:none;
 }
-.rsv-banner.show{transform:translateY(0)}
-.rsv-info{flex:1;min-width:0}
-.rsv-name{
-  font-size:14px;font-weight:800;color:#fff;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  margin-bottom:2px;
+.rsv-dim.show{
+  background:rgba(0,0,0,.65);
+  pointer-events:auto;
 }
-.rsv-sub{font-size:11px;color:rgba(255,255,255,.4)}
-.rsv-btn{
+.rsv-modal{
+  position:fixed;
+  left:0;right:0;bottom:0;
+  z-index:801;
+  height:88vh;
+  background:#fff;
+  border-radius:20px 20px 0 0;
+  display:flex;flex-direction:column;
+  transform:translateY(100%);
+  transition:transform .38s cubic-bezier(.32,1,.23,1);
+  overflow:hidden;
+  box-shadow:0 -6px 40px rgba(0,0,0,.5);
+}
+.rsv-modal.show{transform:translateY(0)}
+.rsv-topbar{
   flex-shrink:0;
-  background:#03C75A;color:#fff;border:none;
-  border-radius:12px;padding:10px 16px;
-  font-size:13px;font-weight:800;cursor:pointer;
-  font-family:inherit;white-space:nowrap;
-  box-shadow:0 3px 12px rgba(3,199,90,.4);
+  height:52px;
+  background:#fff;
+  border-bottom:1px solid #eee;
+  display:flex;align-items:center;
+  padding:0 14px;gap:10px;
 }
-.rsv-btn:active{opacity:.85}
-.rsv-close{
-  flex-shrink:0;width:32px;height:32px;
-  background:rgba(255,255,255,.08);border:none;
-  border-radius:50%;cursor:pointer;
+.rsv-topbar-handle{
+  position:absolute;top:8px;left:50%;transform:translateX(-50%);
+  width:36px;height:4px;border-radius:4px;
+  background:rgba(0,0,0,.12);
+}
+.rsv-topbar-title{
+  flex:1;font-size:14px;font-weight:700;
+  color:#111;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.rsv-topbar-ext{
+  flex-shrink:0;width:36px;height:36px;
+  background:#f4f4f4;border:none;border-radius:10px;
+  cursor:pointer;
   display:flex;align-items:center;justify-content:center;
-  color:rgba(255,255,255,.5);
 }
-.rsv-close:active{background:rgba(255,255,255,.15)}
+.rsv-topbar-close{
+  flex-shrink:0;width:36px;height:36px;
+  background:#fff0f4;border:none;border-radius:10px;
+  cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+}
+.rsv-progress{
+  flex-shrink:0;height:3px;background:#f0f0f0;overflow:hidden;
+}
+.rsv-progress-bar{
+  height:100%;width:35%;
+  background:#03C75A;
+  animation:rsvSlide 1.1s ease-in-out infinite alternate;
+}
+@keyframes rsvSlide{from{transform:translateX(-100%)}to{transform:translateX(350%)}}
+.rsv-progress.done{display:none;}
+.rsv-iframe{
+  flex:1;border:none;width:100%;background:#fff;
+}
 
 /* 토스트 */
 .toast{position:fixed;bottom:calc(var(--nav)+12px);left:50%;
@@ -1109,16 +1137,23 @@ html,body{height:100%;background:var(--bg);color:#fff;
 </div>
 <div class="toast" id="toast"></div>
 
-<!-- 예약 배너 -->
-<div class="rsv-banner" id="rsvBanner">
-  <div class="rsv-info">
-    <div class="rsv-name" id="rsvName"></div>
-    <div class="rsv-sub">네이버 예약</div>
+<!-- 예약 모달 시트 -->
+<div class="rsv-dim" id="rsvDim" onclick="closeReserve()"></div>
+<div class="rsv-modal" id="rsvModal">
+  <div class="rsv-topbar" style="position:relative">
+    <div class="rsv-topbar-handle"></div>
+    <span class="rsv-topbar-title" id="rsvTitle"></span>
+    <button class="rsv-topbar-ext" id="rsvExtBtn" title="외부 브라우저로 열기">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2.2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+    </button>
+    <button class="rsv-topbar-close" onclick="closeReserve()" title="닫기">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FF4D7D" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
   </div>
-  <button class="rsv-btn" id="rsvBtn">예약하기</button>
-  <button class="rsv-close" onclick="closeReserve()">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-  </button>
+  <div class="rsv-progress" id="rsvProgress"><div class="rsv-progress-bar"></div></div>
+  <iframe class="rsv-iframe" id="rsvFrame" src=""
+    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-top-navigation"
+    allowfullscreen></iframe>
 </div>
 
 <script>
@@ -1720,26 +1755,56 @@ function trackSP() { if(curShop) fetch('/api/track/sp/'+curShop.id,{method:'POST
 function trackMapSP(id) { fetch('/api/track/mapsp/'+id,{method:'POST'}); }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// 예약 배너
+// 예약 모달 시트
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-let _rsvCloseTimer = null;
+let _rsvUrl = '';
 function openInapp() {
   if (!curShop || !curShop.smartPlaceUrl) { showToast('예약 링크가 없어요'); return; }
   trackSP();
-  const url = curShop.smartPlaceUrl;
-  document.getElementById('rsvName').textContent = curShop.name || '';
-  document.getElementById('rsvBtn').onclick = function() {
-    window.open(url, '_blank', 'noopener,noreferrer');
+  _rsvUrl = curShop.smartPlaceUrl;
+  const title = (curShop.name || '') + ' 예약하기';
+  document.getElementById('rsvTitle').textContent = title;
+  document.getElementById('rsvExtBtn').onclick = function() {
+    window.open(_rsvUrl, '_blank', 'noopener,noreferrer');
   };
-  if (_rsvCloseTimer) { clearTimeout(_rsvCloseTimer); _rsvCloseTimer = null; }
-  document.getElementById('rsvBanner').classList.add('show');
-  // 30초 후 자동 닫기
-  _rsvCloseTimer = setTimeout(closeReserve, 30000);
+  // iframe 로드
+  const frame = document.getElementById('rsvFrame');
+  const prog  = document.getElementById('rsvProgress');
+  prog.classList.remove('done');
+  frame.src = '';
+  // 짧은 딜레이 후 src 설정 (reset 보장)
+  setTimeout(() => {
+    frame.src = _rsvUrl;
+    frame.onload = () => prog.classList.add('done');
+  }, 30);
+  // 모달 오픈
+  document.getElementById('rsvDim').classList.add('show');
+  document.getElementById('rsvModal').classList.add('show');
+  document.body.style.overflow = 'hidden';
 }
 function closeReserve() {
-  document.getElementById('rsvBanner').classList.remove('show');
-  if (_rsvCloseTimer) { clearTimeout(_rsvCloseTimer); _rsvCloseTimer = null; }
+  document.getElementById('rsvDim').classList.remove('show');
+  document.getElementById('rsvModal').classList.remove('show');
+  document.body.style.overflow = '';
+  // 닫힌 후 iframe src 초기화 (메모리 해제)
+  setTimeout(() => {
+    const f = document.getElementById('rsvFrame');
+    if (f) f.src = '';
+  }, 400);
 }
+// 모달 스와이프 다운 닫기
+(function(){
+  const modal = document.getElementById('rsvModal');
+  let sy = 0, dragging = false;
+  modal.addEventListener('touchstart', e => {
+    if (e.target.closest('iframe')) return;
+    sy = e.touches[0].clientY; dragging = true;
+  }, {passive:true});
+  modal.addEventListener('touchend', e => {
+    if (!dragging) return; dragging = false;
+    if (e.changedTouches[0].clientY - sy > 80) closeReserve();
+  }, {passive:true});
+})();
 
 // 스와이프 다운으로 피드 시트 닫기
 let tsY=0;
@@ -2089,12 +2154,12 @@ function playVideo() {
 }
 
 /* ── 예약 버튼 ── */
-// /map 은 iframe 안 → window.top 의 배너 열기
+// /map 은 iframe 안 → window.top 의 모달 시트 열기
 function openReserve() {
   if (!curShop?.smartPlaceUrl) return;
   fetch('/api/track/mapsp/' + curShop.id, { method: 'POST' }).catch(()=>{});
   try {
-    // 부모(메인) 페이지의 openInapp 호출 → 배너로 예약 링크 표시
+    // 부모(메인) 페이지의 openInapp 호출 → 모달 시트로 예약 페이지 표시
     const top = window.top;
     top.curShop = curShop;
     top.openInapp();
