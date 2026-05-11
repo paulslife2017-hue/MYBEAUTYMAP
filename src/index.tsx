@@ -12,6 +12,14 @@ const DATABASE_URL = process.env.DATABASE_URL ||
   'postgresql://neondb_owner:npg_1PBkOmAWRcf2@ep-round-recipe-aqdgkjfj-pooler.c-8.us-east-1.aws.neon.tech/neondb?sslmode=require'
 const sql = neon(DATABASE_URL)
 
+// KST(UTC+9) 기준 오늘 날짜 반환 → 'YYYY-MM-DD'
+function kstToday(): string {
+  return new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
+}
+function kstYesterday(): string {
+  return new Date(Date.now() + 9 * 60 * 60 * 1000 - 86400000).toISOString().slice(0, 10)
+}
+
 // 유튜브 URL → ID 추출 (서버단 공통 유틸)
 function extractYoutubeId(input: string): string {
   const s = (input ?? '').trim()
@@ -318,7 +326,7 @@ app.delete('/api/admin/shops/:id', async (c) => {
 // 트래킹 — 영상 조회
 app.post('/api/track/view/:id', async (c) => {
   const id = +c.req.param('id')
-  const today = new Date().toISOString().slice(0, 10)
+  const today = kstToday()
   await Promise.all([
     sql`INSERT INTO stats (shop_id, view_cnt) VALUES (${id}, 1)
         ON CONFLICT (shop_id) DO UPDATE SET view_cnt = stats.view_cnt + 1`,
@@ -330,7 +338,7 @@ app.post('/api/track/view/:id', async (c) => {
 // 트래킹 — 피드 예약클릭
 app.post('/api/track/sp/:id', async (c) => {
   const id = +c.req.param('id')
-  const today = new Date().toISOString().slice(0, 10)
+  const today = kstToday()
   await Promise.all([
     sql`INSERT INTO stats (shop_id, feed_sp) VALUES (${id}, 1)
         ON CONFLICT (shop_id) DO UPDATE SET feed_sp = stats.feed_sp + 1`,
@@ -342,7 +350,7 @@ app.post('/api/track/sp/:id', async (c) => {
 // 트래킹 — 지도 예약클릭
 app.post('/api/track/mapsp/:id', async (c) => {
   const id = +c.req.param('id')
-  const today = new Date().toISOString().slice(0, 10)
+  const today = kstToday()
   await Promise.all([
     sql`INSERT INTO stats (shop_id, map_sp) VALUES (${id}, 1)
         ON CONFLICT (shop_id) DO UPDATE SET map_sp = stats.map_sp + 1`,
@@ -354,7 +362,7 @@ app.post('/api/track/mapsp/:id', async (c) => {
 
 // ── 방문자 카운팅 (앱 진입 시 호출) ──────────────────────────────────────
 app.post('/api/track/visit', async (c) => {
-  const today = new Date().toISOString().slice(0, 10) // 'YYYY-MM-DD' KST 보정
+  const today = kstToday() // KST 기준 날짜
   await sql`
     INSERT INTO daily_visits (visit_date, visit_cnt) VALUES (${today}, 1)
     ON CONFLICT (visit_date) DO UPDATE SET visit_cnt = daily_visits.visit_cnt + 1
@@ -398,8 +406,8 @@ app.post('/api/admin/init-daily-stats', async (c) => {
 
 // 어드민 통계
 app.get('/api/admin/stats', async (c) => {
-  const today     = new Date().toISOString().slice(0, 10)
-  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
+  const today     = kstToday()
+  const yesterday = kstYesterday()
 
   // daily_stats 테이블 자동 생성 (없으면)
   await sql`
@@ -3454,8 +3462,8 @@ function renderDashboard() {
   const p   = document.getElementById('panel-stats');
   if (!d) return;
 
-  const todayStr = new Date().toISOString().slice(0,10);
-  const yestStr  = new Date(Date.now()-86400000).toISOString().slice(0,10);
+  const todayStr = new Date(Date.now()+9*60*60*1000).toISOString().slice(0,10);
+  const yestStr  = new Date(Date.now()+9*60*60*1000-86400000).toISOString().slice(0,10);
   const todayRow = dv.find(r=>r.visit_date===todayStr);
   const yestRow  = dv.find(r=>r.visit_date===yestStr);
   const todayVisit = todayRow ? (parseInt(todayRow.visit_cnt)||0) : 0;
@@ -3497,10 +3505,10 @@ function renderDashboard() {
 
 // ── 14일 차트 빌드
 function buildChart14(mode) {
-  const today = new Date();
+  const today = new Date(Date.now()+9*60*60*1000);
   const days = [];
   for (let i=13;i>=0;i--) {
-    const d = new Date(today); d.setDate(today.getDate()-i);
+    const d = new Date(Date.now()+9*60*60*1000-i*86400000);
     days.push(d.toISOString().slice(0,10));
   }
   const todayStr = today.toISOString().slice(0,10);
@@ -3900,7 +3908,7 @@ function renderCalDetail(dateStr, shops) {
 function drawCal() {
   const d    = _calData;
   const fmt  = (n) => n ? n.toLocaleString() : '0';
-  const today = new Date().toISOString().slice(0,10);
+  const today = new Date(Date.now()+9*60*60*1000).toISOString().slice(0,10);
 
   // 히트맵 색상 계산 (영상조회 기준 최대값)
   const maxViews = Math.max(1, ...d.daily.map(x => x.views));
