@@ -518,6 +518,83 @@ app.post('/api/inquiry', async (c) => {
   return c.json({ ok: true })
 })
 
+// 달력 통계 조회 API
+app.get('/api/admin/calendar', async (c) => {
+  const year  = parseInt(c.req.query('year')  || String(new Date().getFullYear()))
+  const month = parseInt(c.req.query('month') || String(new Date().getMonth() + 1))
+
+  // 해당 월의 시작일/종료일 계산
+  const startDate = `${year}-${String(month).padStart(2,'0')}-01`
+  const endDate   = new Date(year, month, 0).toISOString().slice(0, 10) // 말일
+
+  // 해당 월 일별 전체 합계 (달력 히트맵용)
+  const dailyRows = await sql`
+    SELECT stat_date::text as stat_date,
+           COALESCE(SUM(view_cnt),0) as views,
+           COALESCE(SUM(feed_sp),0)  as feed_sp,
+           COALESCE(SUM(map_sp),0)   as map_sp,
+           COUNT(DISTINCT shop_id)   as active_shops
+    FROM daily_stats
+    WHERE stat_date >= ${startDate}
+      AND stat_date <= ${endDate}
+    GROUP BY stat_date
+    ORDER BY stat_date ASC
+  `
+
+  // 특정 날짜 쿼리 (날짜 클릭 시 업체별 상세)
+  const dateParam = c.req.query('date')
+  let shopDetail: any[] = []
+  if (dateParam) {
+    shopDetail = await sql`
+      SELECT s.id, s.name, s.category, s.thumbnail,
+             COALESCE(ds.view_cnt,0) as views,
+             COALESCE(ds.feed_sp,0)  as feed_sp,
+             COALESCE(ds.map_sp,0)   as map_sp
+      FROM shops s
+      LEFT JOIN daily_stats ds ON s.id = ds.shop_id AND ds.stat_date = ${dateParam}
+      WHERE s.active = true
+        AND (COALESCE(ds.view_cnt,0)+COALESCE(ds.feed_sp,0)+COALESCE(ds.map_sp,0)) > 0
+      ORDER BY (COALESCE(ds.view_cnt,0)+COALESCE(ds.feed_sp,0)+COALESCE(ds.map_sp,0)) DESC
+    `
+  }
+
+  // 월 합계
+  const monthTotal = await sql`
+    SELECT COALESCE(SUM(view_cnt),0) as views,
+           COALESCE(SUM(feed_sp),0)  as feed_sp,
+           COALESCE(SUM(map_sp),0)   as map_sp
+    FROM daily_stats
+    WHERE stat_date >= ${startDate}
+      AND stat_date <= ${endDate}
+  `
+  const mt = monthTotal[0] || {}
+
+  return c.json({
+    year, month,
+    monthTotal: {
+      views:  parseInt(mt.views)   || 0,
+      feedSP: parseInt(mt.feed_sp) || 0,
+      mapSP:  parseInt(mt.map_sp)  || 0,
+    },
+    daily: dailyRows.map(r => ({
+      date:        r.stat_date,
+      views:       parseInt(r.views)        || 0,
+      feedSP:      parseInt(r.feed_sp)      || 0,
+      mapSP:       parseInt(r.map_sp)       || 0,
+      activeShops: parseInt(r.active_shops) || 0,
+    })),
+    shopDetail: shopDetail.map(r => ({
+      id:        r.id,
+      name:      r.name,
+      category:  r.category,
+      thumbnail: r.thumbnail,
+      views:     parseInt(r.views)   || 0,
+      feedSP:    parseInt(r.feed_sp) || 0,
+      mapSP:     parseInt(r.map_sp)  || 0,
+    })),
+  })
+})
+
 // 입점 문의 목록 (관리자용)
 app.get('/api/admin/inquiries', async (c) => {
   const rows = await sql`SELECT * FROM inquiries ORDER BY created_at DESC`
@@ -3121,6 +3198,9 @@ body{font-family:'Pretendard',sans-serif;background:var(--bg);color:var(--t1);mi
   <button class="tabbtn" id="tab-inq" onclick="switchTab('inq')">
     <i class="fas fa-envelope"></i>입점문의
   </button>
+  <button class="tabbtn" id="tab-cal" onclick="switchTab('cal')">
+    <i class="fas fa-calendar-alt"></i>달력
+  </button>
 </div>
 
 <!-- 콘텐츠 -->
@@ -3129,6 +3209,7 @@ body{font-family:'Pretendard',sans-serif;background:var(--bg);color:var(--t1);mi
   <div id="panel-shops" style="display:none"></div>
   <div id="panel-pay"   style="display:none"></div>
   <div id="panel-inq"   style="display:none"></div>
+  <div id="panel-cal"   style="display:none"></div>
 </div>
 
 <!-- 업체 추가/수정 모달 -->
@@ -3266,13 +3347,14 @@ let _stats = null, _dvRows = [], _chartMode = 'view', _rankMode = 'today';
 // ── 탭 전환
 function switchTab(t) {
   curTab = t;
-  ['stats','shops','pay','inq'].forEach(x => {
+  ['stats','shops','pay','inq','cal'].forEach(x => {
     document.getElementById('tab-'+x).classList.toggle('on', x===t);
     document.getElementById('panel-'+x).style.display = x===t ? 'block' : 'none';
   });
   document.querySelector('.add-btn').style.display = t==='shops' ? 'flex' : 'none';
   if (t==='inq') loadInquiries();
   if (t==='pay') renderPayTab();
+  if (t==='cal') renderCalendar();
 }
 
 // ── 토스트
@@ -3702,6 +3784,213 @@ async function loadInquiries(){
     const dt=d.toLocaleDateString('ko-KR',{month:'2-digit',day:'2-digit'})+' '+d.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
     return '<div class="inq-card"><div class="inq-top"><span class="inq-name">'+(r.owner||r.name||'이름없음')+'</span>'+(r.category?'<span class="inq-badge">'+r.category+'</span>':'')+'<span class="inq-time">'+dt+'</span></div><div class="inq-row"><span class="inq-kv">🏪 샵명 <strong>'+(r.name||'-')+'</strong></span><span class="inq-kv">📍 지역 <strong>'+(r.area||'-')+'</strong></span><span class="inq-kv">📞 <strong>'+(r.phone||'-')+'</strong></span></div>'+(r.url?'<div class="inq-row"><span class="inq-kv">🔗 <strong style="color:var(--blue)">'+r.url+'</strong></span></div>':'')+(r.message?'<div class="inq-msg">💬 '+r.message+'</div>':'')+'</div>';
   }).join('');
+}
+
+// ======================================================
+// 달력 탭
+// ======================================================
+let _calYear  = new Date().getFullYear();
+let _calMonth = new Date().getMonth() + 1;
+let _calData  = null;
+let _calSel   = null; // 선택된 날짜
+
+async function renderCalendar() {
+  const p = document.getElementById('panel-cal');
+  p.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i></div>';
+  const res = await fetch('/api/admin/calendar?year='+_calYear+'&month='+_calMonth);
+  _calData = await res.json();
+  _calSel  = null;
+  drawCal();
+}
+
+async function calSelectDate(dateStr) {
+  if (_calSel === dateStr) { _calSel = null; drawCal(); return; }
+  _calSel = dateStr;
+  drawCal();
+  // 업체별 상세 로드
+  const detailEl = document.getElementById('cal-detail');
+  if (!detailEl) return;
+  detailEl.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i></div>';
+  const res = await fetch('/api/admin/calendar?year='+_calYear+'&month='+_calMonth+'&date='+dateStr);
+  const data = await res.json();
+  renderCalDetail(dateStr, data.shopDetail || []);
+}
+
+function renderCalDetail(dateStr, shops) {
+  const detailEl = document.getElementById('cal-detail');
+  if (!detailEl) return;
+  if (!shops.length) {
+    detailEl.innerHTML = '<div class="empty" style="padding:20px">📭 해당 날짜에 기록된 데이터가 없어요</div>';
+    return;
+  }
+  const fmt = (n) => n.toLocaleString();
+  detailEl.innerHTML = '<div class="section-title" style="margin-bottom:10px">📅 ' + dateStr + ' 업체별 실적</div>'
+    + shops.map((s,i) => {
+      const total = s.views + s.feedSP + s.mapSP;
+      const thumb = s.thumbnail
+        ? '<img src="'+s.thumbnail+'" class="cal-thumb" style="width:36px;height:36px;border-radius:8px;object-fit:cover">'
+        : '<div style="width:36px;height:36px;border-radius:8px;background:#222;display:flex;align-items:center;justify-content:center;font-size:16px">💄</div>';
+      return '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#1a1a1a;border-radius:10px;margin-bottom:6px">'
+        + '<span style="font-size:12px;font-weight:700;color:var(--t3);min-width:20px;text-align:center">' + (i+1) + '</span>'
+        + thumb
+        + '<div style="flex:1;min-width:0">'
+        +   '<div style="font-size:13px;font-weight:700;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + s.name + '</div>'
+        +   '<div style="font-size:11px;color:var(--t3)">' + (s.category||'') + '</div>'
+        + '</div>'
+        + '<div style="display:flex;gap:6px;flex-shrink:0">'
+        +   (s.views  ? '<span style="font-size:11px;background:rgba(100,149,237,.15);color:#6495ed;padding:3px 7px;border-radius:6px">👁 '+fmt(s.views)+'</span>' : '')
+        +   (s.feedSP ? '<span style="font-size:11px;background:rgba(255,77,125,.15);color:var(--pink);padding:3px 7px;border-radius:6px">📹 '+fmt(s.feedSP)+'</span>' : '')
+        +   (s.mapSP  ? '<span style="font-size:11px;background:rgba(3,199,90,.15);color:var(--green);padding:3px 7px;border-radius:6px">🗺️ '+fmt(s.mapSP)+'</span>' : '')
+        + '</div>'
+        + '<div style="font-size:13px;font-weight:800;color:var(--t1);min-width:36px;text-align:right">' + fmt(total) + '</div>'
+        + '</div>';
+    }).join('');
+}
+
+function drawCal() {
+  const d    = _calData;
+  const fmt  = (n) => n ? n.toLocaleString() : '0';
+  const today = new Date().toISOString().slice(0,10);
+
+  // 히트맵 색상 계산 (영상조회 기준 최대값)
+  const maxViews = Math.max(1, ...d.daily.map(x => x.views));
+
+  // 달력 날짜 → 데이터 맵
+  const dayMap = {};
+  d.daily.forEach(x => { dayMap[x.date] = x; });
+
+  // 해당 월 1일 요일 & 말일
+  const firstDay = new Date(_calYear, _calMonth-1, 1).getDay(); // 0=일
+  const lastDate  = new Date(_calYear, _calMonth, 0).getDate();
+
+  // 이전달 말일
+  const prevLastDate = new Date(_calYear, _calMonth-1, 0).getDate();
+
+  const DOW = ['일','월','화','수','목','금','토'];
+
+  // 월 합계 카드
+  const mt = d.monthTotal;
+  const totalAll = mt.views + mt.feedSP + mt.mapSP;
+
+  let html = '';
+
+  // ── 헤더: 월 이동 + 합계
+  html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">'
+    + '<button onclick="calMove(-1)" style="background:#1e1e1e;border:1px solid var(--border);color:var(--t1);padding:8px 16px;border-radius:8px;cursor:pointer;font-size:14px">◀</button>'
+    + '<div style="text-align:center">'
+    +   '<div style="font-size:18px;font-weight:800;color:var(--t1)">'+_calYear+'년 '+_calMonth+'월</div>'
+    +   '<div style="font-size:12px;color:var(--t3);margin-top:2px">월 합계 · 👁 '+fmt(mt.views)+' · 📹 '+fmt(mt.feedSP)+' · 🗺️ '+fmt(mt.mapSP)+'</div>'
+    + '</div>'
+    + '<button onclick="calMove(1)" style="background:#1e1e1e;border:1px solid var(--border);color:var(--t1);padding:8px 16px;border-radius:8px;cursor:pointer;font-size:14px">▶</button>'
+    + '</div>';
+
+  // ── 달력 그리드
+  html += '<div style="background:#111;border-radius:14px;overflow:hidden;border:1px solid var(--border);margin-bottom:16px">';
+
+  // 요일 헤더
+  html += '<div style="display:grid;grid-template-columns:repeat(7,1fr)">';
+  DOW.forEach((d,i) => {
+    const c = i===0 ? '#ff6b6b' : i===6 ? '#6495ed' : 'var(--t3)';
+    html += '<div style="text-align:center;padding:10px 0;font-size:12px;font-weight:700;color:'+c+';border-bottom:1px solid var(--border)">'+d+'</div>';
+  });
+  html += '</div>';
+
+  // 날짜 셀
+  html += '<div style="display:grid;grid-template-columns:repeat(7,1fr)">';
+
+  // 이전달 빈칸
+  for (let i = 0; i < firstDay; i++) {
+    const dd = prevLastDate - firstDay + i + 1;
+    html += '<div style="padding:8px 6px;min-height:72px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);opacity:.25">'
+      + '<div style="font-size:12px;color:var(--t3);margin-bottom:4px">'+dd+'</div>'
+      + '</div>';
+  }
+
+  // 이번달 날짜
+  for (let day = 1; day <= lastDate; day++) {
+    const col = (firstDay + day - 1) % 7;
+    const dateStr = _calYear+'-'+String(_calMonth).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+    const dd = dayMap[dateStr];
+    const isToday = dateStr === today;
+    const isSel   = dateStr === _calSel;
+    const isSun   = col === 0;
+    const isSat   = col === 6;
+    const isLast  = col === 6 || day === lastDate;
+
+    // 히트맵 강도 (0~1)
+    const intensity = dd ? Math.min(1, dd.views / maxViews) : 0;
+    const heatAlpha = (intensity * 0.55 + (dd && dd.views>0 ? 0.08 : 0)).toFixed(2);
+
+    let cellBg = 'transparent';
+    if (dd && dd.views > 0) cellBg = 'rgba(100,149,237,'+heatAlpha+')';
+    if (isSel)  cellBg = 'rgba(255,77,125,.25)';
+    if (isToday && !isSel) cellBg = 'rgba(245,158,11,.12)';
+
+    const borderR = isLast ? 'none' : '1px solid var(--border)';
+    const borderB = day > lastDate - 7 ? 'none' : '1px solid var(--border)';
+    const cursor  = dd ? 'pointer' : 'default';
+
+    const numColor = isSel ? 'var(--pink)' : isToday ? 'var(--amber)' : isSun ? '#ff6b6b' : isSat ? '#6495ed' : 'var(--t1)';
+
+    html += '<div data-dt="'+dateStr+'" onclick="calSelectDate(this.dataset.dt)" style="padding:8px 6px;min-height:72px;border-right:'+borderR+';border-bottom:'+borderB+';background:'+cellBg+';cursor:'+cursor+';transition:background .15s;position:relative">';
+    html +=   '<div style="font-size:12px;font-weight:'+(isToday||isSel?'800':'600')+';color:'+numColor+';margin-bottom:4px;display:flex;align-items:center;gap:4px">'
+      + day
+      + (isToday ? '<span style="font-size:9px;background:var(--amber);color:#000;padding:1px 4px;border-radius:4px;font-weight:800">오늘</span>' : '')
+      + '</div>';
+
+    if (dd && dd.views > 0) {
+      html += '<div style="font-size:10px;color:rgba(255,255,255,.8);line-height:1.6">'
+        + '<span style="color:#9ab4f0">👁 '+fmt(dd.views)+'</span><br>'
+        + (dd.feedSP ? '<span style="color:#ff8aaa">📹 '+fmt(dd.feedSP)+'</span><br>' : '')
+        + (dd.mapSP  ? '<span style="color:#5de0a0">🗺️ '+fmt(dd.mapSP)+'</span>' : '')
+        + '</div>';
+    } else {
+      html += '<div style="font-size:18px;color:var(--t4);margin-top:4px">·</div>';
+    }
+    html += '</div>';
+  }
+
+  // 다음달 빈칸
+  const remaining = (7 - (firstDay + lastDate) % 7) % 7;
+  for (let i = 1; i <= remaining; i++) {
+    html += '<div style="padding:8px 6px;min-height:72px;border-bottom:none;opacity:.25">'
+      + '<div style="font-size:12px;color:var(--t3);margin-bottom:4px">'+i+'</div>'
+      + '</div>';
+  }
+
+  html += '</div></div>'; // grid + calendar card
+
+  // ── 범례
+  html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap">'
+    + '<span style="font-size:11px;color:var(--t3)">히트맵 강도:</span>'
+    + '<div style="display:flex;gap:3px;align-items:center">'
+    + [0.05,0.15,0.3,0.5,0.7,1.0].map(v=>'<div style="width:18px;height:12px;border-radius:3px;background:rgba(100,149,237,'+v+')"></div>').join('')
+    + '</div>'
+    + '<span style="font-size:11px;color:var(--t3)">낮음 → 높음 (👁 영상조회 기준)</span>'
+    + '<span style="margin-left:8px;font-size:11px;color:var(--amber)">■ 오늘</span>'
+    + '<span style="font-size:11px;color:var(--pink)">■ 선택</span>'
+    + '</div>';
+
+  // ── 날짜 클릭 시 업체 상세
+  html += '<div id="cal-detail" style="margin-top:4px">'
+    + '<div class="empty" style="padding:20px;color:var(--t3)">📅 날짜를 클릭하면 업체별 상세 데이터가 표시됩니다</div>'
+    + '</div>';
+
+  const p = document.getElementById('panel-cal');
+  p.innerHTML = '<div class="section" style="padding:16px">'+html+'</div>';
+
+  // 선택된 날짜가 있으면 상세 재렌더
+  if (_calSel && _calData) {
+    const found = _calData.daily.find(x => x.date === _calSel);
+    if (!found) renderCalDetail(_calSel, []);
+  }
+}
+
+function calMove(dir) {
+  _calMonth += dir;
+  if (_calMonth > 12) { _calMonth = 1;  _calYear++; }
+  if (_calMonth < 1)  { _calMonth = 12; _calYear--; }
+  renderCalendar();
 }
 
 // ======================================================
