@@ -576,15 +576,33 @@ app.get('/api/admin/calendar', async (c) => {
   `
   const mt = monthTotal[0] || {}
 
+  // 해당 월 일별 방문자 수
+  const visitRows = await sql`
+    SELECT visit_date::text as visit_date, visit_cnt
+    FROM daily_visits
+    WHERE visit_date >= ${startDate}
+      AND visit_date <= ${endDate}
+    ORDER BY visit_date ASC
+  `
+  const visitMap: Record<string, number> = {}
+  visitRows.forEach((r: any) => {
+    visitMap[r.visit_date] = parseInt(r.visit_cnt) || 0
+  })
+
+  // 월 방문자 합계
+  const monthVisit = visitRows.reduce((s: number, r: any) => s + (parseInt(r.visit_cnt)||0), 0)
+
   return c.json({
     year, month,
     monthTotal: {
       views:  parseInt(mt.views)   || 0,
       feedSP: parseInt(mt.feed_sp) || 0,
       mapSP:  parseInt(mt.map_sp)  || 0,
+      visits: monthVisit,
     },
     daily: dailyRows.map(r => ({
       date:        r.stat_date,
+      visits:      visitMap[r.stat_date] || 0,
       views:       parseInt(r.views)        || 0,
       feedSP:      parseInt(r.feed_sp)      || 0,
       mapSP:       parseInt(r.map_sp)       || 0,
@@ -3464,19 +3482,19 @@ function buildChart14(mode) {
   const chart = (_stats && _stats.weekChart) || [];
   const dv    = _dvRows;
 
-  let counts, barClass, modeLabel;
+  let counts, barClass, chartLabel;
   if (mode==='view') {
     const m={}; chart.forEach(r=>{m[r.date]=r.views||0;});
-    counts=days.map(d=>m[d]||0); barClass='bar-view'; modeLabel='👁 영상조회';
+    counts=days.map(d=>m[d]||0); barClass='bar-view'; chartLabel='👁 영상조회';
   } else if (mode==='feed') {
     const m={}; chart.forEach(r=>{m[r.date]=r.feedSP||0;});
-    counts=days.map(d=>m[d]||0); barClass='bar-feed'; modeLabel='📹 피드클릭';
+    counts=days.map(d=>m[d]||0); barClass='bar-feed'; chartLabel='📹 피드클릭';
   } else if (mode==='map') {
     const m={}; chart.forEach(r=>{m[r.date]=r.mapSP||0;});
-    counts=days.map(d=>m[d]||0); barClass='bar-map'; modeLabel='🗺️ 지도클릭';
+    counts=days.map(d=>m[d]||0); barClass='bar-map'; chartLabel='🗺️ 지도클릭';
   } else {
     const m={}; dv.forEach(r=>{m[r.visit_date]=parseInt(r.visit_cnt)||0;});
-    counts=days.map(d=>m[d]||0); barClass='bar-visit'; modeLabel='🙋 방문자';
+    counts=days.map(d=>m[d]||0); barClass='bar-visit'; chartLabel='🙋 방문자';
   }
 
   const maxV = Math.max(...counts,1);
@@ -3501,7 +3519,7 @@ function buildChart14(mode) {
   return '<div class="section-title">📈 14일 추이</div>' +
     '<div class="chart-card">' +
       '<div class="chart-header">' +
-        '<span class="chart-title">' + modeLabel + ' · 14일 합계 ' +
+        '<span class="chart-title">' + chartLabel + ' · 14일 합계 ' +
           '<strong style="color:var(--t1)">' + total.toLocaleString() + '</strong></span>' +
         '<div class="chart-tabs">' +
           '<button class="ctab '+(mode==='visit'?tabOn.visit:'')+'" data-m="visit" onclick="switchChart(this.dataset.m)">방문</button>' +
@@ -3866,6 +3884,10 @@ function drawCal() {
   const dayMap = {};
   d.daily.forEach(x => { dayMap[x.date] = x; });
 
+  // 방문자 맵
+  const visitMapCal = {};
+  d.daily.forEach(x => { visitMapCal[x.date] = x.visits || 0; });
+
   // 해당 월 1일 요일 & 말일
   const firstDay = new Date(_calYear, _calMonth-1, 1).getDay(); // 0=일
   const lastDate  = new Date(_calYear, _calMonth, 0).getDate();
@@ -3886,7 +3908,7 @@ function drawCal() {
     + '<button onclick="calMove(-1)" style="background:#1e1e1e;border:1px solid var(--border);color:var(--t1);padding:8px 16px;border-radius:8px;cursor:pointer;font-size:14px">◀</button>'
     + '<div style="text-align:center">'
     +   '<div style="font-size:18px;font-weight:800;color:var(--t1)">'+_calYear+'년 '+_calMonth+'월</div>'
-    +   '<div style="font-size:12px;color:var(--t3);margin-top:2px">월 합계 · 👁 '+fmt(mt.views)+' · 📹 '+fmt(mt.feedSP)+' · 🗺️ '+fmt(mt.mapSP)+'</div>'
+    +   '<div style="font-size:12px;color:var(--t3);margin-top:2px">월 합계 · 🙋 '+fmt(mt.visits||0)+' · 👁 '+fmt(mt.views)+' · 📹 '+fmt(mt.feedSP)+' · 🗺️ '+fmt(mt.mapSP)+'</div>'
     + '</div>'
     + '<button onclick="calMove(1)" style="background:#1e1e1e;border:1px solid var(--border);color:var(--t1);padding:8px 16px;border-radius:8px;cursor:pointer;font-size:14px">▶</button>'
     + '</div>';
@@ -3945,11 +3967,14 @@ function drawCal() {
       + (isToday ? '<span style="font-size:9px;background:var(--amber);color:#000;padding:1px 4px;border-radius:4px;font-weight:800">오늘</span>' : '')
       + '</div>';
 
-    if (dd && dd.views > 0) {
-      html += '<div style="font-size:10px;color:rgba(255,255,255,.8);line-height:1.6">'
-        + '<span style="color:#9ab4f0">👁 '+fmt(dd.views)+'</span><br>'
-        + (dd.feedSP ? '<span style="color:#ff8aaa">📹 '+fmt(dd.feedSP)+'</span><br>' : '')
-        + (dd.mapSP  ? '<span style="color:#5de0a0">🗺️ '+fmt(dd.mapSP)+'</span>' : '')
+    const dayVisits = visitMapCal ? (visitMapCal[dateStr] || 0) : 0;
+    const hasData = (dd && dd.views > 0) || dayVisits > 0;
+    if (hasData) {
+      html += '<div style="font-size:10px;color:rgba(255,255,255,.8);line-height:1.5">'
+        + (dayVisits ? '<span style="color:#fbbf24">🙋 '+fmt(dayVisits)+'</span><br>' : '')
+        + (dd && dd.views  ? '<span style="color:#9ab4f0">👁 '+fmt(dd.views)+'</span><br>' : '')
+        + (dd && dd.feedSP ? '<span style="color:#ff8aaa">📹 '+fmt(dd.feedSP)+'</span><br>' : '')
+        + (dd && dd.mapSP  ? '<span style="color:#5de0a0">🗺️ '+fmt(dd.mapSP)+'</span>' : '')
         + '</div>';
     } else {
       html += '<div style="font-size:18px;color:var(--t4);margin-top:4px">·</div>';
