@@ -394,6 +394,8 @@ app.get('/api/admin/stats', async (c) => {
     SELECT s.id, s.name, s.category, s.thumbnail, s.youtube_id,
            s.featured, s.active, s.lat, s.lng, s.smart_place_url,
            s.address, s.district, s.phone,
+           s.display_mode, s.price, s.tags, s.description,
+           s.plan, s.payment_status, s.paid_until, s.payment_memo,
            COALESCE(st.view_cnt,0) as view_cnt,
            COALESCE(st.feed_sp,0)  as feed_sp,
            COALESCE(st.map_sp,0)   as map_sp
@@ -478,6 +480,11 @@ app.get('/api/admin/stats', async (c) => {
       plan:          r.plan ?? 'basic',
       paymentStatus: r.payment_status ?? 'unpaid',
       paidUntil:     r.paid_until ? String(r.paid_until).slice(0,10) : null,
+      paymentMemo:   r.payment_memo ?? '',
+      displayMode:   r.display_mode ?? 'both',
+      priceRange:    r.price ?? '',
+      tags:          r.tags ?? [],
+      description:   r.description ?? '',
       // 오늘 업체별 성과
       todayViews:  todayShopMap[r.id]?.todayViews  || 0,
       todayFeedSP: todayShopMap[r.id]?.todayFeedSP || 0,
