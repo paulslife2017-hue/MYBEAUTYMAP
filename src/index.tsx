@@ -12,6 +12,111 @@ const DATABASE_URL = process.env.DATABASE_URL ||
   'postgresql://neondb_owner:npg_1PBkOmAWRcf2@ep-round-recipe-aqdgkjfj-pooler.c-8.us-east-1.aws.neon.tech/neondb?sslmode=require'
 const sql = neon(DATABASE_URL)
 
+// ══════════════════════════════════════════════════════════════════════════
+// SEO 유틸 함수 (업체 추가 시 자동 적용)
+// ══════════════════════════════════════════════════════════════════════════
+
+// 주소에서 "시/구" 지역명 추출 → SEO 키워드로 활용
+// 예: "서울특별시 강남구 테헤란로 …" → "강남구"
+// 예: "경기도 성남시 분당구 …"       → "분당구"
+// extractRegion: 검색량 많은 형태로 추출
+// 강남구 → 강남 / 분당구 → 분당 / 수원시 → 수원
+// "강남 마사지", "분당 헤드스파" 형태가 실제 검색량 압도적
+function extractRegion(address: string): string {
+  if (!address) return ''
+  const parts = address.split(/\s+/)
+  // 1순위: 구 단위 → 접미사 '구' 제거 (강남구→강남, 분당구→분당)
+  for (let i = 1; i < parts.length; i++) {
+    if (parts[i].endsWith('구') && !parts[i].endsWith('시구')) {
+      return parts[i].replace(/구$/, '')
+    }
+  }
+  // 2순위: 시 단위 → 접미사 '시' 제거 (수원시→수원, 성남시→성남)
+  for (let i = 1; i < parts.length; i++) {
+    if (parts[i].endsWith('시') && parts[i] !== parts[0]) {
+      return parts[i].replace(/(특별시|광역시|특별자치시|시)$/, '')
+    }
+  }
+  // 3순위: 도 단위 (경기→경기)
+  if (parts[0]) return parts[0].replace(/(특별자치도|도)$/, '')
+  return ''
+}
+
+// extractCity: 광역시/도 단위 (서울, 경기, 인천 등)
+// title 보조 키워드용
+function extractCity(address: string): string {
+  if (!address) return ''
+  const parts = address.split(/\s+/)
+  // 특별시·광역시 → "서울", "부산"
+  if (parts[0]) {
+    const city = parts[0].replace(/(특별시|광역시|특별자치시|특별자치도|도|시)$/, '')
+    return city
+  }
+  return ''
+}
+
+// 카테고리 → Schema.org 타입 매핑
+function schemaType(category: string): string {
+  const map: Record<string, string> = {
+    '마사지':  'MassageTherapist',
+    '헤드스파': 'BeautySalon',
+    '피부관리': 'BeautySalon',
+    '헤어':    'HairSalon',
+    '메이크업': 'BeautySalon',
+    '왁싱':    'BeautySalon',
+    '반영구':  'BeautySalon',
+    '병원':    'MedicalBusiness',
+    '그외':    'LocalBusiness',
+  }
+  return map[category] || 'LocalBusiness'
+}
+
+// 업체 상세 페이지 title – 상위노출 패턴 반영
+// "묘하림 강남 헤드스파 추천 | 마이뷰티맵"
+function seoTitle(shop: any): string {
+  const region = extractRegion(shop.address)
+  const city   = extractCity(shop.address)
+  const loc    = region || city
+  return `${shop.name} ${loc ? loc + ' ' : ''}${shop.category} 추천 | 마이뷰티맵`
+}
+
+// 업체 상세 페이지 description – 검색 클릭률 높이는 패턴
+// "묘하림 | 강남 헤드스파 잘하는 곳. 가격·예약·위치 한눈에 확인!"
+function seoDesc(shop: any): string {
+  const region = extractRegion(shop.address)
+  const city   = extractCity(shop.address)
+  const tags   = Array.isArray(shop.tags) && shop.tags.length ? shop.tags.join('·') + ' ' : ''
+  const loc    = region || city
+  const price  = shop.price ? ` 가격 ${shop.price}.` : ''
+  const desc   = shop.desc  ? ' ' + shop.desc.slice(0, 40) : ''
+  return `${shop.name} | ${loc ? loc + ' ' : ''}${shop.category} 잘하는 곳. ${tags}예약·위치·가격 한눈에 확인!${price}${desc}`.slice(0, 160)
+}
+
+// 카테고리 랜딩 title – "강남 마사지 추천 TOP | 마이뷰티맵"
+function catSeoTitle(category: string, region: string): string {
+  return `${region} ${category} 추천 TOP | 마이뷰티맵`
+}
+// 카테고리 랜딩 description
+function catSeoDesc(category: string, region: string, count: number): string {
+  return `${region} ${category} 잘하는 곳 ${count}곳 추천! 가격·위치·예약·후기까지 마이뷰티맵에서 한눈에 확인하세요.`
+}
+// 카테고리 랜딩 keywords – 실제 검색량 많은 조합
+function catSeoKeywords(category: string, region: string): string {
+  const city = region // 이미 강남/분당 형태
+  return [
+    `${city} ${category}`,
+    `${city} ${category} 추천`,
+    `${city} ${category} 잘하는 곳`,
+    `${city} ${category} 예약`,
+    `${city} ${category} 가격`,
+    `${city} ${category} 후기`,
+    `${city} ${category} 맛집`,
+    `${city} 뷰티샵`,
+    `${city} 뷰티 추천`,
+    `${category} 추천`,
+  ].join(',')
+}
+
 // KST(UTC+9) 기준 오늘 날짜 반환 → 'YYYY-MM-DD'
 function kstToday(): string {
   return new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
@@ -694,6 +799,117 @@ app.post('/api/admin/upload-thumbnail', async (c) => {
   return c.json({ ok: true, url: dataUrl })
 })
 
+// ══════════════════════════════════════════════════════════════════════════
+// SEO 라우트 (업체 추가 시 자동으로 검색엔진에 노출)
+// ══════════════════════════════════════════════════════════════════════════
+
+// robots.txt – 크롤러 전체 허용 + sitemap 위치 알림
+app.get('/robots.txt', (c) => {
+  const proto = c.req.header('x-forwarded-proto') || 'https'
+  const host  = c.req.header('x-forwarded-host') || c.req.header('host') || 'mybeautymap-one.vercel.app'
+  return c.text(
+    `User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api/\n\nSitemap: ${proto}://${host}/sitemap.xml`,
+    200,
+    { 'Content-Type': 'text/plain; charset=utf-8' }
+  )
+})
+
+// sitemap.xml – 동적 생성 (업체 추가만 하면 자동으로 사이트맵에 포함됨)
+app.get('/sitemap.xml', async (c) => {
+  const proto   = c.req.header('x-forwarded-proto') || 'https'
+  const host    = c.req.header('x-forwarded-host') || c.req.header('host') || 'mybeautymap-one.vercel.app'
+  const base    = `${proto}://${host}`
+  const today   = kstToday()
+
+  // DB에서 전체 업체 조회
+  const rows = await sql`SELECT id, name, category, address FROM shops WHERE active = true ORDER BY id`
+
+  // 카테고리×지역 조합 추출 (중복 제거)
+  const catRegionSet = new Set<string>()
+  for (const r of rows) {
+    const region = extractRegion(r.address)
+    if (region) catRegionSet.add(`${r.category}|||${region}`)
+  }
+
+  const staticUrls = [
+    { loc: base,        priority: '1.0', freq: 'daily' },
+    { loc: `${base}/map`, priority: '0.8', freq: 'weekly' },
+  ]
+
+  // 업체별 개별 페이지
+  const shopUrls = rows.map((r: any) => ({
+    loc:      `${base}/shop/${r.id}`,
+    priority: '0.9',
+    freq:     'weekly',
+    lastmod:  today,
+  }))
+
+  // 카테고리×지역 랜딩 페이지
+  const catUrls = [...catRegionSet].map(key => {
+    const [cat, region] = key.split('|||')
+    return {
+      loc:      `${base}/c/${encodeURIComponent(cat)}/${encodeURIComponent(region)}`,
+      priority: '0.8',
+      freq:     'weekly',
+      lastmod:  today,
+    }
+  })
+
+  const allUrls = [...staticUrls, ...shopUrls, ...catUrls]
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${allUrls.map(u => `  <url>
+    <loc>${u.loc}</loc>
+    ${u.lastmod ? `<lastmod>${u.lastmod}</lastmod>` : ''}
+    <changefreq>${u.freq}</changefreq>
+    <priority>${u.priority}</priority>
+  </url>`).join('\n')}
+</urlset>`
+
+  return c.text(xml, 200, { 'Content-Type': 'application/xml; charset=utf-8' })
+})
+
+// /shop/:id – 업체별 개별 SEO 페이지
+// 새 업체 등록 시 자동으로 /shop/{id} 페이지가 생성됨
+app.get('/shop/:id', async (c) => {
+  const proto   = c.req.header('x-forwarded-proto') || 'https'
+  const host    = c.req.header('x-forwarded-host') || c.req.header('host') || 'mybeautymap-one.vercel.app'
+  const baseUrl = `${proto}://${host}`
+  const id      = +c.req.param('id')
+  if (isNaN(id)) return c.redirect('/')
+
+  const rows = await sql`
+    SELECT s.*, COALESCE(st.view_cnt,0) as view_cnt,
+           COALESCE(st.feed_sp,0) as feed_sp
+    FROM shops s LEFT JOIN stats st ON s.id = st.shop_id
+    WHERE s.id = ${id} AND s.active = true
+  `
+  if (!rows.length) return c.redirect('/')
+  const shop = rowToShop(rows[0])
+  return c.html(shopDetailPage(shop, baseUrl))
+})
+
+// /c/:category/:region – 카테고리×지역 랜딩 페이지
+// 예: /c/마사지/강남구  /c/헤드스파/분당구
+app.get('/c/:category/:region', async (c) => {
+  const proto    = c.req.header('x-forwarded-proto') || 'https'
+  const host     = c.req.header('x-forwarded-host') || c.req.header('host') || 'mybeautymap-one.vercel.app'
+  const baseUrl  = `${proto}://${host}`
+  const category = decodeURIComponent(c.req.param('category'))
+  const region   = decodeURIComponent(c.req.param('region'))
+
+  const rows = await sql`
+    SELECT s.*, COALESCE(st.view_cnt,0) as view_cnt,
+           COALESCE(st.feed_sp,0) as feed_sp
+    FROM shops s LEFT JOIN stats st ON s.id = st.shop_id
+    WHERE s.active = true AND s.category = ${category}
+      AND s.address LIKE ${'%' + region + '%'}
+    ORDER BY st.view_cnt DESC NULLS LAST
+  `
+  const shops = rows.map(rowToShop)
+  return c.html(categoryLandingPage(category, region, shops, baseUrl))
+})
+
 app.get('/admin', (c) => c.html(adminPage()))
 app.get('/map-admin', (c) => c.redirect('/admin'))
 app.get('/map', (c) => c.html(mapPage()))
@@ -839,6 +1055,64 @@ function mainPage(baseUrl = 'https://mybeautymap.pages.dev') { return `<!DOCTYPE
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css"/>
+
+<!-- Schema.org 구조화 데이터 -->
+<script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "${baseUrl}/#website",
+      "name": "마이뷰티맵",
+      "alternateName": "MyBeautyMap",
+      "url": "${baseUrl}",
+      "description": "마사지·헤드스파·피부관리·헤어 – 내 주변 뷰티샵을 지도와 피드로 한눈에",
+      "inLanguage": "ko-KR",
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": {
+          "@type": "EntryPoint",
+          "urlTemplate": "${baseUrl}/?q={search_term_string}"
+        },
+        "query-input": "required name=search_term_string"
+      }
+    },
+    {
+      "@type": "WebPage",
+      "@id": "${baseUrl}/#webpage",
+      "url": "${baseUrl}",
+      "name": "마이뷰티맵 – 내 주변 뷰티샵 한눈에",
+      "isPartOf": { "@id": "${baseUrl}/#website" },
+      "about": {
+        "@type": "Thing",
+        "name": "뷰티샵 지도 서비스"
+      },
+      "description": "마사지·헤드스파·피부관리·헤어·메이크업·왁싱·반영구 – 위치 기반으로 가까운 뷰티샵을 찾고, 리뷰·가격·예약까지 바로 확인하세요."
+    },
+    {
+      "@type": "Organization",
+      "@id": "${baseUrl}/#organization",
+      "name": "마이뷰티맵",
+      "url": "${baseUrl}",
+      "logo": {
+        "@type": "ImageObject",
+        "url": "${baseUrl}/og-image.jpg",
+        "width": 1200,
+        "height": 630
+      },
+      "sameAs": []
+    },
+    {
+      "@type": "SiteLinksSearchBox",
+      "url": "${baseUrl}",
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": "${baseUrl}/?q={search_term_string}",
+        "query-input": "required name=search_term_string"
+      }
+    }
+  ]
+}</script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -2445,6 +2719,398 @@ fetch('/api/track/visit', { method: 'POST' }).catch(() => {});
 
 loadFeed('all');
 </script>
+</body>
+</html>`
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// [SEO] 업체 상세 페이지 /shop/:id
+// 업체 등록 시 자동으로 SEO 최적화 페이지 생성
+// ══════════════════════════════════════════════════════════════════════════
+function shopDetailPage(shop: any, baseUrl: string): string {
+  const title   = seoTitle(shop)
+  const desc    = seoDesc(shop)
+  const region  = extractRegion(shop.address)   // 강남, 분당, 수원 등
+  const city    = extractCity(shop.address)     // 서울, 경기 등
+  const loc     = region || city
+  const type    = schemaType(shop.category)
+  const ogImg   = shop.thumbnail || `${baseUrl}/og-image.jpg`
+  const pageUrl = `${baseUrl}/shop/${shop.id}`
+  const tags    = Array.isArray(shop.tags) ? shop.tags : []
+  const catEmoji: Record<string,string> = {마사지:'💆',헤드스파:'🧖',피부관리:'✨',헤어:'💇',메이크업:'💄',왁싱:'🌸',반영구:'👁',병원:'🏥',그외:'🌟'}
+  const emoji   = catEmoji[shop.category] || '🌟'
+
+  // Schema.org LocalBusiness → 구글 리치스니펫 (별점·주소·전화)
+  const schema = JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': type,
+    name: shop.name,
+    description: desc,
+    url: pageUrl,
+    telephone: shop.phone || undefined,
+    address: { '@type': 'PostalAddress', streetAddress: shop.address, addressLocality: loc, addressCountry: 'KR' },
+    geo: (shop.lat && shop.lng) ? { '@type': 'GeoCoordinates', latitude: shop.lat, longitude: shop.lng } : undefined,
+    image: shop.thumbnail || undefined,
+    priceRange: shop.price || undefined,
+    hasMap: shop.smartPlaceUrl || undefined,
+    sameAs: shop.smartPlaceUrl ? [shop.smartPlaceUrl] : undefined,
+  })
+
+  // 키워드: 업체명 + 지역 + 카테고리 + 롱테일 조합
+  const kws = [
+    shop.name, `${loc} ${shop.category}`, `${loc} ${shop.category} 추천`,
+    `${loc} ${shop.category} 잘하는 곳`, `${loc} ${shop.category} 예약`,
+    `${loc} ${shop.category} 가격`, `${loc} ${shop.category} 후기`,
+    `${city} ${shop.category}`, `${shop.name} 예약`, `${shop.name} 위치`,
+    ...tags.map((t:string) => `${loc} ${t}`)
+  ].filter(Boolean).join(',')
+
+  return `<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+<title>${title}</title>
+<meta name="description" content="${desc}"/>
+<meta name="keywords" content="${kws}"/>
+<link rel="canonical" href="${pageUrl}"/>
+<meta property="og:type"        content="business.business"/>
+<meta property="og:site_name"   content="마이뷰티맵"/>
+<meta property="og:title"       content="${title}"/>
+<meta property="og:description" content="${desc}"/>
+<meta property="og:image"       content="${ogImg}"/>
+<meta property="og:url"         content="${pageUrl}"/>
+<meta property="og:locale"      content="ko_KR"/>
+<meta name="twitter:card"        content="summary_large_image"/>
+<meta name="twitter:title"       content="${title}"/>
+<meta name="twitter:description" content="${desc}"/>
+<meta name="twitter:image"       content="${ogImg}"/>
+<script type="application/ld+json">${schema}</script>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Pretendard',-apple-system,sans-serif;background:#0a0a0a;color:#fff;min-height:100vh}
+.wrap{max-width:640px;margin:0 auto;padding-bottom:90px}
+.top{display:flex;align-items:center;gap:12px;padding:14px 16px;position:sticky;top:0;z-index:10;
+  background:rgba(10,10,10,.95);backdrop-filter:blur(14px);border-bottom:1px solid rgba(255,255,255,.07)}
+.back{width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.08);border:none;
+  color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.site-nm{font-size:15px;font-weight:800;color:#FF4D7D;letter-spacing:-.3px}
+.thumb{width:100%;aspect-ratio:16/9;object-fit:cover;background:#111}
+.thumb-ph{width:100%;aspect-ratio:16/9;background:linear-gradient(135deg,#1a1a1a,#2a2a2a);
+  display:flex;align-items:center;justify-content:center;font-size:72px}
+.info{padding:20px 16px 0}
+.badge{display:inline-flex;align-items:center;gap:5px;background:rgba(255,77,125,.12);
+  color:#FF4D7D;font-size:11px;font-weight:700;padding:4px 11px;border-radius:20px;margin-bottom:10px}
+h1{font-size:26px;font-weight:800;line-height:1.2;margin-bottom:8px;letter-spacing:-.5px}
+.addr{font-size:13px;color:rgba(255,255,255,.45);display:flex;align-items:flex-start;gap:5px;margin-bottom:4px;line-height:1.5}
+.shop-desc{font-size:14px;color:rgba(255,255,255,.65);line-height:1.75;margin-top:14px;white-space:pre-wrap}
+.tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.tag{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);
+  color:rgba(255,255,255,.65);font-size:11px;padding:4px 10px;border-radius:12px}
+.price-box{margin:16px 16px 0;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);
+  border-radius:14px;padding:14px 16px}
+.price-lbl{font-size:11px;color:rgba(255,255,255,.35);margin-bottom:5px;font-weight:600}
+.price-val{font-size:16px;font-weight:700}
+.map-btn{display:flex;align-items:center;justify-content:center;gap:8px;margin:12px 16px 0;
+  padding:14px;border-radius:14px;background:rgba(3,199,90,.1);border:1px solid rgba(3,199,90,.2);
+  color:#03C75A;font-size:14px;font-weight:700;text-decoration:none;transition:background .2s}
+.map-btn:hover{background:rgba(3,199,90,.18)}
+.related{padding:28px 16px 0}
+.rel-hd{font-size:12px;font-weight:700;color:rgba(255,255,255,.35);margin-bottom:12px;
+  display:flex;align-items:center;gap:8px}
+.rel-hd::after{content:'';flex:1;height:1px;background:rgba(255,255,255,.08)}
+.rel-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.rel-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);
+  border-radius:14px;padding:14px;cursor:pointer;text-decoration:none;display:block;transition:background .2s}
+.rel-card:hover{background:rgba(255,255,255,.08)}
+.rel-cat{font-size:10px;color:#FF4D7D;font-weight:700;margin-bottom:3px}
+.rel-nm{font-size:13px;font-weight:700;margin-bottom:3px}
+.rel-addr{font-size:11px;color:rgba(255,255,255,.38)}
+/* SEO용 숨긴 텍스트 (크롤러 가독성↑) */
+.seo-text{font-size:13px;color:rgba(255,255,255,.45);line-height:1.8;padding:20px 16px 0}
+.seo-text h2{font-size:15px;font-weight:700;margin-bottom:8px;color:rgba(255,255,255,.6)}
+/* 예약 버튼 */
+.rsv-bar{position:fixed;bottom:0;left:0;right:0;padding:12px 16px;
+  background:rgba(10,10,10,.97);backdrop-filter:blur(14px);border-top:1px solid rgba(255,255,255,.07);
+  z-index:100}
+.rsv-inner{display:flex;gap:10px;max-width:640px;margin:0 auto}
+.btn-rsv{flex:1;padding:15px;border-radius:14px;border:none;
+  background:linear-gradient(135deg,#FF4D7D,#FF8FA3);color:#fff;font-size:16px;font-weight:800;cursor:pointer}
+.btn-home{flex:0 0 auto;padding:15px 18px;border-radius:14px;border:1px solid rgba(255,255,255,.12);
+  background:rgba(255,255,255,.06);color:#fff;font-size:14px;font-weight:600;cursor:pointer;text-decoration:none;
+  display:flex;align-items:center;justify-content:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <button class="back" onclick="history.length>1?history.back():location.href='/'">&#8592;</button>
+    <span class="site-nm">마이뷰티맵</span>
+  </div>
+
+  ${shop.thumbnail
+    ? `<img class="thumb" src="${shop.thumbnail}" alt="${shop.name} ${loc} ${shop.category} 대표사진" loading="eager"/>`
+    : `<div class="thumb-ph">${emoji}</div>`}
+
+  <div class="info">
+    <div class="badge">${emoji} ${shop.category}</div>
+    <h1>${shop.name}</h1>
+    <p class="addr">📍 <span>${shop.address}</span></p>
+    ${shop.phone ? `<p class="addr">📞 <a href="tel:${shop.phone}" style="color:inherit;text-decoration:none">${shop.phone}</a></p>` : ''}
+    ${shop.desc  ? `<p class="shop-desc">${shop.desc}</p>` : ''}
+    ${tags.length ? `<div class="tags">${tags.map((t:string) => `<span class="tag">#${t}</span>`).join('')}</div>` : ''}
+  </div>
+
+  ${shop.price ? `<div class="price-box"><div class="price-lbl">💰 가격 안내</div><div class="price-val">${shop.price}</div></div>` : ''}
+
+  ${shop.smartPlaceUrl ? `<a class="map-btn" href="${shop.smartPlaceUrl}" target="_blank" rel="noopener">🗺️ 네이버 지도에서 보기</a>` : ''}
+
+  <!-- SEO 텍스트 영역 – 크롤러 키워드 보강 -->
+  <div class="seo-text">
+    <h2>${loc} ${shop.category} 추천 – ${shop.name}</h2>
+    <p>${shop.name}은(는) ${shop.address}에 위치한 ${loc} ${shop.category} 전문샵입니다.
+    ${tags.length ? tags.join(', ') + ' 등 다양한 시술을 제공하며,' : ''}
+    ${shop.price ? '가격은 ' + shop.price + '입니다.' : ''}
+    ${loc} ${shop.category} 예약은 마이뷰티맵에서 바로 확인하세요.</p>
+  </div>
+
+  <div class="related" id="relShops"></div>
+</div>
+
+<div class="rsv-bar">
+  <div class="rsv-inner">
+    ${shop.smartPlaceUrl
+      ? `<button class="btn-rsv" onclick="window.open('${shop.smartPlaceUrl}','_blank','noopener')">📅 네이버로 예약하기</button>`
+      : `<button class="btn-rsv" onclick="location.href='/'">📅 다른 샵 예약하기</button>`}
+    <a class="btn-home" href="/">홈</a>
+  </div>
+</div>
+
+<script>
+(async()=>{
+  try{
+    const r=await fetch('/api/shops?category=${encodeURIComponent(shop.category)}');
+    const list=await r.json();
+    const others=list.filter(s=>s.id!==${shop.id}).slice(0,4);
+    if(!others.length)return;
+    const el=document.getElementById('relShops');
+    el.innerHTML='<div class="rel-hd">📍 ${loc} 근처 ${shop.category} 샵</div>'
+      +'<div class="rel-grid">'+others.map(s=>{
+        const a=(s.address||'').split(' ').slice(1,3).join(' ');
+        return '<a class="rel-card" href="/shop/'+s.id+'">'
+          +'<div class="rel-cat">'+s.category+'</div>'
+          +'<div class="rel-nm">'+s.name+'</div>'
+          +'<div class="rel-addr">📍 '+a+'</div>'
+          +'</a>';
+      }).join('')+'</div>';
+  }catch(e){}
+})();
+</script>
+</body>
+</html>`
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// [SEO] 카테고리×지역 랜딩 페이지 /c/:category/:region
+// "강남 마사지 추천", "분당 헤드스파 추천" 같은 키워드로 상위노출 목표
+// 업체 추가 시 자동으로 해당 페이지에 포함됨
+// ══════════════════════════════════════════════════════════════════════════
+function categoryLandingPage(category: string, region: string, shops: any[], baseUrl: string): string {
+  const title    = catSeoTitle(category, region)
+  const desc     = catSeoDesc(category, region, shops.length)
+  const kws      = catSeoKeywords(category, region)
+  const pageUrl  = `${baseUrl}/c/${encodeURIComponent(category)}/${encodeURIComponent(region)}`
+  const catEmoji: Record<string,string> = {마사지:'💆',헤드스파:'🧖',피부관리:'✨',헤어:'💇',메이크업:'💄',왁싱:'🌸',반영구:'👁',병원:'🏥',그외:'🌟'}
+  const emoji    = catEmoji[category] || '🌟'
+  const catList  = ['마사지','헤드스파','피부관리','헤어','메이크업','왁싱','반영구','병원','그외']
+
+  // Schema.org ItemList → 구글 목록 리치스니펫
+  const schema = JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name: title,
+    description: desc,
+    url: pageUrl,
+    numberOfItems: shops.length,
+    itemListElement: shops.map((s: any, i: number) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      name: s.name,
+      url: `${baseUrl}/shop/${s.id}`,
+      description: seoDesc(s),
+    })),
+  })
+
+  // BreadcrumbList → 구글 빵부스러기 경로 표시
+  const breadcrumb = JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: '마이뷰티맵', item: baseUrl },
+      { '@type': 'ListItem', position: 2, name: `${region} ${category}`, item: pageUrl },
+    ],
+  })
+
+  return `<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+<title>${title}</title>
+<meta name="description" content="${desc}"/>
+<meta name="keywords" content="${kws}"/>
+<link rel="canonical" href="${pageUrl}"/>
+<meta property="og:type"        content="website"/>
+<meta property="og:site_name"   content="마이뷰티맵"/>
+<meta property="og:title"       content="${title}"/>
+<meta property="og:description" content="${desc}"/>
+<meta property="og:image"       content="${baseUrl}/og-image.jpg"/>
+<meta property="og:url"         content="${pageUrl}"/>
+<meta property="og:locale"      content="ko_KR"/>
+<meta name="twitter:card"        content="summary_large_image"/>
+<meta name="twitter:title"       content="${title}"/>
+<meta name="twitter:description" content="${desc}"/>
+<meta name="twitter:image"       content="${baseUrl}/og-image.jpg"/>
+<script type="application/ld+json">${schema}</script>
+<script type="application/ld+json">${breadcrumb}</script>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Pretendard',-apple-system,sans-serif;background:#0a0a0a;color:#fff;min-height:100vh}
+.wrap{max-width:640px;margin:0 auto;padding-bottom:40px}
+.top{display:flex;align-items:center;gap:12px;padding:14px 16px;position:sticky;top:0;z-index:10;
+  background:rgba(10,10,10,.95);backdrop-filter:blur(14px);border-bottom:1px solid rgba(255,255,255,.07)}
+.back{width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.08);border:none;
+  color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.site-nm{font-size:15px;font-weight:800;color:#FF4D7D}
+/* 히어로 */
+.hero{padding:28px 16px 22px;background:linear-gradient(180deg,rgba(255,77,125,.07) 0%,transparent 100%)}
+.hero-emoji{font-size:44px;margin-bottom:12px}
+h1{font-size:26px;font-weight:800;line-height:1.25;margin-bottom:8px;letter-spacing:-.5px}
+.hero-sub{font-size:13px;color:rgba(255,255,255,.5);line-height:1.7;margin-bottom:12px}
+.hero-cnt{display:inline-block;background:rgba(255,77,125,.12);color:#FF4D7D;
+  font-size:12px;font-weight:700;padding:4px 13px;border-radius:20px}
+/* 빵부스러기 */
+.bread{padding:12px 16px;font-size:12px;color:rgba(255,255,255,.3);display:flex;align-items:center;gap:6px}
+.bread a{color:rgba(255,255,255,.3);text-decoration:none}
+.bread a:hover{color:#FF4D7D}
+/* 카테고리 탭 */
+.cat-tabs{display:flex;gap:6px;padding:10px 16px;overflow-x:auto;scrollbar-width:none;
+  border-bottom:1px solid rgba(255,255,255,.06)}
+.cat-tabs::-webkit-scrollbar{display:none}
+.ctab{flex-shrink:0;padding:7px 14px;border-radius:20px;border:1px solid rgba(255,255,255,.1);
+  background:transparent;color:rgba(255,255,255,.45);font-size:12px;font-weight:600;
+  cursor:pointer;text-decoration:none;white-space:nowrap;transition:all .2s}
+.ctab.on{background:#FF4D7D;border-color:#FF4D7D;color:#fff}
+/* 업체 리스트 */
+.list{padding:12px 16px;display:flex;flex-direction:column;gap:12px}
+.card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);
+  border-radius:16px;overflow:hidden;text-decoration:none;display:flex;transition:background .2s}
+.card:hover{background:rgba(255,255,255,.08)}
+.card-img{width:108px;min-height:100px;object-fit:cover;background:#1a1a1a;flex-shrink:0}
+.card-ph{width:108px;display:flex;align-items:center;justify-content:center;
+  font-size:38px;background:linear-gradient(135deg,#141414,#222)}
+.card-body{padding:14px;flex:1;min-width:0}
+.card-cat{font-size:10px;color:#FF4D7D;font-weight:700;margin-bottom:3px}
+.card-nm{font-size:15px;font-weight:800;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.card-addr{font-size:11px;color:rgba(255,255,255,.38);margin-bottom:6px}
+.card-tags{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px}
+.card-tag{background:rgba(255,255,255,.06);color:rgba(255,255,255,.55);font-size:10px;padding:2px 7px;border-radius:10px}
+.card-price{font-size:11px;color:rgba(255,255,255,.4)}
+.card-arrow{font-size:16px;color:rgba(255,255,255,.2);align-self:center;padding-right:14px;flex-shrink:0}
+/* 빈 상태 */
+.empty{text-align:center;padding:60px 16px;color:rgba(255,255,255,.3)}
+.empty-icon{font-size:52px;margin-bottom:14px}
+/* SEO 텍스트 */
+.seo-text{padding:24px 16px 0;font-size:13px;color:rgba(255,255,255,.38);line-height:1.8}
+.seo-text h2{font-size:14px;font-weight:700;color:rgba(255,255,255,.5);margin-bottom:6px}
+.seo-text p{margin-bottom:10px}
+/* 다른 카테고리 */
+.other{padding:24px 16px 0}
+.other-hd{font-size:12px;font-weight:700;color:rgba(255,255,255,.3);margin-bottom:10px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{padding:6px 12px;border-radius:20px;border:1px solid rgba(255,255,255,.08);
+  color:rgba(255,255,255,.4);font-size:11px;text-decoration:none;transition:all .2s}
+.chip:hover{border-color:#FF4D7D;color:#FF4D7D}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <button class="back" onclick="history.length>1?history.back():location.href='/'">&#8592;</button>
+    <span class="site-nm">마이뷰티맵</span>
+  </div>
+
+  <!-- 빵부스러기 (SEO) -->
+  <nav class="bread" aria-label="breadcrumb">
+    <a href="/">마이뷰티맵</a> › <span>${region} ${category}</span>
+  </nav>
+
+  <!-- 히어로 -->
+  <div class="hero">
+    <div class="hero-emoji">${emoji}</div>
+    <h1>${region} ${category} 추천 TOP</h1>
+    <p class="hero-sub">
+      ${region} 인근 ${category} 전문샵 ${shops.length}곳 모음<br>
+      가격·위치·예약·후기까지 한눈에 확인하세요
+    </p>
+    <span class="hero-cnt">총 ${shops.length}곳</span>
+  </div>
+
+  <!-- 카테고리 탭 -->
+  <div class="cat-tabs">
+    ${catList.map(c => `<a class="ctab${c===category?' on':''}" href="/c/${encodeURIComponent(c)}/${encodeURIComponent(region)}">${catEmoji[c]||'🌟'} ${c}</a>`).join('')}
+  </div>
+
+  <!-- 업체 목록 -->
+  <div class="list">
+    ${shops.length ? shops.map((s: any, i: number) => {
+      const tags = Array.isArray(s.tags) ? s.tags : []
+      const addrShort = (s.address||'').split(' ').slice(1,3).join(' ')
+      const rank = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}.`
+      return `<a class="card" href="/shop/${s.id}">
+        ${s.thumbnail
+          ? `<img class="card-img" src="${s.thumbnail}" alt="${s.name} ${region} ${category}" loading="lazy"/>`
+          : `<div class="card-ph">${emoji}</div>`}
+        <div class="card-body">
+          <div class="card-cat">${rank} ${s.category}</div>
+          <div class="card-nm">${s.name}</div>
+          <div class="card-addr">📍 ${addrShort}</div>
+          ${tags.length ? `<div class="card-tags">${tags.map((t:string)=>`<span class="card-tag">#${t}</span>`).join('')}</div>` : ''}
+          ${s.price ? `<div class="card-price">💰 ${s.price}</div>` : ''}
+        </div>
+        <div class="card-arrow">›</div>
+      </a>`
+    }).join('') : `
+    <div class="empty">
+      <div class="empty-icon">${emoji}</div>
+      <div>${region} ${category} 업체를 준비 중이에요</div>
+      <a href="/" style="color:#FF4D7D;font-size:13px;margin-top:12px;display:inline-block">전체 보기 →</a>
+    </div>`}
+  </div>
+
+  <!-- SEO 텍스트 (크롤러 키워드 보강) -->
+  <div class="seo-text">
+    <h2>${region} ${category} 추천 가이드</h2>
+    <p>${region} ${category} 잘하는 곳을 찾고 계신가요? 마이뷰티맵에서 ${region} 근처 ${category} 전문샵 ${shops.length}곳을 한눈에 비교해 보세요. 가격, 위치, 예약, 후기까지 모두 확인 가능합니다.</p>
+    <p>${region} ${category} 예약 방법, 가격 비교, 잘하는 곳 추천 정보를 마이뷰티맵에서 확인하세요. ${category} 전문 업체들의 상세 정보와 네이버 예약 링크를 바로 이용하실 수 있습니다.</p>
+  </div>
+
+  <!-- 다른 카테고리 -->
+  <div class="other">
+    <div class="other-hd">🔍 다른 카테고리도 찾아보기</div>
+    <div class="chips">
+      ${catList.filter(c=>c!==category).map(c =>
+        `<a class="chip" href="/c/${encodeURIComponent(c)}/${encodeURIComponent(region)}">${catEmoji[c]||'🌟'} ${region} ${c}</a>`
+      ).join('')}
+    </div>
+  </div>
+</div>
 </body>
 </html>`
 }
@@ -4109,184 +4775,268 @@ function renderCalDetail(dateStr, shops) {
   const detailEl = document.getElementById('cal-detail');
   if (!detailEl) return;
   if (!shops.length) {
-    detailEl.innerHTML = '<div class="empty" style="padding:20px">📭 해당 날짜에 기록된 데이터가 없어요</div>';
+    detailEl.innerHTML = '<div class="empty" style="padding:24px;color:var(--t3);text-align:center">\u{1F4ED} \ud574\ub2f9 \ub0a0\uc9dc\uc5d0 \uae30\ub85d\ub41c \ub370\uc774\ud130\uac00 \uc5c6\uc5b4\uc694</div>';
     return;
   }
-  const fmt = (n) => n.toLocaleString();
-  detailEl.innerHTML = '<div class="section-title" style="margin-bottom:10px">📅 ' + dateStr + ' 업체별 실적</div>'
-    + shops.map((s,i) => {
-      const total = s.views + s.feedSP + s.mapSP;
-      const thumb = s.thumbnail
-        ? '<img src="'+s.thumbnail+'" class="cal-thumb" style="width:36px;height:36px;border-radius:8px;object-fit:cover">'
-        : '<div style="width:36px;height:36px;border-radius:8px;background:#222;display:flex;align-items:center;justify-content:center;font-size:16px">💄</div>';
-      return '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#1a1a1a;border-radius:10px;margin-bottom:6px">'
-        + '<span style="font-size:12px;font-weight:700;color:var(--t3);min-width:20px;text-align:center">' + (i+1) + '</span>'
-        + thumb
-        + '<div style="flex:1;min-width:0">'
-        +   '<div style="font-size:13px;font-weight:700;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + s.name + '</div>'
-        +   '<div style="font-size:11px;color:var(--t3)">' + (s.category||'') + '</div>'
-        + '</div>'
-        + '<div style="display:flex;gap:6px;flex-shrink:0">'
-        +   (s.views  ? '<span style="font-size:11px;background:rgba(100,149,237,.15);color:#6495ed;padding:3px 7px;border-radius:6px">👁 '+fmt(s.views)+'</span>' : '')
-        +   (s.feedSP ? '<span style="font-size:11px;background:rgba(255,77,125,.15);color:var(--pink);padding:3px 7px;border-radius:6px">📹 '+fmt(s.feedSP)+'</span>' : '')
-        +   (s.mapSP  ? '<span style="font-size:11px;background:rgba(3,199,90,.15);color:var(--green);padding:3px 7px;border-radius:6px">🗺️ '+fmt(s.mapSP)+'</span>' : '')
-        + '</div>'
-        + '<div style="font-size:13px;font-weight:800;color:var(--t1);min-width:36px;text-align:right">' + fmt(total) + '</div>'
-        + '</div>';
-    }).join('');
+  const fmt = function(n) { return (n||0).toLocaleString(); };
+  const maxTotal = Math.max.apply(null, [1].concat(shops.map(function(s) { return (s.views||0)+(s.feedSP||0)+(s.mapSP||0); })));
+  const mm = dateStr.slice(5,7)+'\uc6d4', dd2 = dateStr.slice(8,10)+'\uc77c';
+
+  let html = '<div style="background:#111;border:1px solid var(--border);border-radius:14px;overflow:hidden">'
+    + '<div style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">'
+    + '<div style="font-size:13px;font-weight:700;color:var(--t1)">\u{1F4C5} '+mm+' '+dd2+' \uc5c5\uccb4\ubcc4 \uc2e4\uc801</div>'
+    + '<div style="font-size:11px;color:var(--t3)">'+shops.length+'\uac1c \uc5c5\uccb4</div>'
+    + '</div>';
+
+  shops.forEach(function(s, i) {
+    const total  = (s.views||0) + (s.feedSP||0) + (s.mapSP||0);
+    const barPct = Math.round(total / maxTotal * 100);
+    const rankColors = ['#fbbf24','#aaa','#cd7f32'];
+    const rankEmoji  = i===0 ? '\uD83E\uDD47' : i===1 ? '\uD83E\uDD48' : i===2 ? '\uD83E\uDD49' : '';
+    const rankColor  = rankColors[i] || 'var(--t3)';
+    const rankSize   = i < 3 ? '18' : '12';
+    const rankLabel  = rankEmoji || String(i+1);
+    const thumb = s.thumbnail
+      ? '<img src="'+s.thumbnail+'" style="width:38px;height:38px;border-radius:9px;object-fit:cover;flex-shrink:0">'
+      : '<div style="width:38px;height:38px;border-radius:9px;background:#222;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">\uD83D\uDC84</div>';
+    const borderStyle = i === shops.length-1 ? 'border-bottom:none' : 'border-bottom:1px solid var(--border)';
+
+    html += '<div style="padding:12px 14px;'+borderStyle+'">'
+      + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'
+      +   '<span style="font-size:'+rankSize+'px;font-weight:700;color:'+rankColor+';min-width:24px;text-align:center">'+rankLabel+'</span>'
+      +   thumb
+      +   '<div style="flex:1;min-width:0">'
+      +     '<div style="font-size:13px;font-weight:700;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+s.name+'</div>'
+      +     '<div style="font-size:11px;color:var(--t3)">'+(s.category||'')+'</div>'
+      +   '</div>'
+      +   '<div style="font-size:16px;font-weight:800;color:var(--t1)">'+fmt(total)+'</div>'
+      + '</div>'
+      + '<div style="display:flex;gap:5px;margin-bottom:7px;flex-wrap:wrap">'
+      +   (s.views  ? '<span style="font-size:11px;background:rgba(100,149,237,.15);color:#9ab4f0;padding:3px 8px;border-radius:6px">\uD83D\uDC41 '+fmt(s.views)+'</span>' : '')
+      +   (s.feedSP ? '<span style="font-size:11px;background:rgba(255,138,170,.15);color:#ff8aaa;padding:3px 8px;border-radius:6px">\uD83D\uDCF9 '+fmt(s.feedSP)+'</span>' : '')
+      +   (s.mapSP  ? '<span style="font-size:11px;background:rgba(93,224,160,.15);color:#5de0a0;padding:3px 8px;border-radius:6px">\uD83D\uDDFA\uFE0F '+fmt(s.mapSP)+'</span>' : '')
+      + '</div>'
+      + '<div style="height:4px;background:rgba(255,255,255,.06);border-radius:3px;overflow:hidden">'
+      +   '<div style="height:100%;width:'+barPct+'%;background:linear-gradient(90deg,rgba(100,149,237,.8),rgba(255,77,125,.6));border-radius:3px;transition:width .4s ease"></div>'
+      + '</div>'
+      + '</div>';
+  });
+
+  html += '</div>';
+  detailEl.innerHTML = html;
 }
 
 function drawCal() {
-  const d    = _calData;
-  const fmt  = (n) => n ? n.toLocaleString() : '0';
-  const today = new Date(Date.now()+9*60*60*1000).toISOString().slice(0,10);
+  var d    = _calData;
+  var fmt  = function(n) { return (n||0).toLocaleString(); };
+  var today = new Date(Date.now()+9*60*60*1000).toISOString().slice(0,10);
+  var mt   = d.monthTotal;
 
-  // 히트맵 색상 계산 (영상조회 기준 최대값)
-  const maxViews = Math.max(1, ...d.daily.map(x => x.views));
+  var dayMap = {}, visitMap = {};
+  d.daily.forEach(function(x) { dayMap[x.date] = x; visitMap[x.date] = x.visits||0; });
 
-  // 달력 날짜 → 데이터 맵
-  const dayMap = {};
-  d.daily.forEach(x => { dayMap[x.date] = x; });
+  var maxVisits = Math.max.apply(null,[1].concat(d.daily.map(function(x){return x.visits||0;})));
+  var maxViews  = Math.max.apply(null,[1].concat(d.daily.map(function(x){return x.views||0;})));
+  var maxFeed   = Math.max.apply(null,[1].concat(d.daily.map(function(x){return x.feedSP||0;})));
+  var maxMap2   = Math.max.apply(null,[1].concat(d.daily.map(function(x){return x.mapSP||0;})));
 
-  // 방문자 맵
-  const visitMapCal = {};
-  d.daily.forEach(x => { visitMapCal[x.date] = x.visits || 0; });
+  var firstDay     = new Date(_calYear, _calMonth-1, 1).getDay();
+  var lastDate     = new Date(_calYear, _calMonth, 0).getDate();
+  var prevLastDate = new Date(_calYear, _calMonth-1, 0).getDate();
+  var DOW = ['\uc77c','\uc6d4','\ud654','\uc218','\ubaa9','\uae08','\ud1a0'];
 
-  // 해당 월 1일 요일 & 말일
-  const firstDay = new Date(_calYear, _calMonth-1, 1).getDay(); // 0=일
-  const lastDate  = new Date(_calYear, _calMonth, 0).getDate();
+  var totalVisits = mt.visits||0;
+  var totalViews  = mt.views||0;
+  var totalFeed   = mt.feedSP||0;
+  var totalMap    = mt.mapSP||0;
+  var totalAll    = totalViews + totalFeed + totalMap;
 
-  // 이전달 말일
-  const prevLastDate = new Date(_calYear, _calMonth-1, 0).getDate();
+  var activeDays = d.daily.filter(function(x){return (x.views||0)+(x.feedSP||0)+(x.mapSP||0)+(x.visits||0)>0;}).length || 1;
+  var avgVisits  = (totalVisits/activeDays).toFixed(1);
+  var avgViews   = (totalViews/activeDays).toFixed(1);
 
-  const DOW = ['일','월','화','수','목','금','토'];
+  var html = '';
 
-  // 월 합계 카드
-  const mt = d.monthTotal;
-  const totalAll = mt.views + mt.feedSP + mt.mapSP;
-
-  let html = '';
-
-  // ── 헤더: 월 이동 + 합계
+  // ① 월 네비게이션 헤더
   html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">'
-    + '<button onclick="calMove(-1)" style="background:#1e1e1e;border:1px solid var(--border);color:var(--t1);padding:8px 16px;border-radius:8px;cursor:pointer;font-size:14px">◀</button>'
+    + '<button onclick="calMove(-1)" style="background:#1a1a1a;border:1px solid var(--border);color:var(--t1);width:36px;height:36px;border-radius:10px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center">&#9664;</button>'
     + '<div style="text-align:center">'
-    +   '<div style="font-size:18px;font-weight:800;color:var(--t1)">'+_calYear+'년 '+_calMonth+'월</div>'
-    +   '<div style="font-size:12px;color:var(--t3);margin-top:2px">월 합계 · 🙋 '+fmt(mt.visits||0)+' · 👁 '+fmt(mt.views)+' · 📹 '+fmt(mt.feedSP)+' · 🗺️ '+fmt(mt.mapSP)+'</div>'
+    +   '<div style="font-size:20px;font-weight:800;color:var(--t1)">'+_calYear+'\ub144 '+_calMonth+'\uc6d4</div>'
+    +   '<div style="font-size:11px;color:var(--t3);margin-top:3px">\ud65c\uc131\uc77c '+activeDays+'\uc77c &middot; \uc77c\ud3c9\uade0 \ubc29\ubb38 '+avgVisits+' &middot; \uc77c\ud3c9\uade0 \uc870\ud68c '+avgViews+'</div>'
     + '</div>'
-    + '<button onclick="calMove(1)" style="background:#1e1e1e;border:1px solid var(--border);color:var(--t1);padding:8px 16px;border-radius:8px;cursor:pointer;font-size:14px">▶</button>'
+    + '<button onclick="calMove(1)" style="background:#1a1a1a;border:1px solid var(--border);color:var(--t1);width:36px;height:36px;border-radius:10px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center">&#9654;</button>'
     + '</div>';
 
-  // ── 달력 그리드
-  html += '<div style="background:#111;border-radius:14px;overflow:hidden;border:1px solid var(--border);margin-bottom:16px">';
+  // ② 월 합계 통계 카드 (4개)
+  var statCards = [
+    { emoji:'\uD83D\uDE4B', label:'\ubc29\ubb38\uc790',     val:totalVisits, color:'#fbbf24', bg:'rgba(251,191,36,.1)',   bdr:'rgba(251,191,36,.25)' },
+    { emoji:'\uD83D\uDC41', label:'\uc601\uc0c1\uc870\ud68c',val:totalViews,  color:'#6495ed', bg:'rgba(100,149,237,.1)', bdr:'rgba(100,149,237,.25)' },
+    { emoji:'\uD83D\uDCF9', label:'\ud53c\ub4dc\ud074\ub9ad',val:totalFeed,   color:'#ff8aaa', bg:'rgba(255,138,170,.1)', bdr:'rgba(255,138,170,.25)' },
+    { emoji:'\uD83D\uDDFA\uFE0F',label:'\uc9c0\ub3c4\ud074\ub9ad',val:totalMap, color:'#5de0a0',bg:'rgba(93,224,160,.1)', bdr:'rgba(93,224,160,.25)' },
+  ];
 
-  // 요일 헤더
-  html += '<div style="display:grid;grid-template-columns:repeat(7,1fr)">';
-  DOW.forEach((d,i) => {
-    const c = i===0 ? '#ff6b6b' : i===6 ? '#6495ed' : 'var(--t3)';
-    html += '<div style="text-align:center;padding:10px 0;font-size:12px;font-weight:700;color:'+c+';border-bottom:1px solid var(--border)">'+d+'</div>';
+  html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">';
+  statCards.forEach(function(sc) {
+    var pct = totalAll > 0 && sc.label !== '\ubc29\ubb38\uc790'
+      ? Math.round(sc.val / Math.max(1,totalAll) * 100) : 0;
+    var barHtml = sc.label !== '\ubc29\ubb38\uc790'
+      ? '<div style="margin-top:6px;height:3px;background:rgba(255,255,255,.08);border-radius:2px"><div style="height:100%;width:'+pct+'%;background:'+sc.color+';border-radius:2px"></div></div>'
+      : '';
+    html += '<div style="background:'+sc.bg+';border:1px solid '+sc.bdr+';border-radius:14px;padding:12px 10px;text-align:center">'
+      + '<div style="font-size:20px;margin-bottom:4px">'+sc.emoji+'</div>'
+      + '<div style="font-size:18px;font-weight:800;color:'+sc.color+'">'+fmt(sc.val)+'</div>'
+      + '<div style="font-size:10px;color:var(--t3);margin-top:2px">'+sc.label+'</div>'
+      + barHtml
+      + '</div>';
   });
   html += '</div>';
 
-  // 날짜 셀
+  // ③ 최근 14일 트렌드 막대
+  var last14 = [];
+  for (var ti = 13; ti >= 0; ti--) {
+    var dt14 = new Date(Date.now()+9*3600*1000 - ti*86400*1000).toISOString().slice(0,10);
+    var dd14 = dayMap[dt14];
+    last14.push({ date:dt14, visits:visitMap[dt14]||0, views:dd14?(dd14.views||0):0 });
+  }
+  var maxBar14 = Math.max.apply(null,[1].concat(last14.map(function(x){return Math.max(x.visits,x.views);})));
+
+  html += '<div style="background:#111;border:1px solid var(--border);border-radius:14px;padding:12px;margin-bottom:16px">'
+    + '<div style="font-size:12px;font-weight:700;color:var(--t2);margin-bottom:10px">\uD83D\uDCC8 \ucd5c\uadfc 14\uc77c \ud2b8\ub80c\ub4dc</div>'
+    + '<div style="display:flex;align-items:flex-end;gap:3px;height:52px">';
+  last14.forEach(function(x14) {
+    var hv14 = maxBar14 ? Math.round(x14.visits/maxBar14*48) : 0;
+    var hw14 = maxBar14 ? Math.round(x14.views/maxBar14*48) : 0;
+    var isT14 = x14.date===today;
+    var dd14s = x14.date.slice(8,10);
+    var todayLbl = isT14 ? '<div style="position:absolute;top:-14px;font-size:8px;color:var(--amber);font-weight:800;white-space:nowrap">\uc624\ub298</div>' : '';
+    var dtTip = x14.date+' \ubc29\ubb38:'+x14.visits+' \uc870\ud68c:'+x14.views;
+    html += '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;position:relative" title="'+dtTip+'">'
+      + '<div style="width:100%;display:flex;flex-direction:column;justify-content:flex-end;height:48px;gap:1px">'
+      +   '<div style="height:'+hw14+'px;background:rgba(100,149,237,.7);border-radius:2px 2px 0 0;min-height:'+(hw14>0?2:0)+'px"></div>'
+      +   '<div style="height:'+hv14+'px;background:rgba(251,191,36,.8);border-radius:2px 2px 0 0;min-height:'+(hv14>0?2:0)+'px"></div>'
+      + '</div>'
+      + '<div style="font-size:8px;color:'+(isT14?'var(--amber)':'var(--t4)')+';font-weight:'+(isT14?800:400)+';margin-top:2px">'+dd14s+'</div>'
+      + todayLbl
+      + '</div>';
+  });
+  html += '</div>'
+    + '<div style="display:flex;gap:12px;margin-top:8px">'
+    +   '<span style="font-size:10px;color:var(--t3);display:flex;align-items:center;gap:4px"><span style="display:inline-block;width:10px;height:6px;background:rgba(251,191,36,.8);border-radius:1px"></span>\ubc29\ubb38\uc790</span>'
+    +   '<span style="font-size:10px;color:var(--t3);display:flex;align-items:center;gap:4px"><span style="display:inline-block;width:10px;height:6px;background:rgba(100,149,237,.7);border-radius:1px"></span>\uc601\uc0c1\uc870\ud68c</span>'
+    + '</div>'
+    + '</div>';
+
+  // ④ 달력 히트맵 그리드
+  html += '<div style="background:#111;border-radius:14px;overflow:hidden;border:1px solid var(--border);margin-bottom:12px">';
+  html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);border-bottom:1px solid var(--border)">';
+  DOW.forEach(function(dw,i) {
+    var c = i===0 ? '#ff6b6b' : i===6 ? '#6495ed' : 'var(--t3)';
+    html += '<div style="text-align:center;padding:8px 0;font-size:11px;font-weight:700;color:'+c+'">'+dw+'</div>';
+  });
+  html += '</div>';
   html += '<div style="display:grid;grid-template-columns:repeat(7,1fr)">';
 
   // 이전달 빈칸
-  for (let i = 0; i < firstDay; i++) {
-    const dd = prevLastDate - firstDay + i + 1;
-    html += '<div style="padding:8px 6px;min-height:72px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);opacity:.25">'
-      + '<div style="font-size:12px;color:var(--t3);margin-bottom:4px">'+dd+'</div>'
-      + '</div>';
+  for (var pi = 0; pi < firstDay; pi++) {
+    var pdd = prevLastDate - firstDay + pi + 1;
+    html += '<div style="padding:6px 5px;min-height:64px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);opacity:.2">'
+      + '<div style="font-size:11px;color:var(--t4)">'+pdd+'</div></div>';
   }
 
   // 이번달 날짜
-  for (let day = 1; day <= lastDate; day++) {
-    const col = (firstDay + day - 1) % 7;
-    const dateStr = _calYear+'-'+String(_calMonth).padStart(2,'0')+'-'+String(day).padStart(2,'0');
-    const dd = dayMap[dateStr];
-    const isToday = dateStr === today;
-    const isSel   = dateStr === _calSel;
-    const isSun   = col === 0;
-    const isSat   = col === 6;
-    const isLast  = col === 6 || day === lastDate;
+  for (var day = 1; day <= lastDate; day++) {
+    var col     = (firstDay + day - 1) % 7;
+    var mo2     = String(_calMonth).padStart(2,'0');
+    var da2     = String(day).padStart(2,'0');
+    var dateStr = _calYear+'-'+mo2+'-'+da2;
+    var dd      = dayMap[dateStr];
+    var vis     = visitMap[dateStr]||0;
+    var isToday = dateStr === today;
+    var isSel   = dateStr === _calSel;
+    var isSun   = col === 0;
+    var isSat   = col === 6;
+    var isLast  = col === 6 || day === lastDate;
+    var isLastRow = day > lastDate - 7;
 
-    // 히트맵 강도 (0~1)
-    const intensity = dd ? Math.min(1, dd.views / maxViews) : 0;
-    const heatAlpha = (intensity * 0.55 + (dd && dd.views>0 ? 0.08 : 0)).toFixed(2);
+    var totalDay = vis + (dd ? (dd.views||0)+(dd.feedSP||0)+(dd.mapSP||0) : 0);
+    var maxTotal = Math.max(1, maxVisits + maxViews + maxFeed + maxMap2);
+    var intensity = Math.min(1, totalDay / maxTotal);
+    var heatAlpha = totalDay > 0 ? (intensity * 0.5 + 0.08).toFixed(2) : '0';
 
-    let cellBg = 'transparent';
-    if (dd && dd.views > 0) cellBg = 'rgba(100,149,237,'+heatAlpha+')';
-    if (isSel)  cellBg = 'rgba(255,77,125,.25)';
-    if (isToday && !isSel) cellBg = 'rgba(245,158,11,.12)';
+    var cellBg = 'transparent';
+    if (totalDay > 0)       cellBg = 'rgba(100,149,237,'+heatAlpha+')';
+    if (isSel)              cellBg = 'rgba(255,77,125,.22)';
+    if (isToday && !isSel)  cellBg = 'rgba(245,158,11,.15)';
 
-    const borderR = isLast ? 'none' : '1px solid var(--border)';
-    const borderB = day > lastDate - 7 ? 'none' : '1px solid var(--border)';
-    const cursor  = dd ? 'pointer' : 'default';
+    var borderR  = isLast    ? 'none' : '1px solid var(--border)';
+    var borderB  = isLastRow ? 'none' : '1px solid var(--border)';
+    var cursor   = totalDay > 0 ? 'pointer' : 'default';
+    var numColor = isSel ? 'var(--pink)' : isToday ? '#fbbf24' : isSun ? '#ff6b6b' : isSat ? '#6495ed' : 'var(--t1)';
+    var numWt    = (isToday||isSel) ? '800' : '600';
+    var badge    = isToday ? '<span style="font-size:8px;background:#fbbf24;color:#000;padding:1px 3px;border-radius:3px;font-weight:800">T</span>' : '';
 
-    const numColor = isSel ? 'var(--pink)' : isToday ? 'var(--amber)' : isSun ? '#ff6b6b' : isSat ? '#6495ed' : 'var(--t1)';
+    html += '<div data-dt="'+dateStr+'" onclick="calSelectDate(this.dataset.dt)"'
+      +' style="padding:6px 5px;min-height:64px;border-right:'+borderR+';border-bottom:'+borderB+';background:'+cellBg+';cursor:'+cursor+';transition:background .15s;position:relative">';
+    html += '<div style="font-size:11px;font-weight:'+numWt+';color:'+numColor+';display:flex;align-items:center;gap:3px;margin-bottom:3px">'+day+badge+'</div>';
 
-    html += '<div data-dt="'+dateStr+'" onclick="calSelectDate(this.dataset.dt)" style="padding:8px 6px;min-height:72px;border-right:'+borderR+';border-bottom:'+borderB+';background:'+cellBg+';cursor:'+cursor+';transition:background .15s;position:relative">';
-    html +=   '<div style="font-size:12px;font-weight:'+(isToday||isSel?'800':'600')+';color:'+numColor+';margin-bottom:4px;display:flex;align-items:center;gap:4px">'
-      + day
-      + (isToday ? '<span style="font-size:9px;background:var(--amber);color:#000;padding:1px 4px;border-radius:4px;font-weight:800">오늘</span>' : '')
-      + '</div>';
-
-    const dayVisits = visitMapCal ? (visitMapCal[dateStr] || 0) : 0;
-    const hasData = (dd && dd.views > 0) || dayVisits > 0;
-    if (hasData) {
-      html += '<div style="font-size:10px;color:rgba(255,255,255,.8);line-height:1.5">'
-        + (dayVisits ? '<span style="color:#fbbf24">🙋 '+fmt(dayVisits)+'</span><br>' : '')
-        + (dd && dd.views  ? '<span style="color:#9ab4f0">👁 '+fmt(dd.views)+'</span><br>' : '')
-        + (dd && dd.feedSP ? '<span style="color:#ff8aaa">📹 '+fmt(dd.feedSP)+'</span><br>' : '')
-        + (dd && dd.mapSP  ? '<span style="color:#5de0a0">🗺️ '+fmt(dd.mapSP)+'</span>' : '')
+    if (totalDay > 0) {
+      html += '<div style="display:flex;flex-direction:column;gap:2px">';
+      if (vis)           html += '<div style="display:flex;align-items:center;gap:2px"><span style="font-size:8px">\uD83D\uDE4B</span><span style="font-size:9px;color:#fbbf24;font-weight:700">'+fmt(vis)+'</span></div>';
+      if (dd && dd.views)  html += '<div style="display:flex;align-items:center;gap:2px"><span style="font-size:8px">\uD83D\uDC41</span><span style="font-size:9px;color:#9ab4f0;font-weight:700">'+fmt(dd.views)+'</span></div>';
+      if (dd && dd.feedSP) html += '<div style="display:flex;align-items:center;gap:2px"><span style="font-size:8px">\uD83D\uDCF9</span><span style="font-size:9px;color:#ff8aaa;font-weight:700">'+fmt(dd.feedSP)+'</span></div>';
+      if (dd && dd.mapSP)  html += '<div style="display:flex;align-items:center;gap:2px"><span style="font-size:8px">\uD83D\uDDFA\uFE0F</span><span style="font-size:9px;color:#5de0a0;font-weight:700">'+fmt(dd.mapSP)+'</span></div>';
+      html += '</div>';
+      var barPct2  = Math.max(2, Math.round(intensity * 100));
+      var barColor = isSel ? 'var(--pink)' : isToday ? '#fbbf24' : 'rgba(100,149,237,.8)';
+      html += '<div style="position:absolute;bottom:0;left:0;right:0;height:2px;background:rgba(255,255,255,.05)">'
+        + '<div style="height:100%;width:'+barPct2+'%;background:'+barColor+';transition:width .3s"></div>'
         + '</div>';
     } else {
-      html += '<div style="font-size:18px;color:var(--t4);margin-top:4px">·</div>';
+      html += '<div style="font-size:16px;color:var(--t4);margin-top:2px">&middot;</div>';
     }
     html += '</div>';
   }
 
   // 다음달 빈칸
-  const remaining = (7 - (firstDay + lastDate) % 7) % 7;
-  for (let i = 1; i <= remaining; i++) {
-    html += '<div style="padding:8px 6px;min-height:72px;border-bottom:none;opacity:.25">'
-      + '<div style="font-size:12px;color:var(--t3);margin-bottom:4px">'+i+'</div>'
-      + '</div>';
+  var remaining = (7 - (firstDay + lastDate) % 7) % 7;
+  for (var ri = 1; ri <= remaining; ri++) {
+    html += '<div style="padding:6px 5px;min-height:64px;border-bottom:none;opacity:.2">'
+      + '<div style="font-size:11px;color:var(--t4)">'+ri+'</div></div>';
   }
+  html += '</div></div>';
 
-  html += '</div></div>'; // grid + calendar card
-
-  // ── 범례
-  html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap">'
-    + '<span style="font-size:11px;color:var(--t3)">히트맵 강도:</span>'
-    + '<div style="display:flex;gap:3px;align-items:center">'
-    + [0.05,0.15,0.3,0.5,0.7,1.0].map(v=>'<div style="width:18px;height:12px;border-radius:3px;background:rgba(100,149,237,'+v+')"></div>').join('')
+  // ⑤ 범례
+  var heatBars = [0.1,0.2,0.35,0.5,0.65,0.85].map(function(v){
+    return '<div style="width:16px;height:10px;border-radius:2px;background:rgba(100,149,237,'+v+')"></div>';
+  }).join('');
+  html += '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:16px;padding:8px 10px;background:#111;border:1px solid var(--border);border-radius:10px">'
+    + '<span style="font-size:10px;color:var(--t3);font-weight:600">\ud788\ud2b8\ub9f5:</span>'
+    + '<div style="display:flex;gap:2px;align-items:center">'+heatBars+'</div>'
+    + '<span style="font-size:10px;color:var(--t3)">\ub099\uc74c &#8594; \ub192\uc74c</span>'
+    + '<span style="margin-left:4px;font-size:10px;color:#fbbf24">&#9632; \uc624\ub298</span>'
+    + '<span style="font-size:10px;color:var(--pink)">&#9632; \uc120\ud0dd</span>'
+    + '<div style="display:flex;gap:8px;margin-left:auto;flex-wrap:wrap">'
+    +   '<span style="font-size:10px;color:#fbbf24">\uD83D\uDE4B\ubc29\ubb38\uc790</span>'
+    +   '<span style="font-size:10px;color:#9ab4f0">\uD83D\uDC41\uc601\uc0c1\uc870\ud68c</span>'
+    +   '<span style="font-size:10px;color:#ff8aaa">\uD83D\uDCF9\ud53c\ub4dc</span>'
+    +   '<span style="font-size:10px;color:#5de0a0">\uD83D\uDDFA\uFE0F\uc9c0\ub3c4</span>'
     + '</div>'
-    + '<span style="font-size:11px;color:var(--t3)">낮음 → 높음 (👁 영상조회 기준)</span>'
-    + '<span style="margin-left:8px;font-size:11px;color:var(--amber)">■ 오늘</span>'
-    + '<span style="font-size:11px;color:var(--pink)">■ 선택</span>'
     + '</div>';
 
-  // ── 날짜 클릭 시 업체 상세
+  // ⑥ 날짜 클릭 상세
   html += '<div id="cal-detail" style="margin-top:4px">'
-    + '<div class="empty" style="padding:20px;color:var(--t3)">📅 날짜를 클릭하면 업체별 상세 데이터가 표시됩니다</div>'
+    + '<div class="empty" style="padding:20px;color:var(--t3);text-align:center">\uD83D\uDCC5 \ub0a0\uc9dc\ub97c \ud074\ub9ad\ud558\uba74 \uc5c5\uccb4\ubcc4 \uc0c1\uc138 \ub370\uc774\ud130\uac00 \ud45c\uc2dc\ub429\ub2c8\ub2e4</div>'
     + '</div>';
 
-  const p = document.getElementById('panel-cal');
+  var p = document.getElementById('panel-cal');
   p.innerHTML = '<div class="section" style="padding:16px">'+html+'</div>';
 
-  // 선택된 날짜가 있으면 상세 재렌더
   if (_calSel && _calData) {
-    const found = _calData.daily.find(x => x.date === _calSel);
+    var found = _calData.daily.find(function(x) { return x.date === _calSel; });
     if (!found) renderCalDetail(_calSel, []);
   }
 }
 
-function calMove(dir) {
-  _calMonth += dir;
-  if (_calMonth > 12) { _calMonth = 1;  _calYear++; }
-  if (_calMonth < 1)  { _calMonth = 12; _calYear--; }
-  renderCalendar();
 }
 
 // ======================================================
