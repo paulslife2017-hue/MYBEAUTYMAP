@@ -3812,7 +3812,7 @@ function renderStats(d, dvRows) {
         const img = s.thumbnail || (s.youtubeId ? 'https://img.youtube.com/vi/'+s.youtubeId+'/maxresdefault.jpg' : fallback);
         const total = (s.views||0)+(s.feedSP||0)+(s.mapSP||0);
         return '<div class="stat-card">' +
-          '<img class="stat-thumb" src="' + img + '" onerror="this.src=\'' + fallback + '\'"/>' +
+          '<img class="stat-thumb" src="' + img + '" onerror="this.src=this.dataset.fb" data-fb="' + fallback + '"/>' +
           '<div class="stat-body">' +
             '<div class="stat-top">' +
               '<div class="stat-rank ' + rc + '">' + (i+1) + '</div>' +
@@ -3894,9 +3894,9 @@ function buildChart(mode) {
       '<button class="dv-reset-btn" onclick="confirmReset()">🗑 초기화</button>' +
     '</div>' +
     '<div class="dv-chart-tabs">' +
-      '<button class="dv-ctab ' + (mode==='visit'?tabOn.visit:'') + '" onclick="switchChart(\'visit\')">🙋 방문</button>' +
-      '<button class="dv-ctab ' + (mode==='view'?tabOn.view:'')   + '" onclick="switchChart(\'view\')">👁 영상</button>' +
-      '<button class="dv-ctab ' + (mode==='click'?tabOn.click:'') + '" onclick="switchChart(\'click\')">📍 클릭</button>' +
+      '<button class="dv-ctab ' + (mode==='visit'?tabOn.visit:'') + '" data-m="visit" onclick="switchChart(this.dataset.m)">🙋 방문</button>' +
+      '<button class="dv-ctab ' + (mode==='view'?tabOn.view:'')   + '" data-m="view" onclick="switchChart(this.dataset.m)">👁 영상</button>' +
+      '<button class="dv-ctab ' + (mode==='click'?tabOn.click:'') + '" data-m="click" onclick="switchChart(this.dataset.m)">📍 클릭</button>' +
     '</div>' +
     (empty
       ? '<div class="dv-empty">데이터가 쌓이면 여기에 표시돼요</div>'
@@ -3912,7 +3912,7 @@ function switchChart(mode) {
 
 /* ── 통계 초기화 확인 ── */
 async function confirmReset() {
-  if (!confirm('⚠️ 오늘하루 통계를 초기화할게요?\n(방문자 · 영상조회 · 예약클릭 모두 0으로 리셋)')) return;
+  if (!confirm('⚠️ 오늘하루 통계를 초기화할게요? (방문자 · 영상조회 · 예약클릭 모두 0으로 리셋)')) return;
   const r = await fetch('/api/admin/reset-stats', { method: 'POST' });
   if (r.ok) {
     showPayToast('✅ 통계가 초기화되었습니다');
