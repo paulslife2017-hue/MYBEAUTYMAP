@@ -3067,6 +3067,57 @@ body{font-family:'Pretendard',sans-serif;background:var(--bg);color:var(--t1);mi
 .rank-total{font-size:12px;font-weight:800;color:var(--t2);white-space:nowrap;text-align:right}
 .rank-total small{display:block;font-size:9px;color:var(--t4);font-weight:500}
 
+/* ── 투자자 지표 섹션 ── */
+.insight-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.insight-card{background:var(--card);border:1px solid var(--border);border-radius:16px;
+  padding:14px;position:relative;overflow:hidden}
+.insight-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:16px 16px 0 0}
+.ic-cvr::before  {background:linear-gradient(90deg,#f59e0b,#d97706)}
+.ic-growth::before{background:linear-gradient(90deg,#34d399,#059669)}
+.ic-pay::before  {background:linear-gradient(90deg,#a78bfa,#7c3aed)}
+.ic-daumau::before{background:linear-gradient(90deg,#60a5fa,#2563eb)}
+.insight-icon{font-size:16px;margin-bottom:5px}
+.insight-val{font-size:22px;font-weight:800;line-height:1;margin-bottom:3px}
+.ic-cvr   .insight-val{color:#f59e0b}
+.ic-growth .insight-val{color:#34d399}
+.ic-pay   .insight-val{color:#a78bfa}
+.ic-daumau .insight-val{color:#60a5fa}
+.insight-lbl{font-size:10px;color:var(--t3);font-weight:600;margin-bottom:6px}
+.insight-sub{font-size:9px;color:var(--t4);font-weight:500;line-height:1.5}
+.insight-sub b{font-weight:700}
+/* 전환율 게이지 바 */
+.cvr-gauge{margin-top:8px;height:4px;background:rgba(255,255,255,.07);border-radius:4px;overflow:hidden}
+.cvr-gauge-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,#f59e0b,#d97706);transition:width .6s}
+/* 업체별 인사이트 리스트 */
+.shop-insight-list{margin-bottom:8px}
+.si-card{background:var(--card);border:1px solid var(--border);border-radius:14px;
+  padding:11px 13px;margin-bottom:6px;display:flex;align-items:center;gap:10px}
+.si-rank{font-size:11px;font-weight:800;width:20px;flex-shrink:0;text-align:center}
+.si-name{flex:1;font-size:12px;font-weight:700;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.si-cat{font-size:10px;color:var(--t3);font-weight:500;white-space:nowrap}
+.si-right{text-align:right;flex-shrink:0}
+.si-cvr{font-size:13px;font-weight:800}
+.si-cvr.hi{color:#34d399}.si-cvr.mid{color:#f59e0b}.si-cvr.lo{color:#f87171}
+.si-sub{font-size:9px;color:var(--t4);margin-top:1px}
+.si-alert{font-size:9px;font-weight:700;padding:2px 7px;border-radius:5px;
+  background:rgba(248,113,113,.12);color:#f87171;border:1px solid rgba(248,113,113,.2);
+  white-space:nowrap}
+/* 수익화 퍼널 */
+.funnel-bar{background:var(--card);border:1px solid var(--border);border-radius:16px;
+  padding:14px;margin-bottom:8px}
+.funnel-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.funnel-row:last-child{margin-bottom:0}
+.funnel-label{font-size:11px;font-weight:600;color:var(--t3);width:60px;flex-shrink:0}
+.funnel-track{flex:1;height:10px;background:rgba(255,255,255,.05);border-radius:10px;overflow:hidden}
+.funnel-fill{height:100%;border-radius:10px;transition:width .6s}
+.f-visit{background:linear-gradient(90deg,#c4b5fd,#7c3aed)}
+.f-view {background:linear-gradient(90deg,#FFB6C8,#FF4D7D)}
+.f-feed {background:linear-gradient(90deg,#6ee7b7,#03C75A)}
+.f-map  {background:linear-gradient(90deg,#93c5fd,#6495ed)}
+.funnel-num{font-size:11px;font-weight:800;color:var(--t2);width:46px;text-align:right;flex-shrink:0}
+.funnel-pct{font-size:9px;color:var(--t4);width:34px;text-align:right;flex-shrink:0}
+
 /* ── 업체 관리 카드 ── */
 .shop-card{background:var(--card);border:1px solid var(--border);
   border-radius:16px;padding:14px;margin-bottom:10px}
@@ -3399,7 +3450,7 @@ let pmPlan = 'shoot', pmStatus = 'unpaid';
 let curTab = 'stats';
 let shopData = [];
 let thumbDataUrl = '';
-let _stats = null, _dvRows = [], _chartMode = 'view', _rankMode = 'today';
+let _stats = null, _dvRows = [], _chartMode = 'view', _rankMode = 'today', _insightMode = 'top';
 
 // ── 탭 전환
 function switchTab(t) {
@@ -3494,13 +3545,192 @@ function renderDashboard() {
       '<div class="sb-item"><div class="sb-val" style="color:#a78bfa">' + (d.totalShops||0) + '</div><div class="sb-lbl">등록 업체</div></div>' +
     '</div>';
 
-  // 3) 14일 차트
+  // 3) 투자자 지표
+  const invest = buildInvestMetrics(d, dv);
+
+  // 4) 14일 차트
   const chart = buildChart14(_chartMode);
 
-  // 4) 오늘 업체 랭킹
+  // 5) 업체별 전환율 인사이트
+  const shopInsight = buildShopInsight();
+
+  // 6) 오늘 업체 랭킹
   const rank = buildRank(_rankMode);
 
-  p.innerHTML = kpi + accum + chart + rank;
+  p.innerHTML = kpi + accum + invest + chart + shopInsight + rank;
+}
+
+// ── 투자자 지표 섹션
+function buildInvestMetrics(d, dv) {
+  const list = shopData || [];
+
+  // ① 전환율 (누적 view → feed클릭)
+  const totalV = d.totalViews  || 0;
+  const totalF = d.totalFeedSP || 0;
+  const totalM = d.totalMapSP  || 0;
+  const cvr    = totalV ? ((totalF / totalV) * 100) : 0;
+  const cvrStr = cvr.toFixed(1) + '%';
+  const cvrW   = Math.min(cvr * 5, 100).toFixed(1); // 게이지 (20%=풀)
+  const cvrComment = cvr >= 5 ? '우수' : cvr >= 2 ? '보통' : '개선 필요';
+  const cvrColor   = cvr >= 5 ? '#34d399' : cvr >= 2 ? '#f59e0b' : '#f87171';
+
+  // ② 주간 성장률 (어제 기준 7일 전 대비)
+  const chart = d.weekChart || [];
+  const chartMap = {};
+  chart.forEach(r => { chartMap[r.date] = r.views || 0; });
+  const todayKST = new Date(Date.now()+9*60*60*1000).toISOString().slice(0,10);
+  // 최근 3일 합계 vs 그 이전 3일
+  const recent3 = [-2,-1,0].map(i => {
+    const dt = new Date(Date.now()+9*60*60*1000+i*86400000).toISOString().slice(0,10);
+    return chartMap[dt] || 0;
+  }).reduce((a,b)=>a+b,0);
+  const prev3 = [-5,-4,-3].map(i => {
+    const dt = new Date(Date.now()+9*60*60*1000+i*86400000).toISOString().slice(0,10);
+    return chartMap[dt] || 0;
+  }).reduce((a,b)=>a+b,0);
+  const growthPct = prev3 > 0 ? (((recent3 - prev3) / prev3) * 100) : (recent3 > 0 ? 100 : 0);
+  const growthStr = (growthPct >= 0 ? '+' : '') + growthPct.toFixed(0) + '%';
+  const growthColor = growthPct >= 0 ? '#34d399' : '#f87171';
+  const growthComment = growthPct >= 10 ? '성장 중 🚀' : growthPct >= 0 ? '유지 중 →' : '감소 중 ⚠️';
+
+  // ③ DAU/MAU (방문자 기준)
+  const dvRows = Array.isArray(dv) ? dv : [];
+  const mau30  = dvRows.slice(0, 30).reduce((s, r) => s + (parseInt(r.visit_cnt)||0), 0);
+  const dau    = dvRows[0] ? (parseInt(dvRows[0].visit_cnt)||0) : 0; // 어제(최근 완성일)
+  const dauMau = mau30 > 0 ? ((dau / (mau30 / 30)) * 100).toFixed(0) : '—';
+  const dauMauComment = mau30 > 0 ? '일평균 ' + Math.round(mau30/Math.min(dvRows.length,30)).toLocaleString() + '명' : '데이터 누적 중';
+
+  // ④ 수익화 현황
+  const paid    = list.filter(s => s.paymentStatus === 'paid').length;
+  const free    = list.filter(s => s.paymentStatus === 'free').length;
+  const total   = list.length;
+  const payRate = total > 0 ? ((paid / total) * 100).toFixed(0) : 0;
+  const payComment = paid > 0 ? paid + '개 결제 · ' + free + '개 무료' : '무료 ' + free + '개 · 미결제 ' + (total-free) + '개';
+
+  // ── 렌더링
+  const insightCards =
+    '<div class="insight-grid">' +
+      // 전환율
+      '<div class="insight-card ic-cvr">' +
+        '<div class="insight-icon">🎯</div>' +
+        '<div class="insight-val">' + cvrStr + '</div>' +
+        '<div class="insight-lbl">예약 전환율</div>' +
+        '<div class="cvr-gauge"><div class="cvr-gauge-fill" style="width:' + cvrW + '%"></div></div>' +
+        '<div class="insight-sub" style="margin-top:5px">view→피드클릭 <b style="color:' + cvrColor + '">' + cvrComment + '</b><br>' +
+          '조회 ' + totalV.toLocaleString() + ' → 클릭 ' + totalF.toLocaleString() + '</div>' +
+      '</div>' +
+      // 성장률
+      '<div class="insight-card ic-growth">' +
+        '<div class="insight-icon">📈</div>' +
+        '<div class="insight-val" style="color:' + growthColor + '">' + growthStr + '</div>' +
+        '<div class="insight-lbl">주간 성장률</div>' +
+        '<div class="insight-sub">최근 3일 vs 이전 3일<br>' +
+          '<b>' + recent3.toLocaleString() + '</b> vs <b>' + prev3.toLocaleString() + '</b> 영상조회<br>' +
+          '<b style="color:' + growthColor + '">' + growthComment + '</b></div>' +
+      '</div>' +
+      // DAU/MAU
+      '<div class="insight-card ic-daumau">' +
+        '<div class="insight-icon">🔁</div>' +
+        '<div class="insight-val">' + dauMau + (mau30 > 0 ? '%' : '') + '</div>' +
+        '<div class="insight-lbl">재방문 지수</div>' +
+        '<div class="insight-sub">일방문 / 월평균 비율<br>' + dauMauComment + '<br>' +
+          '<b style="color:var(--t3)">높을수록 습관성 앱</b></div>' +
+      '</div>' +
+      // 수익화
+      '<div class="insight-card ic-pay">' +
+        '<div class="insight-icon">💰</div>' +
+        '<div class="insight-val">' + payRate + '%</div>' +
+        '<div class="insight-lbl">유료 전환율</div>' +
+        '<div class="insight-sub">전체 ' + total + '개 업체 중<br>' + payComment + '<br>' +
+          (paid > 0 ? '<b style="color:#a78bfa">수익화 진행 중</b>' : '<b style="color:var(--t3)">수익화 준비 단계</b>') + '</div>' +
+      '</div>' +
+    '</div>';
+
+  // ── 수익화 퍼널 (방문→조회→클릭 드롭오프)
+  const maxFunnel = Math.max(mau30 || dau || 1, totalV || 1);
+  const funnelVisit = mau30 || dau;
+  const funnelView  = totalV;
+  const funnelFeed  = totalF;
+  const funnelMap   = totalM;
+  const fw = (n) => Math.max((n / (maxFunnel || 1) * 100), n > 0 ? 2 : 0).toFixed(1);
+  const drop1 = funnelVisit > 0 ? ((funnelView / funnelVisit)*100).toFixed(0) + '% 진입' : '—';
+  const drop2 = funnelView  > 0 ? ((funnelFeed / funnelView)*100).toFixed(1) + '% 전환' : '—';
+
+  const funnel =
+    '<div class="section-title">🔽 사용자 퍼널</div>' +
+    '<div class="funnel-bar">' +
+      '<div class="funnel-row">' +
+        '<div class="funnel-label">방문자</div>' +
+        '<div class="funnel-track"><div class="funnel-fill f-visit" style="width:100%"></div></div>' +
+        '<div class="funnel-num">' + (funnelVisit||0).toLocaleString() + '</div>' +
+        '<div class="funnel-pct">100%</div>' +
+      '</div>' +
+      '<div class="funnel-row">' +
+        '<div class="funnel-label">영상조회</div>' +
+        '<div class="funnel-track"><div class="funnel-fill f-view" style="width:' + fw(funnelView) + '%"></div></div>' +
+        '<div class="funnel-num">' + funnelView.toLocaleString() + '</div>' +
+        '<div class="funnel-pct" style="color:#f59e0b">' + drop1 + '</div>' +
+      '</div>' +
+      '<div class="funnel-row">' +
+        '<div class="funnel-label">피드클릭</div>' +
+        '<div class="funnel-track"><div class="funnel-fill f-feed" style="width:' + fw(funnelFeed) + '%"></div></div>' +
+        '<div class="funnel-num">' + funnelFeed.toLocaleString() + '</div>' +
+        '<div class="funnel-pct" style="color:#34d399">' + drop2 + '</div>' +
+      '</div>' +
+      '<div class="funnel-row">' +
+        '<div class="funnel-label">지도클릭</div>' +
+        '<div class="funnel-track"><div class="funnel-fill f-map" style="width:' + fw(funnelMap) + '%"></div></div>' +
+        '<div class="funnel-num">' + funnelMap.toLocaleString() + '</div>' +
+        '<div class="funnel-pct">' + (funnelView > 0 ? ((funnelMap/funnelView)*100).toFixed(1)+'%' : '—') + '</div>' +
+      '</div>' +
+    '</div>';
+
+  return '<div class="section-title">💡 핵심 지표</div>' + insightCards + funnel;
+}
+
+// ── 업체별 전환율 인사이트
+function buildShopInsight() {
+  const list = shopData || [];
+  if (!list.length) return '';
+
+  // 전환율 계산 (view→feed, 조회 50 이상만)
+  const withCvr = list
+    .filter(s => (s.views||0) >= 50)
+    .map(s => ({
+      ...s,
+      cvr: s.views > 0 ? (s.feedSP / s.views * 100) : 0
+    }))
+    .sort((a, b) => b.cvr - a.cvr);
+
+  if (!withCvr.length) return '';
+
+  const top3  = withCvr.slice(0, 3);
+  const bot3  = [...withCvr].sort((a,b) => a.cvr - b.cvr).slice(0, 3);
+
+  const renderRow = (s, i, isAlert) => {
+    const cvrN = s.cvr;
+    const cls  = cvrN >= 5 ? 'hi' : cvrN >= 2 ? 'mid' : 'lo';
+    return '<div class="si-card">' +
+      '<div class="si-rank" style="color:' + (isAlert ? '#f87171' : '#34d399') + '">' + (isAlert ? '⚠' : '✓') + '</div>' +
+      '<div style="flex:1;min-width:0">' +
+        '<div class="si-name">' + s.name + '</div>' +
+        '<div class="si-cat">' + s.category + ' · 조회 ' + (s.views||0).toLocaleString() + '</div>' +
+      '</div>' +
+      '<div class="si-right">' +
+        '<div class="si-cvr ' + cls + '">' + cvrN.toFixed(1) + '%</div>' +
+        '<div class="si-sub">전환율</div>' +
+      '</div>' +
+    '</div>';
+  };
+
+  return '<div class="section-title">🔬 업체별 전환율</div>' +
+    '<div style="display:flex;gap:6px;margin-bottom:8px">' +
+      '<button class="rank-tab' + (_insightMode==='top'?' on':'') + '" data-m="top" onclick="switchInsight(this.dataset.m)">🏆 전환율 TOP</button>' +
+      '<button class="rank-tab' + (_insightMode==='bot'?' on':'') + '" data-m="bot" onclick="switchInsight(this.dataset.m)">⚠️ 개선 필요</button>' +
+    '</div>' +
+    '<div class="shop-insight-list">' +
+    (_insightMode === 'top' ? top3 : bot3).map((s,i) => renderRow(s, i, _insightMode==='bot')).join('') +
+    '</div>';
 }
 
 // ── 14일 차트 빌드
@@ -3570,6 +3800,7 @@ function buildChart14(mode) {
 }
 
 function switchChart(m) { _chartMode=m; renderDashboard(); }
+function switchInsight(m) { _insightMode=m; renderDashboard(); }
 
 // ── 업체 랭킹 빌드
 function buildRank(mode) {
