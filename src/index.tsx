@@ -294,28 +294,37 @@ app.delete('/api/admin/shops/:id', async (c) => {
 // 트래킹 — 영상 조회
 app.post('/api/track/view/:id', async (c) => {
   const id = +c.req.param('id')
-  await sql`
-    INSERT INTO stats (shop_id, view_cnt) VALUES (${id}, 1)
-    ON CONFLICT (shop_id) DO UPDATE SET view_cnt = stats.view_cnt + 1
-  `
+  const today = new Date().toISOString().slice(0, 10)
+  await Promise.all([
+    sql`INSERT INTO stats (shop_id, view_cnt) VALUES (${id}, 1)
+        ON CONFLICT (shop_id) DO UPDATE SET view_cnt = stats.view_cnt + 1`,
+    sql`INSERT INTO daily_stats (shop_id, stat_date, view_cnt) VALUES (${id}, ${today}, 1)
+        ON CONFLICT (shop_id, stat_date) DO UPDATE SET view_cnt = daily_stats.view_cnt + 1`,
+  ])
   return c.json({ ok: true })
 })
 // 트래킹 — 피드 예약클릭
 app.post('/api/track/sp/:id', async (c) => {
   const id = +c.req.param('id')
-  await sql`
-    INSERT INTO stats (shop_id, feed_sp) VALUES (${id}, 1)
-    ON CONFLICT (shop_id) DO UPDATE SET feed_sp = stats.feed_sp + 1
-  `
+  const today = new Date().toISOString().slice(0, 10)
+  await Promise.all([
+    sql`INSERT INTO stats (shop_id, feed_sp) VALUES (${id}, 1)
+        ON CONFLICT (shop_id) DO UPDATE SET feed_sp = stats.feed_sp + 1`,
+    sql`INSERT INTO daily_stats (shop_id, stat_date, feed_sp) VALUES (${id}, ${today}, 1)
+        ON CONFLICT (shop_id, stat_date) DO UPDATE SET feed_sp = daily_stats.feed_sp + 1`,
+  ])
   return c.json({ ok: true })
 })
 // 트래킹 — 지도 예약클릭
 app.post('/api/track/mapsp/:id', async (c) => {
   const id = +c.req.param('id')
-  await sql`
-    INSERT INTO stats (shop_id, map_sp) VALUES (${id}, 1)
-    ON CONFLICT (shop_id) DO UPDATE SET map_sp = stats.map_sp + 1
-  `
+  const today = new Date().toISOString().slice(0, 10)
+  await Promise.all([
+    sql`INSERT INTO stats (shop_id, map_sp) VALUES (${id}, 1)
+        ON CONFLICT (shop_id) DO UPDATE SET map_sp = stats.map_sp + 1`,
+    sql`INSERT INTO daily_stats (shop_id, stat_date, map_sp) VALUES (${id}, ${today}, 1)
+        ON CONFLICT (shop_id, stat_date) DO UPDATE SET map_sp = daily_stats.map_sp + 1`,
+  ])
   return c.json({ ok: true })
 })
 
@@ -344,11 +353,43 @@ app.get('/api/admin/daily-visits', async (c) => {
 app.post('/api/admin/reset-stats', async (c) => {
   await sql`UPDATE stats SET view_cnt=0, feed_sp=0, map_sp=0`
   await sql`DELETE FROM daily_visits`
+  await sql`DELETE FROM daily_stats`
+  return c.json({ ok: true })
+})
+
+// ── daily_stats 테이블 초기화 (최초 1회) ─────────────────────────────────
+app.post('/api/admin/init-daily-stats', async (c) => {
+  await sql`
+    CREATE TABLE IF NOT EXISTS daily_stats (
+      shop_id   INTEGER NOT NULL,
+      stat_date DATE    NOT NULL,
+      view_cnt  INTEGER NOT NULL DEFAULT 0,
+      feed_sp   INTEGER NOT NULL DEFAULT 0,
+      map_sp    INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (shop_id, stat_date)
+    )
+  `
   return c.json({ ok: true })
 })
 
 // 어드민 통계
 app.get('/api/admin/stats', async (c) => {
+  const today     = new Date().toISOString().slice(0, 10)
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
+
+  // daily_stats 테이블 자동 생성 (없으면)
+  await sql`
+    CREATE TABLE IF NOT EXISTS daily_stats (
+      shop_id   INTEGER NOT NULL,
+      stat_date DATE    NOT NULL,
+      view_cnt  INTEGER NOT NULL DEFAULT 0,
+      feed_sp   INTEGER NOT NULL DEFAULT 0,
+      map_sp    INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (shop_id, stat_date)
+    )
+  `
+
+  // 업체별 누적 통계 (랭킹용)
   const rows = await sql`
     SELECT s.id, s.name, s.category, s.thumbnail, s.youtube_id,
            s.featured, s.active, s.lat, s.lng, s.smart_place_url,
@@ -359,6 +400,33 @@ app.get('/api/admin/stats', async (c) => {
     FROM shops s LEFT JOIN stats st ON s.id = st.shop_id
     ORDER BY (COALESCE(st.view_cnt,0)+COALESCE(st.feed_sp,0)+COALESCE(st.map_sp,0)) DESC
   `
+
+  // 오늘 합계
+  const todayTotals = await sql`
+    SELECT COALESCE(SUM(view_cnt),0) as views,
+           COALESCE(SUM(feed_sp),0)  as feed_sp,
+           COALESCE(SUM(map_sp),0)   as map_sp
+    FROM daily_stats WHERE stat_date = ${today}
+  `
+  // 어제 합계
+  const yestTotals = await sql`
+    SELECT COALESCE(SUM(view_cnt),0) as views,
+           COALESCE(SUM(feed_sp),0)  as feed_sp,
+           COALESCE(SUM(map_sp),0)   as map_sp
+    FROM daily_stats WHERE stat_date = ${yesterday}
+  `
+  // 7일 일별 합계 (차트용)
+  const weekRows = await sql`
+    SELECT stat_date::text as stat_date,
+           COALESCE(SUM(view_cnt),0) as views,
+           COALESCE(SUM(feed_sp),0)  as feed_sp,
+           COALESCE(SUM(map_sp),0)   as map_sp
+    FROM daily_stats
+    WHERE stat_date >= (CURRENT_DATE - INTERVAL '13 days')
+    GROUP BY stat_date
+    ORDER BY stat_date ASC
+  `
+  // 누적 합계
   const totals = await sql`
     SELECT
       SUM(view_cnt) as total_views,
@@ -367,7 +435,11 @@ app.get('/api/admin/stats', async (c) => {
     FROM stats
   `
   const activeCount = await sql`SELECT COUNT(*) as cnt FROM shops WHERE active = true`
-  const t = totals[0] || {}
+
+  const t  = totals[0]      || {}
+  const td = todayTotals[0] || {}
+  const yd = yestTotals[0]  || {}
+
   return c.json({
     stats: rows.map(r => ({
       id:        r.id,
@@ -387,10 +459,26 @@ app.get('/api/admin/stats', async (c) => {
       district:     r.district ?? '',
       phone:        r.phone ?? '',
     })),
+    // 누적
     totalViews:  parseInt(t.total_views)   || 0,
     totalFeedSP: parseInt(t.total_feed_sp) || 0,
     totalMapSP:  parseInt(t.total_map_sp)  || 0,
     totalShops:  parseInt(activeCount[0].cnt) || 0,
+    // 오늘
+    todayViews:  parseInt(td.views)   || 0,
+    todayFeedSP: parseInt(td.feed_sp) || 0,
+    todayMapSP:  parseInt(td.map_sp)  || 0,
+    // 어제
+    yestViews:   parseInt(yd.views)   || 0,
+    yestFeedSP:  parseInt(yd.feed_sp) || 0,
+    yestMapSP:   parseInt(yd.map_sp)  || 0,
+    // 14일 차트
+    weekChart: weekRows.map(r => ({
+      date:   r.stat_date,
+      views:  parseInt(r.views)   || 0,
+      feedSP: parseInt(r.feed_sp) || 0,
+      mapSP:  parseInt(r.map_sp)  || 0,
+    })),
   })
 })
 
@@ -2724,28 +2812,63 @@ body{font-family:'Pretendard',sans-serif;background:var(--bg);color:#fff;min-hei
 /* ── 요약 카드 ── */
 .summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
 .sv{background:var(--card);border:1px solid var(--border);border-radius:14px;
-  padding:14px 8px;text-align:center}
+  padding:14px 8px;text-align:center;position:relative;overflow:hidden}
 .sv-n{font-size:22px;font-weight:800;color:#FF8FA3}
 .sv-l{font-size:10px;color:rgba(255,255,255,.3);margin-top:3px;font-weight:600}
-/* ── 일별 방문자 차트 ── */
+.sv-delta{font-size:9px;font-weight:700;margin-top:4px;display:flex;align-items:center;justify-content:center;gap:2px}
+.sv-delta.up{color:#03C75A}
+.sv-delta.down{color:#FF4D7D}
+.sv-delta.flat{color:rgba(255,255,255,.25)}
+
+/* ── 통계 탭 헤더 ── */
+.st-today-section{background:var(--card);border:1px solid var(--border);border-radius:18px;
+  padding:18px 16px;margin-bottom:12px}
+.st-today-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.st-today-title{font-size:13px;font-weight:800;color:rgba(255,255,255,.9)}
+.st-today-date{font-size:11px;color:rgba(255,255,255,.3);font-weight:500}
+.st-kpi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.st-kpi{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);
+  border-radius:12px;padding:14px 10px;text-align:center;position:relative}
+.st-kpi-val{font-size:28px;font-weight:800;line-height:1}
+.st-kpi-lbl{font-size:10px;font-weight:600;margin-top:6px;color:rgba(255,255,255,.4)}
+.st-kpi-vs{font-size:9px;font-weight:700;margin-top:5px;display:flex;
+  align-items:center;justify-content:center;gap:3px}
+.st-kpi-vs.up{color:#03C75A}
+.st-kpi-vs.down{color:#FF4D7D}
+.st-kpi-vs.flat{color:rgba(255,255,255,.2)}
+.kpi-view .st-kpi-val{color:#FF8FA3}
+.kpi-feed .st-kpi-val{color:#03C75A}
+.kpi-map  .st-kpi-val{color:#6495ed}
+
+/* ── 일별 차트 (통합) ── */
 .dv-section{background:var(--card);border:1px solid var(--border);border-radius:16px;
-  padding:16px;margin-bottom:14px}
-.dv-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
-.dv-title{font-size:13px;font-weight:700;color:rgba(255,255,255,.8)}
+  padding:16px;margin-bottom:12px}
+.dv-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.dv-title{font-size:12px;font-weight:700;color:rgba(255,255,255,.7)}
 .dv-reset-btn{font-size:11px;font-weight:700;padding:5px 12px;
   background:rgba(255,77,125,.12);color:var(--pink);
   border:1px solid rgba(255,77,125,.3);border-radius:8px;cursor:pointer;
-  transition:all .2s}
+  transition:all .2s;white-space:nowrap}
 .dv-reset-btn:active{background:rgba(255,77,125,.25)}
-.dv-bars{display:flex;align-items:flex-end;gap:3px;height:80px;overflow-x:auto;overflow-y:hidden;
-  padding-bottom:2px}
-.dv-bar-wrap{display:flex;flex-direction:column;align-items:center;gap:3px;flex-shrink:0;min-width:26px}
-.dv-bar{background:linear-gradient(180deg,#FF8FA3,#FF4D7D);border-radius:4px 4px 0 0;
-  width:18px;min-height:3px;transition:height .3s}
-.dv-bar-date{font-size:8px;color:rgba(255,255,255,.3);white-space:nowrap}
-.dv-bar-cnt{font-size:8px;color:rgba(255,255,255,.5);font-weight:700}
-.dv-today{background:linear-gradient(180deg,#6ee7b7,#03C75A)!important}
+.dv-chart-tabs{display:flex;gap:4px;margin-bottom:10px}
+.dv-ctab{font-size:10px;font-weight:700;padding:4px 10px;border-radius:6px;
+  cursor:pointer;border:1px solid rgba(255,255,255,.08);color:rgba(255,255,255,.35);
+  background:none;transition:all .2s;font-family:inherit}
+.dv-ctab.on-visit{background:rgba(255,77,125,.15);border-color:rgba(255,77,125,.35);color:var(--pink)}
+.dv-ctab.on-view{background:rgba(255,143,163,.15);border-color:rgba(255,143,163,.35);color:#FF8FA3}
+.dv-ctab.on-click{background:rgba(3,199,90,.15);border-color:rgba(3,199,90,.35);color:#03C75A}
+.dv-bars{display:flex;align-items:flex-end;gap:3px;height:72px;overflow-x:auto;overflow-y:hidden;
+  padding-bottom:0}
+.dv-bar-wrap{display:flex;flex-direction:column;align-items:center;gap:2px;flex-shrink:0;min-width:22px}
+.dv-bar{border-radius:3px 3px 0 0;width:14px;min-height:2px;transition:height .3s}
+.dv-bar.visit-bar{background:linear-gradient(180deg,#FF8FA3,#FF4D7D)}
+.dv-bar.view-bar {background:linear-gradient(180deg,#FFB6C8,#FF8FA3)}
+.dv-bar.click-bar{background:linear-gradient(180deg,#6ee7b7,#03C75A)}
+.dv-bar-date{font-size:7px;color:rgba(255,255,255,.25);white-space:nowrap}
+.dv-bar-cnt{font-size:7px;color:rgba(255,255,255,.45);font-weight:700;min-height:10px}
+.dv-today-bar{background:linear-gradient(180deg,#ffe066,#f59e0b)!important}
 .dv-empty{color:rgba(255,255,255,.3);font-size:12px;text-align:center;padding:20px 0}
+.dv-legend{font-size:10px;color:rgba(255,255,255,.3);margin-top:8px;text-align:right;font-weight:500}
 
 /* ── 업체 카드 ── */
 .shop-card{background:var(--card);border:1px solid var(--border);
@@ -2990,10 +3113,25 @@ body{font-family:'Pretendard',sans-serif;background:var(--bg);color:#fff;min-hei
 <div class="wrap">
   <!-- 요약 (업체/통계 탭 공통) -->
   <div class="summary" id="summaryBox">
-    <div class="sv"><div class="sv-n" id="sv-shops">-</div><div class="sv-l">💄 등록 샵</div></div>
-    <div class="sv"><div class="sv-n" id="sv-visits">-</div><div class="sv-l">🙋 오늘 방문</div></div>
-    <div class="sv"><div class="sv-n" id="sv-views">-</div><div class="sv-l">👁 영상조회</div></div>
-    <div class="sv"><div class="sv-n" id="sv-clicks">-</div><div class="sv-l">📍 예약클릭</div></div>
+    <div class="sv">
+      <div class="sv-n" id="sv-shops">-</div>
+      <div class="sv-l">💄 등록 샵</div>
+    </div>
+    <div class="sv">
+      <div class="sv-n" id="sv-visits">-</div>
+      <div class="sv-l">🙋 오늘 방문</div>
+      <div class="sv-delta flat" id="sv-visits-delta">-</div>
+    </div>
+    <div class="sv">
+      <div class="sv-n" id="sv-views">-</div>
+      <div class="sv-l">👁 영상조회</div>
+      <div class="sv-delta flat" id="sv-views-delta">-</div>
+    </div>
+    <div class="sv">
+      <div class="sv-n" id="sv-clicks">-</div>
+      <div class="sv-l">📍 예약클릭</div>
+      <div class="sv-delta flat" id="sv-clicks-delta">-</div>
+    </div>
   </div>
 
   <!-- 패널들 -->
@@ -3440,18 +3578,56 @@ async function loadAll() {
     fetch('/api/admin/stats').then(r=>r.json()),
     fetch('/api/admin/daily-visits').then(r=>r.json()),
   ]);
-  // 오늘 방문자 (daily_visits 첫 번째가 오늘이거나 없으면 0)
-  const todayStr = new Date().toISOString().slice(0,10);
-  const todayRow = dvRows.find(r => r.visit_date === todayStr);
-  const todayVisits = todayRow ? (parseInt(todayRow.visit_cnt)||0) : 0;
 
-  document.getElementById('sv-shops').textContent  = d.totalShops;
-  document.getElementById('sv-visits').textContent = todayVisits.toLocaleString();
-  document.getElementById('sv-views').textContent  = (d.totalViews||0).toLocaleString();
-  document.getElementById('sv-clicks').textContent = ((d.totalFeedSP||0)+(d.totalMapSP||0)).toLocaleString();
+  // 오늘 방문자
+  const todayStr  = new Date().toISOString().slice(0,10);
+  const yestStr   = new Date(Date.now()-86400000).toISOString().slice(0,10);
+  const todayRow  = dvRows.find(r => r.visit_date === todayStr);
+  const yestRow   = dvRows.find(r => r.visit_date === yestStr);
+  const todayVisits = todayRow ? (parseInt(todayRow.visit_cnt)||0) : 0;
+  const yestVisits  = yestRow  ? (parseInt(yestRow.visit_cnt)||0)  : 0;
+
+  // 오늘 조회/클릭
+  const todayViews  = (d.todayViews  || 0);
+  const todayClicks = (d.todayFeedSP || 0) + (d.todayMapSP || 0);
+  const yestViews   = (d.yestViews   || 0);
+  const yestClicks  = (d.yestFeedSP  || 0) + (d.yestMapSP  || 0);
+
+  // 요약카드 채우기
+  document.getElementById('sv-shops').textContent   = d.totalShops;
+  document.getElementById('sv-visits').textContent  = todayVisits.toLocaleString();
+  document.getElementById('sv-views').textContent   = todayViews.toLocaleString();
+  document.getElementById('sv-clicks').textContent  = todayClicks.toLocaleString();
+
+  // 어제 대비 증감 델타
+  setDelta('sv-visits-delta', todayVisits, yestVisits);
+  setDelta('sv-views-delta',  todayViews,  yestViews);
+  setDelta('sv-clicks-delta', todayClicks, yestClicks);
+
   shopData = d.stats;
   renderShops(d.stats);
-  renderStats(d.stats, dvRows);
+  renderStats(d, dvRows);
+}
+
+// 증감 표시 헬퍼
+function setDelta(elId, today, yest) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  if (yest === 0 && today === 0) {
+    el.className = 'sv-delta flat'; el.innerHTML = '— 데이터 없음';
+  } else if (yest === 0) {
+    el.className = 'sv-delta up'; el.innerHTML = '▲ 새로운 기록';
+  } else {
+    const diff = today - yest;
+    const pct  = Math.round(Math.abs(diff) / yest * 100);
+    if (diff > 0) {
+      el.className = 'sv-delta up';   el.innerHTML = '▲ +' + diff.toLocaleString() + ' (' + pct + '%)';
+    } else if (diff < 0) {
+      el.className = 'sv-delta down'; el.innerHTML = '▼ ' + diff.toLocaleString() + ' (' + pct + '%)';
+    } else {
+      el.className = 'sv-delta flat'; el.innerHTML = '— 어제와 동일';
+    }
+  }
 }
 
 async function loadInquiries() {
@@ -3561,97 +3737,182 @@ function renderShops(list) {
 }
 
 /* ═══════════════════════════════════════════════════════
-   통계 렌더
+   통계 렌더 (전면 개선판)
 ═══════════════════════════════════════════════════════ */
-function renderStats(list, dvRows) {
-  const p = document.getElementById('panel-stats');
-  // ── 일별 방문자 차트 + 초기화 버튼 ──
-  const dvHtml = buildVisitChart(dvRows || []);
-  // ── 업체별 통계 랭킹 ──
-  const fallback = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 60'%3E%3Crect width='60' height='60' fill='%23222'/%3E%3Ctext x='30' y='38' font-size='24' text-anchor='middle'%3E💄%3C/text%3E%3C/svg%3E";
-  const rankHtml = list.length ? [...list]
-    .sort((a,b)=>(b.views+b.feedSP+b.mapSP)-(a.views+a.feedSP+a.mapSP))
-    .map((s,i) => {
-      const rc = i===0?'rank1':i===1?'rank2':i===2?'rank3':'rankN';
-      const img = s.thumbnail || (s.youtubeId?'https://img.youtube.com/vi/'+s.youtubeId+'/maxresdefault.jpg':fallback);
-      return \`
-      <div class="stat-card">
-        <img class="stat-thumb" src="\${img}" onerror="this.src='\${fallback}'"/>
-        <div class="stat-body">
-          <div class="stat-top">
-            <div class="stat-rank \${rc}">\${i+1}</div>
-            <div class="stat-name">\${s.name}</div>
-          </div>
-          <div class="stat-nums">
-            <div class="stat-num c-view">
-              <div class="sn-n">\${(s.views||0).toLocaleString()}</div>
-              <div class="sn-l">👁 영상조회</div>
-            </div>
-            <div class="stat-num c-feed">
-              <div class="sn-n">\${(s.feedSP||0).toLocaleString()}</div>
-              <div class="sn-l">📹 피드예약</div>
-            </div>
-            <div class="stat-num c-map">
-              <div class="sn-n">\${(s.mapSP||0).toLocaleString()}</div>
-              <div class="sn-l">🗺 지도예약</div>
-            </div>
-          </div>
-        </div>
-      </div>\`;
-    }).join('')
-  : '<div class="empty" style="margin-top:0">아직 조회 데이터가 없어요</div>';
+let _statsData = null;
+let _dvRows    = [];
+let _chartMode = 'visit'; // 'visit' | 'view' | 'click'
 
-  p.innerHTML = dvHtml + rankHtml;
+function renderStats(d, dvRows) {
+  _statsData = d;
+  _dvRows    = dvRows || [];
+  const p    = document.getElementById('panel-stats');
+
+  const todayStr  = new Date().toISOString().slice(0,10);
+  const yestStr   = new Date(Date.now()-86400000).toISOString().slice(0,10);
+  const todayRow  = _dvRows.find(r=>r.visit_date===todayStr);
+  const yestRow   = _dvRows.find(r=>r.visit_date===yestStr);
+  const todayVisit = todayRow ? (parseInt(todayRow.visit_cnt)||0) : 0;
+  const yestVisit  = yestRow  ? (parseInt(yestRow.visit_cnt)||0)  : 0;
+
+  const todayViews  = d.todayViews  || 0;
+  const todayClicks = (d.todayFeedSP||0) + (d.todayMapSP||0);
+  const yestViews   = d.yestViews   || 0;
+  const yestClicks  = (d.yestFeedSP||0) + (d.yestMapSP||0);
+
+  const todayLabel = new Date().toLocaleDateString('ko-KR',{month:'long',day:'numeric',weekday:'short'});
+
+  function kpiDelta(today, yest) {
+    if (yest===0 && today===0) return '<div class="st-kpi-vs flat">—</div>';
+    if (yest===0) return '<div class="st-kpi-vs up">▲ 새로운 기록</div>';
+    const diff = today - yest;
+    const pct  = Math.round(Math.abs(diff)/yest*100);
+    if (diff>0) return '<div class="st-kpi-vs up">▲ +' + diff.toLocaleString() + ' (' + pct + '%)</div>';
+    if (diff<0) return '<div class="st-kpi-vs down">▼ ' + diff.toLocaleString() + ' (' + pct + '%)</div>';
+    return '<div class="st-kpi-vs flat">— 어제와 동일</div>';
+  }
+
+  const kpiHtml =
+    '<div class="st-today-section">' +
+      '<div class="st-today-header">' +
+        '<span class="st-today-title">📅 오늘 통계</span>' +
+        '<span class="st-today-date">' + todayLabel + '</span>' +
+      '</div>' +
+      '<div class="st-kpi-grid">' +
+        '<div class="st-kpi kpi-view">' +
+          '<div class="st-kpi-val">' + todayVisit.toLocaleString() + '</div>' +
+          '<div class="st-kpi-lbl">🙋 방문자</div>' +
+          kpiDelta(todayVisit, yestVisit) +
+        '</div>' +
+        '<div class="st-kpi kpi-feed">' +
+          '<div class="st-kpi-val">' + todayViews.toLocaleString() + '</div>' +
+          '<div class="st-kpi-lbl">👁 영상조회</div>' +
+          kpiDelta(todayViews, yestViews) +
+        '</div>' +
+        '<div class="st-kpi kpi-map">' +
+          '<div class="st-kpi-val">' + todayClicks.toLocaleString() + '</div>' +
+          '<div class="st-kpi-lbl">📍 예약클릭</div>' +
+          kpiDelta(todayClicks, yestClicks) +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+  const chartHtml = buildChart(_chartMode);
+
+  const fallback = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 60'%3E%3Crect width='60' height='60' fill='%23222'/%3E%3Ctext x='30' y='38' font-size='24' text-anchor='middle'%3E%F0%9F%92%84%3C/text%3E%3C/svg%3E";
+  const list = d.stats || [];
+  let rankHtml;
+  if (!list.length) {
+    rankHtml = '<div class="empty" style="margin-top:0">아직 조회 데이터가 없어요</div>';
+  } else {
+    const rows = [...list]
+      .sort((a,b)=>(b.views+b.feedSP+b.mapSP)-(a.views+a.feedSP+a.mapSP))
+      .map((s,i) => {
+        const rc  = i===0?'rank1':i===1?'rank2':i===2?'rank3':'rankN';
+        const img = s.thumbnail || (s.youtubeId ? 'https://img.youtube.com/vi/'+s.youtubeId+'/maxresdefault.jpg' : fallback);
+        const total = (s.views||0)+(s.feedSP||0)+(s.mapSP||0);
+        return '<div class="stat-card">' +
+          '<img class="stat-thumb" src="' + img + '" onerror="this.src=\'' + fallback + '\'"/>' +
+          '<div class="stat-body">' +
+            '<div class="stat-top">' +
+              '<div class="stat-rank ' + rc + '">' + (i+1) + '</div>' +
+              '<div class="stat-name">' + s.name + '</div>' +
+              '<div style="font-size:10px;color:rgba(255,255,255,.25);font-weight:600;margin-left:auto;white-space:nowrap">합계 ' + total.toLocaleString() + '</div>' +
+            '</div>' +
+            '<div class="stat-nums">' +
+              '<div class="stat-num c-view"><div class="sn-n">' + (s.views||0).toLocaleString() + '</div><div class="sn-l">👁 영상</div></div>' +
+              '<div class="stat-num c-feed"><div class="sn-n">' + (s.feedSP||0).toLocaleString() + '</div><div class="sn-l">📹 피드</div></div>' +
+              '<div class="stat-num c-map"><div class="sn-n">'  + (s.mapSP||0).toLocaleString()  + '</div><div class="sn-l">🗺 지도</div></div>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+      });
+    rankHtml = '<div class="sec-label" style="margin-top:16px">🏆 누적 업체 랭킹</div>' + rows.join('');
+  }
+
+  p.innerHTML = kpiHtml + chartHtml + rankHtml;
 }
 
-/* ── 일별 방문자 막대 차트 빌더 ── */
-function buildVisitChart(rows) {
-  // rows: [{visit_date:'2025-05-10', visit_cnt:42}, ...] 최신순
-  // 최근 14일 날짜 배열 생성 (오늘 포함, 과거→오늘 순)
+/* ── 일별 통합 차트 (방문/영상/클릭 탭 전환) ── */
+function buildChart(mode) {
   const today = new Date();
-  const days = [];
-  for (let i = 13; i >= 0; i--) {
+  const days  = [];
+  for (let i=13; i>=0; i--) {
     const d = new Date(today);
-    d.setDate(today.getDate() - i);
+    d.setDate(today.getDate()-i);
     days.push(d.toISOString().slice(0,10));
   }
-  const map = {};
-  rows.forEach(r => { map[r.visit_date] = parseInt(r.visit_cnt)||0; });
-  const counts = days.map(d => map[d] || 0);
-  const maxCnt = Math.max(...counts, 1);
   const todayStr = today.toISOString().slice(0,10);
-  // 전체 합계
-  const total = rows.reduce((s,r)=>s+(parseInt(r.visit_cnt)||0), 0);
 
-  const barsHtml = days.map((d, i) => {
-    const cnt  = counts[i];
-    const pct  = Math.round((cnt / maxCnt) * 72); // max 72px
-    const h    = Math.max(pct, cnt>0?4:2);
-    const isToday = d === todayStr;
-    const label = d.slice(5); // 'MM-DD'
-    return \`<div class="dv-bar-wrap">
-      <div class="dv-bar-cnt">\${cnt > 0 ? cnt : ''}</div>
-      <div class="dv-bar\${isToday?' dv-today':''}" style="height:\${h}px"></div>
-      <div class="dv-bar-date">\${isToday?'오늘':label}</div>
-    </div>\`;
+  let counts, barClass, label14, totalSuffix;
+  if (mode === 'visit') {
+    const map = {};
+    _dvRows.forEach(r=>{ map[r.visit_date]=parseInt(r.visit_cnt)||0; });
+    counts      = days.map(d=>map[d]||0);
+    barClass    = 'visit-bar';
+    label14     = '🙋 방문자 (14일)';
+    totalSuffix = '명';
+  } else if (mode === 'view') {
+    const chart = (_statsData && _statsData.weekChart) || [];
+    const map = {};
+    chart.forEach(r=>{ map[r.date]=parseInt(r.views)||0; });
+    counts      = days.map(d=>map[d]||0);
+    barClass    = 'view-bar';
+    label14     = '👁 영상조회 (14일)';
+    totalSuffix = '회';
+  } else {
+    const chart = (_statsData && _statsData.weekChart) || [];
+    const map = {};
+    chart.forEach(r=>{ map[r.date]=(parseInt(r.feedSP)||0)+(parseInt(r.mapSP)||0); });
+    counts      = days.map(d=>map[d]||0);
+    barClass    = 'click-bar';
+    label14     = '📍 예약클릭 (14일)';
+    totalSuffix = '회';
+  }
+
+  const maxCnt   = Math.max(...counts, 1);
+  const totalVal = counts.reduce((a,b)=>a+b,0);
+  const barsHtml = days.map((d,i)=>{
+    const cnt     = counts[i];
+    const h       = Math.max(Math.round((cnt/maxCnt)*64), cnt>0?4:2);
+    const isToday = d===todayStr;
+    const label   = d.slice(5);
+    return '<div class="dv-bar-wrap">' +
+      '<div class="dv-bar-cnt">' + (cnt>0?cnt:'') + '</div>' +
+      '<div class="dv-bar ' + (isToday?'dv-today-bar':barClass) + '" style="height:' + h + 'px"></div>' +
+      '<div class="dv-bar-date">' + (isToday?'오늘':label) + '</div>' +
+    '</div>';
   }).join('');
 
-  return \`
-  <div class="dv-section">
-    <div class="dv-header">
-      <span class="dv-title">📅 방문자 추이 (최근 14일)&nbsp;<span style="color:rgba(255,255,255,.4);font-weight:500;font-size:11px">누적 \${total.toLocaleString()}명</span></span>
-      <button class="dv-reset-btn" onclick="confirmReset()">🗑 통계 초기화</button>
-    </div>
-    \${counts.every(c=>c===0)
-      ? '<div class="dv-empty">아직 방문 데이터가 없어요</div>'
-      : \`<div class="dv-bars">\${barsHtml}</div>\`
-    }
-  </div>\`;
+  const empty  = counts.every(c=>c===0);
+  const tabOn  = { visit:'on-visit', view:'on-view', click:'on-click' };
+
+  return '<div class="dv-section">' +
+    '<div class="dv-header">' +
+      '<span class="dv-title">' + label14 +
+        ' <span style="font-size:10px;color:rgba(255,255,255,.3);font-weight:500">누적 ' + totalVal.toLocaleString() + totalSuffix + '</span></span>' +
+      '<button class="dv-reset-btn" onclick="confirmReset()">🗑 초기화</button>' +
+    '</div>' +
+    '<div class="dv-chart-tabs">' +
+      '<button class="dv-ctab ' + (mode==='visit'?tabOn.visit:'') + '" onclick="switchChart(\'visit\')">🙋 방문</button>' +
+      '<button class="dv-ctab ' + (mode==='view'?tabOn.view:'')   + '" onclick="switchChart(\'view\')">👁 영상</button>' +
+      '<button class="dv-ctab ' + (mode==='click'?tabOn.click:'') + '" onclick="switchChart(\'click\')">📍 클릭</button>' +
+    '</div>' +
+    (empty
+      ? '<div class="dv-empty">데이터가 쌓이면 여기에 표시돼요</div>'
+      : '<div class="dv-bars">' + barsHtml + '</div>') +
+    '<div class="dv-legend">🟡 오늘 · 나머지는 해당 유형 색상</div>' +
+  '</div>';
+}
+
+function switchChart(mode) {
+  _chartMode = mode;
+  if (_statsData) renderStats(_statsData, _dvRows);
 }
 
 /* ── 통계 초기화 확인 ── */
 async function confirmReset() {
-  if (!confirm('⚠️ 지금까지의 모든 통계(영상조회·예약클릭·방문자)를 초기화합니다.\\n정말 초기화하시겠어요?')) return;
+  if (!confirm('⚠️ 오늘하루 통계를 초기화할게요?\n(방문자 · 영상조회 · 예약클릭 모두 0으로 리셋)')) return;
   const r = await fetch('/api/admin/reset-stats', { method: 'POST' });
   if (r.ok) {
     showPayToast('✅ 통계가 초기화되었습니다');
