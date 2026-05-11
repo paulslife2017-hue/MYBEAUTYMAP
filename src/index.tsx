@@ -3377,6 +3377,7 @@ function switchTab(t) {
     document.getElementById('panel-'+x).style.display = x===t ? 'block' : 'none';
   });
   document.querySelector('.add-btn').style.display = t==='shops' ? 'flex' : 'none';
+  if (t==='shops') renderShops(shopData);
   if (t==='inq') loadInquiries();
   if (t==='pay') renderPayTab();
   if (t==='cal') renderCalendar();
