@@ -3413,7 +3413,7 @@ async function loadAll() {
     fetch('/api/admin/daily-visits').then(r=>r.json()),
   ]);
   _stats  = d;
-  _dvRows = dv;
+  _dvRows = Array.isArray(dv) ? dv : [];
   shopData = d.stats || [];
   renderDashboard();
   if (curTab==='shops') renderShops(shopData);
