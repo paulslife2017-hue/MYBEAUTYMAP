@@ -440,6 +440,23 @@ app.get('/api/admin/stats', async (c) => {
   const td = todayTotals[0] || {}
   const yd = yestTotals[0]  || {}
 
+  // 업체별 오늘 통계 (피드/지도 클릭 분리)
+  const todayShopRows = await sql`
+    SELECT shop_id,
+           COALESCE(view_cnt,0) as view_cnt,
+           COALESCE(feed_sp,0)  as feed_sp,
+           COALESCE(map_sp,0)   as map_sp
+    FROM daily_stats WHERE stat_date = ${today}
+  `
+  const todayShopMap: Record<number,any> = {}
+  todayShopRows.forEach((r:any) => {
+    todayShopMap[r.shop_id] = {
+      todayViews:  parseInt(r.view_cnt) || 0,
+      todayFeedSP: parseInt(r.feed_sp)  || 0,
+      todayMapSP:  parseInt(r.map_sp)   || 0,
+    }
+  })
+
   return c.json({
     stats: rows.map(r => ({
       id:        r.id,
@@ -458,6 +475,13 @@ app.get('/api/admin/stats', async (c) => {
       address:      r.address ?? '',
       district:     r.district ?? '',
       phone:        r.phone ?? '',
+      plan:          r.plan ?? 'basic',
+      paymentStatus: r.payment_status ?? 'unpaid',
+      paidUntil:     r.paid_until ? String(r.paid_until).slice(0,10) : null,
+      // 오늘 업체별 성과
+      todayViews:  todayShopMap[r.id]?.todayViews  || 0,
+      todayFeedSP: todayShopMap[r.id]?.todayFeedSP || 0,
+      todayMapSP:  todayShopMap[r.id]?.todayMapSP  || 0,
     })),
     // 누적
     totalViews:  parseInt(t.total_views)   || 0,
@@ -2783,303 +2807,295 @@ function adminPage() { return `<!DOCTYPE html>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css"/>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{--pink:#FF4D7D;--green:#03C75A;--bg:#0a0a0a;--card:#141414;--border:rgba(255,255,255,.08)}
-body{font-family:'Pretendard',sans-serif;background:var(--bg);color:#fff;min-height:100vh}
+:root{
+  --pink:#FF4D7D;--green:#03C75A;--blue:#6495ed;--amber:#f59e0b;
+  --bg:#0a0a0a;--card:#141414;--card2:#1a1a1a;--border:rgba(255,255,255,.07);
+  --t1:#fff;--t2:rgba(255,255,255,.6);--t3:rgba(255,255,255,.3);--t4:rgba(255,255,255,.15)
+}
+body{font-family:'Pretendard',sans-serif;background:var(--bg);color:var(--t1);min-height:100vh}
 
 /* ── 상단바 ── */
-.top{background:rgba(16,16,16,.98);border-bottom:1px solid var(--border);
-  padding:0 16px;height:54px;display:flex;align-items:center;gap:12px;
-  position:sticky;top:0;z-index:50;backdrop-filter:blur(10px)}
-.back{font-size:20px;color:rgba(255,255,255,.5);text-decoration:none}
-.back:hover{color:#fff}
-.ttl{font-size:17px;font-weight:800;flex:1}
+.top{background:rgba(14,14,14,.98);border-bottom:1px solid var(--border);
+  padding:0 16px;height:54px;display:flex;align-items:center;gap:10px;
+  position:sticky;top:0;z-index:50;backdrop-filter:blur(12px)}
+.back{font-size:20px;color:var(--t3);text-decoration:none;display:flex;align-items:center}
+.back:hover{color:var(--t1)}
+.ttl{font-size:16px;font-weight:800;flex:1}
 .add-btn{background:var(--pink);color:#fff;border:none;border-radius:10px;
   padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;
   display:flex;align-items:center;gap:6px;font-family:inherit;white-space:nowrap}
 
 /* ── 탭바 ── */
-.tabbar{display:flex;border-bottom:1px solid var(--border);background:rgba(16,16,16,.9);
-  position:sticky;top:54px;z-index:40}
-.tabbtn{flex:1;padding:13px 4px;text-align:center;font-size:12px;font-weight:700;
-  color:rgba(255,255,255,.35);background:none;border:none;cursor:pointer;
-  font-family:inherit;border-bottom:2px solid transparent;transition:all .2s}
+.tabbar{display:flex;border-bottom:1px solid var(--border);background:rgba(14,14,14,.92);
+  position:sticky;top:54px;z-index:40;backdrop-filter:blur(8px)}
+.tabbtn{flex:1;padding:12px 4px;text-align:center;font-size:11px;font-weight:700;
+  color:var(--t3);background:none;border:none;cursor:pointer;
+  font-family:inherit;border-bottom:2px solid transparent;transition:all .2s;
+  display:flex;flex-direction:column;align-items:center;gap:3px}
+.tabbtn i{font-size:15px}
 .tabbtn.on{color:var(--pink);border-bottom-color:var(--pink)}
-.tabbtn i{display:block;font-size:16px;margin-bottom:3px}
 
-/* ── 내용 공통 ── */
-.wrap{max-width:640px;margin:0 auto;padding:14px 14px 80px}
+/* ── 공통 레이아웃 ── */
+.wrap{max-width:640px;margin:0 auto;padding:14px 14px 100px}
+.section-title{font-size:11px;font-weight:700;color:var(--t3);
+  letter-spacing:.6px;text-transform:uppercase;margin:18px 0 10px 2px;
+  display:flex;align-items:center;gap:6px}
+.section-title::after{content:'';flex:1;height:1px;background:var(--border)}
 
-/* ── 요약 카드 ── */
-.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
-.sv{background:var(--card);border:1px solid var(--border);border-radius:14px;
-  padding:14px 8px;text-align:center;position:relative;overflow:hidden}
-.sv-n{font-size:22px;font-weight:800;color:#FF8FA3}
-.sv-l{font-size:10px;color:rgba(255,255,255,.3);margin-top:3px;font-weight:600}
-.sv-delta{font-size:9px;font-weight:700;margin-top:4px;display:flex;align-items:center;justify-content:center;gap:2px}
-.sv-delta.up{color:#03C75A}
-.sv-delta.down{color:#FF4D7D}
-.sv-delta.flat{color:rgba(255,255,255,.25)}
+/* ── 오늘 KPI 그리드 (2x2) ── */
+.kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.kpi-card{background:var(--card);border:1px solid var(--border);border-radius:16px;
+  padding:14px 14px 12px;position:relative;overflow:hidden}
+.kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:16px 16px 0 0}
+.kpi-visit::before{background:linear-gradient(90deg,#a78bfa,#7c3aed)}
+.kpi-view::before{background:linear-gradient(90deg,#FF8FA3,#FF4D7D)}
+.kpi-feed::before{background:linear-gradient(90deg,#6ee7b7,#03C75A)}
+.kpi-map::before{background:linear-gradient(90deg,#93c5fd,#6495ed)}
+.kpi-icon{font-size:18px;margin-bottom:6px}
+.kpi-val{font-size:26px;font-weight:800;line-height:1;margin-bottom:4px}
+.kpi-visit .kpi-val{color:#a78bfa}
+.kpi-view  .kpi-val{color:#FF8FA3}
+.kpi-feed  .kpi-val{color:var(--green)}
+.kpi-map   .kpi-val{color:var(--blue)}
+.kpi-lbl{font-size:10px;color:var(--t3);font-weight:600;margin-bottom:6px}
+.kpi-delta{font-size:9px;font-weight:700;display:inline-flex;align-items:center;
+  gap:3px;padding:2px 7px;border-radius:20px}
+.kpi-delta.up  {background:rgba(3,199,90,.12);color:#03C75A}
+.kpi-delta.down{background:rgba(255,77,125,.12);color:var(--pink)}
+.kpi-delta.flat{background:rgba(255,255,255,.05);color:var(--t3)}
 
-/* ── 통계 탭 헤더 ── */
-.st-today-section{background:var(--card);border:1px solid var(--border);border-radius:18px;
-  padding:18px 16px;margin-bottom:12px}
-.st-today-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
-.st-today-title{font-size:13px;font-weight:800;color:rgba(255,255,255,.9)}
-.st-today-date{font-size:11px;color:rgba(255,255,255,.3);font-weight:500}
-.st-kpi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.st-kpi{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);
-  border-radius:12px;padding:14px 10px;text-align:center;position:relative}
-.st-kpi-val{font-size:28px;font-weight:800;line-height:1}
-.st-kpi-lbl{font-size:10px;font-weight:600;margin-top:6px;color:rgba(255,255,255,.4)}
-.st-kpi-vs{font-size:9px;font-weight:700;margin-top:5px;display:flex;
-  align-items:center;justify-content:center;gap:3px}
-.st-kpi-vs.up{color:#03C75A}
-.st-kpi-vs.down{color:#FF4D7D}
-.st-kpi-vs.flat{color:rgba(255,255,255,.2)}
-.kpi-view .st-kpi-val{color:#FF8FA3}
-.kpi-feed .st-kpi-val{color:#03C75A}
-.kpi-map  .st-kpi-val{color:#6495ed}
+/* ── 오늘 vs 누적 요약바 ── */
+.summary-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px}
+.sb-item{background:var(--card);border:1px solid var(--border);border-radius:12px;
+  padding:10px 8px;text-align:center}
+.sb-val{font-size:18px;font-weight:800;color:rgba(255,255,255,.85)}
+.sb-lbl{font-size:9px;color:var(--t3);font-weight:600;margin-top:3px}
 
-/* ── 일별 차트 (통합) ── */
-.dv-section{background:var(--card);border:1px solid var(--border);border-radius:16px;
-  padding:16px;margin-bottom:12px}
-.dv-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
-.dv-title{font-size:12px;font-weight:700;color:rgba(255,255,255,.7)}
-.dv-reset-btn{font-size:11px;font-weight:700;padding:5px 12px;
-  background:rgba(255,77,125,.12);color:var(--pink);
-  border:1px solid rgba(255,77,125,.3);border-radius:8px;cursor:pointer;
+/* ── 차트 섹션 ── */
+.chart-card{background:var(--card);border:1px solid var(--border);border-radius:16px;
+  padding:14px;margin-bottom:8px}
+.chart-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.chart-title{font-size:12px;font-weight:700;color:var(--t2)}
+.chart-tabs{display:flex;gap:4px}
+.ctab{font-size:10px;font-weight:700;padding:4px 10px;border-radius:6px;
+  cursor:pointer;border:1px solid var(--border);color:var(--t3);
+  background:none;transition:all .15s;font-family:inherit}
+.ctab.on-v{background:rgba(255,143,163,.15);border-color:rgba(255,143,163,.4);color:#FF8FA3}
+.ctab.on-f{background:rgba(3,199,90,.15);border-color:rgba(3,199,90,.4);color:var(--green)}
+.ctab.on-m{background:rgba(100,149,237,.15);border-color:rgba(100,149,237,.4);color:var(--blue)}
+.ctab.on-a{background:rgba(167,139,250,.15);border-color:rgba(167,139,250,.4);color:#a78bfa}
+.chart-body{display:flex;align-items:flex-end;gap:3px;height:80px;
+  overflow-x:auto;overflow-y:hidden;padding-bottom:0;scrollbar-width:none}
+.chart-body::-webkit-scrollbar{display:none}
+.bar-col{display:flex;flex-direction:column;align-items:center;gap:2px;
+  flex-shrink:0;min-width:20px;cursor:default}
+.bar-col:hover .bar-fill{opacity:.75}
+.bar-fill{border-radius:3px 3px 0 0;width:14px;min-height:2px;transition:height .3s}
+.bar-visit{background:linear-gradient(180deg,#c4b5fd,#7c3aed)}
+.bar-view {background:linear-gradient(180deg,#FFB6C8,#FF4D7D)}
+.bar-feed {background:linear-gradient(180deg,#6ee7b7,#03C75A)}
+.bar-map  {background:linear-gradient(180deg,#93c5fd,#6495ed)}
+.bar-today{background:linear-gradient(180deg,#fde68a,#f59e0b)!important}
+.bar-date{font-size:7px;color:var(--t4);white-space:nowrap;margin-top:2px}
+.bar-cnt{font-size:7px;color:var(--t3);font-weight:700;min-height:10px}
+.chart-footer{display:flex;align-items:center;justify-content:space-between;margin-top:8px}
+.chart-legend{font-size:9px;color:var(--t4);font-weight:500}
+.reset-btn{font-size:10px;font-weight:700;padding:4px 10px;
+  background:rgba(255,77,125,.1);color:var(--pink);
+  border:1px solid rgba(255,77,125,.25);border-radius:7px;cursor:pointer;
   transition:all .2s;white-space:nowrap}
-.dv-reset-btn:active{background:rgba(255,77,125,.25)}
-.dv-chart-tabs{display:flex;gap:4px;margin-bottom:10px}
-.dv-ctab{font-size:10px;font-weight:700;padding:4px 10px;border-radius:6px;
-  cursor:pointer;border:1px solid rgba(255,255,255,.08);color:rgba(255,255,255,.35);
-  background:none;transition:all .2s;font-family:inherit}
-.dv-ctab.on-visit{background:rgba(255,77,125,.15);border-color:rgba(255,77,125,.35);color:var(--pink)}
-.dv-ctab.on-view{background:rgba(255,143,163,.15);border-color:rgba(255,143,163,.35);color:#FF8FA3}
-.dv-ctab.on-click{background:rgba(3,199,90,.15);border-color:rgba(3,199,90,.35);color:#03C75A}
-.dv-bars{display:flex;align-items:flex-end;gap:3px;height:72px;overflow-x:auto;overflow-y:hidden;
-  padding-bottom:0}
-.dv-bar-wrap{display:flex;flex-direction:column;align-items:center;gap:2px;flex-shrink:0;min-width:22px}
-.dv-bar{border-radius:3px 3px 0 0;width:14px;min-height:2px;transition:height .3s}
-.dv-bar.visit-bar{background:linear-gradient(180deg,#FF8FA3,#FF4D7D)}
-.dv-bar.view-bar {background:linear-gradient(180deg,#FFB6C8,#FF8FA3)}
-.dv-bar.click-bar{background:linear-gradient(180deg,#6ee7b7,#03C75A)}
-.dv-bar-date{font-size:7px;color:rgba(255,255,255,.25);white-space:nowrap}
-.dv-bar-cnt{font-size:7px;color:rgba(255,255,255,.45);font-weight:700;min-height:10px}
-.dv-today-bar{background:linear-gradient(180deg,#ffe066,#f59e0b)!important}
-.dv-empty{color:rgba(255,255,255,.3);font-size:12px;text-align:center;padding:20px 0}
-.dv-legend{font-size:10px;color:rgba(255,255,255,.3);margin-top:8px;text-align:right;font-weight:500}
+.reset-btn:active{background:rgba(255,77,125,.22)}
+.chart-empty{color:var(--t3);font-size:11px;text-align:center;padding:20px 0;height:80px;display:flex;align-items:center;justify-content:center}
 
-/* ── 업체 카드 ── */
+/* ── 업체별 오늘 랭킹 ── */
+.rank-tabs{display:flex;gap:4px;margin-bottom:10px}
+.rank-tab{font-size:10px;font-weight:700;padding:5px 12px;border-radius:7px;
+  cursor:pointer;border:1px solid var(--border);color:var(--t3);
+  background:none;transition:all .15s;font-family:inherit}
+.rank-tab.on{background:rgba(255,77,125,.12);border-color:rgba(255,77,125,.35);color:var(--pink)}
+.rank-item{background:var(--card);border:1px solid var(--border);
+  border-radius:14px;padding:12px;margin-bottom:8px;display:flex;gap:10px;align-items:center}
+.rank-num{width:24px;height:24px;border-radius:50%;font-size:11px;font-weight:800;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.rn1{background:#FFD700;color:#000}.rn2{background:#C0C0C0;color:#000}
+.rn3{background:#CD7F32;color:#fff}.rnN{background:rgba(255,255,255,.08);color:var(--t3)}
+.rank-thumb{width:44px;height:44px;border-radius:10px;object-fit:cover;flex-shrink:0;
+  background:rgba(255,255,255,.05)}
+.rank-info{flex:1;min-width:0}
+.rank-name{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px}
+.rank-cat{font-size:10px;color:var(--t3);font-weight:500}
+.rank-stats{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+.rank-stat{font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px}
+.rs-view{background:rgba(255,143,163,.1);color:#FF8FA3}
+.rs-feed{background:rgba(3,199,90,.1);color:var(--green)}
+.rs-map {background:rgba(100,149,237,.1);color:var(--blue)}
+.rs-zero{color:var(--t4)}
+.rank-total{font-size:12px;font-weight:800;color:var(--t2);white-space:nowrap;text-align:right}
+.rank-total small{display:block;font-size:9px;color:var(--t4);font-weight:500}
+
+/* ── 업체 관리 카드 ── */
 .shop-card{background:var(--card);border:1px solid var(--border);
   border-radius:16px;padding:14px;margin-bottom:10px}
 .sc-top{display:flex;gap:10px;align-items:flex-start}
-.sc-thumb{width:60px;height:60px;border-radius:10px;object-fit:cover;flex-shrink:0;
-  background:rgba(255,255,255,.06)}
+.sc-thumb{width:58px;height:58px;border-radius:10px;object-fit:cover;flex-shrink:0;
+  background:rgba(255,255,255,.05)}
 .sc-info{flex:1;min-width:0}
-.sc-name{font-size:15px;font-weight:700;display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.sc-name{font-size:14px;font-weight:700;display:flex;align-items:center;gap:5px;flex-wrap:wrap}
 .sc-cat{font-size:11px;color:var(--pink);font-weight:600;margin-top:3px}
-.sc-addr{font-size:11px;color:rgba(255,255,255,.3);margin-top:2px;
+.sc-addr{font-size:10px;color:var(--t3);margin-top:2px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sc-mode{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;
   padding:2px 7px;border-radius:6px;margin-top:4px}
-.mode-both{background:rgba(3,199,90,.12);color:var(--green)}
-.mode-feed{background:rgba(255,77,125,.12);color:var(--pink)}
-.mode-map{background:rgba(100,149,237,.15);color:#6495ed}
-.sc-fields{display:grid;grid-template-columns:1fr 1fr;gap:5px;
-  border-top:1px solid var(--border);margin-top:10px;padding-top:10px}
-.sc-f{font-size:10px;color:rgba(255,255,255,.3)}
-.sc-f strong{display:block;color:rgba(255,255,255,.65);font-size:11px;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.mode-both{background:rgba(3,199,90,.1);color:var(--green)}
+.mode-feed{background:rgba(255,77,125,.1);color:var(--pink)}
+.mode-map{background:rgba(100,149,237,.12);color:var(--blue)}
+.sc-mid{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px;
+  padding-top:10px;border-top:1px solid var(--border)}
+.badge{font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px}
+.b-feat{background:rgba(255,77,125,.13);color:var(--pink)}
+.b-hide{background:rgba(255,255,255,.06);color:var(--t3)}
+.b-plan-shoot{background:rgba(3,199,90,.13);color:var(--green);border:1px solid rgba(3,199,90,.25)}
+.b-plan-basic{background:rgba(255,77,125,.1);color:var(--pink);border:1px solid rgba(255,77,125,.2)}
+.b-paid{background:rgba(3,199,90,.12);color:var(--green)}
+.b-unpaid{background:rgba(255,165,0,.12);color:#FFA500}
+.b-expired{background:rgba(255,77,125,.12);color:var(--pink)}
+.b-free{background:rgba(100,149,237,.12);color:var(--blue)}
+.sc-nums{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;
+  margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
+.sc-num{background:rgba(255,255,255,.03);border:1px solid var(--border);
+  border-radius:8px;padding:6px 4px;text-align:center}
+.sn-v{font-size:15px;font-weight:800}.sn-l{font-size:9px;color:var(--t3);margin-top:1px;font-weight:600}
+.c-view .sn-v{color:#FF8FA3}.c-feed .sn-v{color:var(--green)}.c-map .sn-v{color:var(--blue)}
 .sc-btns{display:flex;gap:6px;margin-top:10px}
-.btn-edit{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);
-  color:#fff;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;
-  cursor:pointer;font-family:inherit;flex:1}
-.btn-del{background:rgba(255,77,125,.1);border:1px solid rgba(255,77,125,.2);
-  color:var(--pink);border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;
-  cursor:pointer;font-family:inherit;flex:1}
-.badge{font-size:10px;font-weight:700;padding:2px 6px;border-radius:5px}
-.b-feat{background:rgba(255,77,125,.15);color:var(--pink)}
-.b-hide{background:rgba(255,255,255,.07);color:rgba(255,255,255,.3)}
+.btn-edit{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);
+  color:var(--t1);border-radius:8px;padding:8px 0;font-size:12px;font-weight:600;
+  cursor:pointer;font-family:inherit;flex:1;display:flex;align-items:center;justify-content:center;gap:5px}
+.btn-pay-edit{background:rgba(3,199,90,.1);border:1px solid rgba(3,199,90,.22);
+  color:var(--green);border-radius:8px;padding:8px 0;font-size:12px;font-weight:600;
+  cursor:pointer;font-family:inherit;flex:1;display:flex;align-items:center;justify-content:center;gap:5px}
+.btn-del{background:rgba(255,77,125,.08);border:1px solid rgba(255,77,125,.18);
+  color:var(--pink);border-radius:8px;padding:8px 12px;font-size:12px;font-weight:600;
+  cursor:pointer;font-family:inherit}
 
-/* ── 통계 ── */
-.stat-card{background:var(--card);border:1px solid var(--border);
-  border-radius:16px;padding:12px;margin-bottom:10px;display:flex;gap:12px;align-items:center}
-.stat-thumb{width:56px;height:56px;border-radius:10px;object-fit:cover;flex-shrink:0}
-.stat-body{flex:1;min-width:0}
-.stat-top{display:flex;align-items:center;gap:6px;margin-bottom:8px}
-.stat-rank{width:22px;height:22px;border-radius:50%;font-size:11px;font-weight:800;
-  display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.rank1{background:#FFD700;color:#000}
-.rank2{background:#C0C0C0;color:#000}
-.rank3{background:#CD7F32;color:#fff}
-.rankN{background:rgba(255,255,255,.1);color:rgba(255,255,255,.5)}
-.stat-name{font-size:14px;font-weight:700;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.stat-nums{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
-.stat-num{background:rgba(255,255,255,.04);border:1px solid var(--border);
-  border-radius:8px;padding:7px 4px;text-align:center}
-.sn-n{font-size:16px;font-weight:800}
-.sn-l{font-size:9px;color:rgba(255,255,255,.3);margin-top:1px;font-weight:600}
-.c-view .sn-n{color:#FF8FA3}
-.c-feed .sn-n{color:var(--green)}
-.c-map  .sn-n{color:#6495ed}
+/* ── 구독관리 ── */
+.pay-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:14px}
+.pay-sv{background:var(--card);border:1px solid var(--border);border-radius:12px;
+  padding:10px 8px;text-align:center}
+.pay-sv-n{font-size:20px;font-weight:800}
+.pay-sv-l{font-size:9px;color:var(--t3);margin-top:3px;font-weight:600}
+.pay-filter{display:flex;gap:5px;margin-bottom:12px;flex-wrap:wrap}
+.pf-btn{background:rgba(255,255,255,.05);border:1px solid var(--border);
+  color:var(--t3);border-radius:8px;padding:5px 11px;font-size:11px;
+  font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s}
+.pf-btn.on{background:rgba(255,77,125,.13);border-color:rgba(255,77,125,.3);color:var(--pink)}
+.pay-card{background:var(--card);border:1px solid var(--border);
+  border-radius:16px;padding:14px;margin-bottom:10px}
+.pay-card.status-expired{border-color:rgba(255,77,125,.3)}
+.pay-card.status-unpaid{border-color:rgba(255,165,0,.25)}
+.pay-card.status-paid{border-color:rgba(3,199,90,.2)}
+.pay-card.status-free{border-color:rgba(100,149,237,.25)}
+.pay-top{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.pay-thumb{width:44px;height:44px;border-radius:10px;object-fit:cover;flex-shrink:0;background:rgba(255,255,255,.05)}
+.pay-info{flex:1;min-width:0}
+.pay-name{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pay-sub{font-size:11px;color:var(--t3);margin-top:2px}
+.pay-badges{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px}
+.pay-body{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
+.pay-kv{font-size:10px;color:var(--t3);background:rgba(255,255,255,.03);border-radius:8px;padding:7px 10px}
+.pay-kv strong{display:block;font-size:12px;color:var(--t1);font-weight:700;margin-top:2px}
+.pay-memo{font-size:11px;color:var(--t3);background:rgba(255,255,255,.03);
+  border-radius:8px;padding:8px 10px;margin-bottom:10px;line-height:1.5;
+  display:flex;gap:6px;align-items:flex-start}
+.pay-btns{display:flex;gap:6px}
 
 /* ── 입점문의 ── */
-.inq-card{background:var(--card);border:1px solid var(--border);
-  border-radius:14px;padding:14px;margin-bottom:10px}
+.inq-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:10px}
 .inq-top{display:flex;align-items:center;gap:8px;margin-bottom:8px}
 .inq-name{font-size:14px;font-weight:700}
-.inq-badge{font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;
-  background:rgba(255,77,125,.12);color:var(--pink)}
-.inq-time{font-size:10px;color:rgba(255,255,255,.25);margin-left:auto}
-.inq-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px}
-.inq-kv{font-size:11px;color:rgba(255,255,255,.35)}
-.inq-kv strong{color:rgba(255,255,255,.7);font-weight:600}
-.inq-msg{font-size:12px;color:rgba(255,255,255,.45);line-height:1.6;
-  border-top:1px solid var(--border);margin-top:8px;padding-top:8px}
+.inq-badge{font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;background:rgba(255,77,125,.1);color:var(--pink)}
+.inq-time{font-size:10px;color:var(--t3);margin-left:auto}
+.inq-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:5px}
+.inq-kv{font-size:11px;color:var(--t3)}
+.inq-kv strong{color:var(--t2);font-weight:600}
+.inq-msg{font-size:12px;color:var(--t3);line-height:1.6;border-top:1px solid var(--border);margin-top:8px;padding-top:8px}
+
+/* ── 빈 상태 ── */
+.empty{text-align:center;padding:44px 16px;color:var(--t3);font-size:13px}
 
 /* ── 모달 ── */
-.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:200;
   display:flex;align-items:flex-end;justify-content:center}
 .modal-bg.hidden{display:none}
-.modal{background:#1c1c1c;border-radius:22px 22px 0 0;width:100%;max-width:640px;
+.modal{background:#1b1b1b;border-radius:22px 22px 0 0;width:100%;max-width:640px;
   max-height:92vh;overflow-y:auto;padding:18px 16px 48px}
-.modal-handle{width:36px;height:4px;background:rgba(255,255,255,.1);
-  border-radius:4px;margin:0 auto 16px}
+.modal-handle{width:36px;height:4px;background:rgba(255,255,255,.08);border-radius:4px;margin:0 auto 16px}
 .modal-ttl{font-size:18px;font-weight:800;margin-bottom:16px}
 .field{margin-bottom:12px}
-.field label{display:block;font-size:11px;font-weight:700;
-  color:rgba(255,255,255,.4);margin-bottom:5px;letter-spacing:.3px}
+.field label{display:block;font-size:11px;font-weight:700;color:var(--t3);margin-bottom:5px;letter-spacing:.3px}
 .field input,.field select,.field textarea{
-  width:100%;background:rgba(255,255,255,.07);border:1.5px solid rgba(255,255,255,.1);
-  border-radius:10px;padding:10px 12px;color:#fff;font-size:14px;
+  width:100%;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.09);
+  border-radius:10px;padding:10px 12px;color:var(--t1);font-size:14px;
   font-family:inherit;outline:none;transition:border-color .2s}
 .field input:focus,.field textarea:focus{border-color:var(--pink)}
-.field select option{background:#1c1c1c}
+.field select option{background:#1b1b1b}
 .field textarea{resize:vertical;min-height:70px}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .modal-actions{display:flex;gap:10px;margin-top:18px}
 .btn-save{flex:1;background:var(--pink);color:#fff;border:none;border-radius:12px;
   padding:14px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit}
-.btn-cancel{background:rgba(255,255,255,.07);color:rgba(255,255,255,.6);
-  border:1.5px solid rgba(255,255,255,.1);border-radius:12px;
+.btn-cancel{background:rgba(255,255,255,.06);color:var(--t2);
+  border:1.5px solid rgba(255,255,255,.09);border-radius:12px;
   padding:14px 18px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
-
-/* ── 썸네일 업로드 ── */
 .thumb-wrap{display:flex;gap:10px;align-items:flex-start}
 .thumb-preview{width:70px;height:70px;border-radius:10px;object-fit:cover;
-  background:rgba(255,255,255,.06);border:1.5px solid var(--border);flex-shrink:0}
+  background:rgba(255,255,255,.05);border:1.5px solid var(--border);flex-shrink:0}
 .thumb-right{flex:1;display:flex;flex-direction:column;gap:6px}
-.upload-btn{background:rgba(255,255,255,.08);border:1.5px solid rgba(255,255,255,.12);
-  color:#fff;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:600;
+.upload-btn{background:rgba(255,255,255,.07);border:1.5px solid rgba(255,255,255,.1);
+  color:var(--t1);border-radius:8px;padding:8px 12px;font-size:12px;font-weight:600;
   cursor:pointer;font-family:inherit;text-align:center}
-.upload-btn:hover{background:rgba(255,255,255,.13)}
-.thumb-url-inp{width:100%;background:rgba(255,255,255,.07);border:1.5px solid rgba(255,255,255,.1);
-  border-radius:8px;padding:8px 10px;color:#fff;font-size:12px;font-family:inherit;outline:none}
-.thumb-url-inp::placeholder{color:rgba(255,255,255,.25)}
-
-/* ── 유튜브 미리보기 ── */
-.yt-preview{margin-top:6px;border-radius:10px;overflow:hidden;
-  background:#000;aspect-ratio:16/9;display:none}
+.thumb-url-inp{width:100%;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.09);
+  border-radius:8px;padding:8px 10px;color:var(--t1);font-size:12px;font-family:inherit;outline:none}
+.thumb-url-inp::placeholder{color:var(--t3)}
+.yt-preview{margin-top:6px;border-radius:10px;overflow:hidden;background:#000;aspect-ratio:16/9;display:none}
 .yt-preview iframe{width:100%;height:100%;border:none}
-
-/* ── 지오코딩 ── */
 .geo-row{display:flex;gap:8px}
 .geo-btn{flex-shrink:0;background:var(--pink);color:#fff;border:none;border-radius:10px;
   padding:0 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;
   height:42px;display:flex;align-items:center;gap:5px;white-space:nowrap}
 .geo-status{margin-top:6px;font-size:11px;display:none}
-
-/* ── 노출방식 선택 ── */
 .mode-select{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .mode-opt{border:1.5px solid var(--border);border-radius:10px;padding:10px 6px;
-  text-align:center;cursor:pointer;transition:all .2s;font-size:11px;font-weight:700;
-  color:rgba(255,255,255,.4)}
+  text-align:center;cursor:pointer;transition:all .2s;font-size:11px;font-weight:700;color:var(--t3)}
 .mode-opt .mo-icon{font-size:20px;margin-bottom:4px}
-.mode-opt.sel-both{border-color:var(--green);background:rgba(3,199,90,.08);color:var(--green)}
-.mode-opt.sel-feed{border-color:var(--pink);background:rgba(255,77,125,.08);color:var(--pink)}
-.mode-opt.sel-map {border-color:#6495ed;background:rgba(100,149,237,.08);color:#6495ed}
+.mode-opt.sel-both{border-color:var(--green);background:rgba(3,199,90,.07);color:var(--green)}
+.mode-opt.sel-feed{border-color:var(--pink);background:rgba(255,77,125,.07);color:var(--pink)}
+.mode-opt.sel-map{border-color:var(--blue);background:rgba(100,149,237,.07);color:var(--blue)}
 
-/* ── 빈 상태 ── */
-.empty{text-align:center;padding:48px 16px;color:rgba(255,255,255,.2);font-size:14px}
-
-/* ── 섹션 라벨 ── */
-.sec-label{font-size:11px;font-weight:700;color:rgba(255,255,255,.25);
-  letter-spacing:.5px;margin-bottom:10px;padding-left:2px}
-
-/* ── 플랜/결제 뱃지 ── */
-.b-plan-shoot{background:rgba(3,199,90,.18);color:#03C75A;border:1px solid rgba(3,199,90,.3)}
-.b-plan-basic{background:rgba(255,77,125,.13);color:var(--pink);border:1px solid rgba(255,77,125,.25)}
-.b-paid{background:rgba(3,199,90,.15);color:#03C75A}
-.b-unpaid{background:rgba(255,165,0,.15);color:#FFA500}
-.b-expired{background:rgba(255,77,125,.15);color:var(--pink)}
-.b-free{background:rgba(99,149,237,.15);color:#6495ed}
-
-/* ── 구독관리 탭 ── */
-.pay-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:18px}
-.pay-sv{background:var(--card);border:1px solid var(--border);border-radius:12px;
-  padding:12px 8px;text-align:center}
-.pay-sv-n{font-size:20px;font-weight:800}
-.pay-sv-l{font-size:9px;color:rgba(255,255,255,.3);margin-top:3px;font-weight:600}
-.pay-card{background:var(--card);border:1px solid var(--border);
-  border-radius:16px;padding:14px;margin-bottom:10px}
-.pay-card.status-expired{border-color:rgba(255,77,125,.35);background:rgba(255,77,125,.04)}
-.pay-card.status-unpaid{border-color:rgba(255,165,0,.3);background:rgba(255,165,0,.03)}
-.pay-card.status-paid{border-color:rgba(3,199,90,.25);background:rgba(3,199,90,.03)}
-.pay-card.status-free{border-color:rgba(99,149,237,.3);background:rgba(99,149,237,.03)}
-.pay-top{display:flex;align-items:center;gap:10px;margin-bottom:10px}
-.pay-thumb{width:44px;height:44px;border-radius:10px;object-fit:cover;flex-shrink:0;
-  background:rgba(255,255,255,.06)}
-.pay-info{flex:1;min-width:0}
-.pay-name{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pay-sub{font-size:11px;color:rgba(255,255,255,.35);margin-top:2px}
-.pay-badges{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px}
-.pay-body{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
-.pay-kv{font-size:10px;color:rgba(255,255,255,.3);background:rgba(255,255,255,.04);
-  border-radius:8px;padding:7px 10px}
-.pay-kv strong{display:block;font-size:12px;color:#fff;font-weight:700;margin-top:2px}
-.pay-memo{font-size:11px;color:rgba(255,255,255,.4);background:rgba(255,255,255,.04);
-  border-radius:8px;padding:8px 10px;margin-bottom:10px;line-height:1.5;
-  display:flex;gap:6px;align-items:flex-start}
-.pay-btns{display:flex;gap:6px}
-.btn-pay-edit{flex:1;background:rgba(3,199,90,.12);border:1px solid rgba(3,199,90,.25);
-  color:#03C75A;border-radius:8px;padding:8px 10px;font-size:12px;font-weight:700;
-  cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:5px}
-.btn-pay-edit:hover{background:rgba(3,199,90,.2)}
-.pay-filter{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
-.pf-btn{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);
-  color:rgba(255,255,255,.4);border-radius:8px;padding:6px 12px;font-size:11px;
-  font-weight:700;cursor:pointer;font-family:inherit;transition:all .2s}
-.pf-btn.on{background:rgba(255,77,125,.15);border-color:rgba(255,77,125,.35);color:var(--pink)}
-
-/* ── 결제 수정 모달 ── */
-.pay-modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:300;
+/* ── 결제 모달 ── */
+.pay-modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:300;
   display:flex;align-items:flex-end;justify-content:center}
 .pay-modal-bg.hidden{display:none}
-.pay-modal{background:#1c1c1c;border-radius:22px 22px 0 0;width:100%;max-width:640px;
+.pay-modal{background:#1b1b1b;border-radius:22px 22px 0 0;width:100%;max-width:640px;
   max-height:88vh;overflow-y:auto;padding:20px 16px 48px}
-.pm-handle{width:36px;height:4px;background:rgba(255,255,255,.1);
-  border-radius:4px;margin:0 auto 18px}
-.pm-ttl{font-size:18px;font-weight:800;margin-bottom:6px}
-.pm-sub{font-size:12px;color:rgba(255,255,255,.35);margin-bottom:20px}
+.pm-handle{width:36px;height:4px;background:rgba(255,255,255,.08);border-radius:4px;margin:0 auto 18px}
+.pm-ttl{font-size:18px;font-weight:800;margin-bottom:5px}
+.pm-sub{font-size:12px;color:var(--t3);margin-bottom:20px}
 .pm-plan-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
-.pm-plan-opt{border:2px solid var(--border);border-radius:12px;padding:14px 10px;
-  text-align:center;cursor:pointer;transition:all .2s}
+.pm-plan-opt{border:2px solid var(--border);border-radius:12px;padding:14px 10px;text-align:center;cursor:pointer;transition:all .2s}
 .pm-plan-opt .po-icon{font-size:24px;margin-bottom:6px}
 .pm-plan-opt .po-name{font-size:13px;font-weight:800;margin-bottom:3px}
-.pm-plan-opt .po-price{font-size:11px;color:rgba(255,255,255,.4)}
-.pm-plan-opt.sel-shoot{border-color:#03C75A;background:rgba(3,199,90,.1)}
-.pm-plan-opt.sel-shoot .po-name{color:#03C75A}
-.pm-plan-opt.sel-basic{border-color:var(--pink);background:rgba(255,77,125,.1)}
+.pm-plan-opt .po-price{font-size:11px;color:var(--t3)}
+.pm-plan-opt.sel-shoot{border-color:var(--green);background:rgba(3,199,90,.08)}
+.pm-plan-opt.sel-shoot .po-name{color:var(--green)}
+.pm-plan-opt.sel-basic{border-color:var(--pink);background:rgba(255,77,125,.08)}
 .pm-plan-opt.sel-basic .po-name{color:var(--pink)}
-.pm-status-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
-.pm-status-opt{border:1.5px solid var(--border);border-radius:10px;padding:10px 6px;
-  text-align:center;cursor:pointer;font-size:11px;font-weight:700;
-  color:rgba(255,255,255,.35);transition:all .2s}
-.pm-status-opt.sel-paid{border-color:#03C75A;background:rgba(3,199,90,.1);color:#03C75A}
-.pm-status-opt.sel-unpaid{border-color:#FFA500;background:rgba(255,165,0,.1);color:#FFA500}
-.pm-status-opt.sel-expired{border-color:var(--pink);background:rgba(255,77,125,.1);color:var(--pink)}
-.pm-status-opt.sel-free{border-color:#6495ed;background:rgba(100,149,237,.1);color:#6495ed}
+.pm-status-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:16px}
+.pm-status-opt{border:1.5px solid var(--border);border-radius:10px;padding:10px 4px;
+  text-align:center;cursor:pointer;font-size:11px;font-weight:700;color:var(--t3);transition:all .2s}
+.pm-status-opt.sel-paid{border-color:var(--green);background:rgba(3,199,90,.08);color:var(--green)}
+.pm-status-opt.sel-free{border-color:var(--blue);background:rgba(100,149,237,.08);color:var(--blue)}
+.pm-status-opt.sel-unpaid{border-color:#FFA500;background:rgba(255,165,0,.08);color:#FFA500}
+.pm-status-opt.sel-expired{border-color:var(--pink);background:rgba(255,77,125,.08);color:var(--pink)}
 </style>
 </head>
 <body>
@@ -3087,19 +3103,17 @@ body{font-family:'Pretendard',sans-serif;background:var(--bg);color:#fff;min-hei
 <!-- 상단바 -->
 <div class="top">
   <a class="back" href="/"><i class="fas fa-arrow-left"></i></a>
-  <span class="ttl">관리자 대시보드</span>
-  <button class="add-btn" onclick="openModal()">
-    <i class="fas fa-plus"></i> 업체 추가
-  </button>
+  <span class="ttl">마이뷰티맵 관리자</span>
+  <button class="add-btn" onclick="openModal()"><i class="fas fa-plus"></i> 업체 추가</button>
 </div>
 
 <!-- 탭바 -->
 <div class="tabbar">
-  <button class="tabbtn on" id="tab-shops" onclick="switchTab('shops')">
-    <i class="fas fa-store"></i>업체 관리
+  <button class="tabbtn on" id="tab-stats" onclick="switchTab('stats')">
+    <i class="fas fa-chart-line"></i>대시보드
   </button>
-  <button class="tabbtn" id="tab-stats" onclick="switchTab('stats')">
-    <i class="fas fa-chart-bar"></i>통계
+  <button class="tabbtn" id="tab-shops" onclick="switchTab('shops')">
+    <i class="fas fa-store"></i>업체 관리
   </button>
   <button class="tabbtn" id="tab-pay" onclick="switchTab('pay')">
     <i class="fas fa-credit-card"></i>구독관리
@@ -3109,34 +3123,10 @@ body{font-family:'Pretendard',sans-serif;background:var(--bg);color:#fff;min-hei
   </button>
 </div>
 
-<!-- 내용 -->
+<!-- 콘텐츠 -->
 <div class="wrap">
-  <!-- 요약 (업체/통계 탭 공통) -->
-  <div class="summary" id="summaryBox">
-    <div class="sv">
-      <div class="sv-n" id="sv-shops">-</div>
-      <div class="sv-l">💄 등록 샵</div>
-    </div>
-    <div class="sv">
-      <div class="sv-n" id="sv-visits">-</div>
-      <div class="sv-l">🙋 오늘 방문</div>
-      <div class="sv-delta flat" id="sv-visits-delta">-</div>
-    </div>
-    <div class="sv">
-      <div class="sv-n" id="sv-views">-</div>
-      <div class="sv-l">👁 영상조회</div>
-      <div class="sv-delta flat" id="sv-views-delta">-</div>
-    </div>
-    <div class="sv">
-      <div class="sv-n" id="sv-clicks">-</div>
-      <div class="sv-l">📍 예약클릭</div>
-      <div class="sv-delta flat" id="sv-clicks-delta">-</div>
-    </div>
-  </div>
-
-  <!-- 패널들 -->
-  <div id="panel-shops"></div>
-  <div id="panel-stats" style="display:none"></div>
+  <div id="panel-stats"></div>
+  <div id="panel-shops" style="display:none"></div>
   <div id="panel-pay"   style="display:none"></div>
   <div id="panel-inq"   style="display:none"></div>
 </div>
@@ -3146,984 +3136,701 @@ body{font-family:'Pretendard',sans-serif;background:var(--bg);color:#fff;min-hei
 <div class="modal" id="modal">
   <div class="modal-handle"></div>
   <div class="modal-ttl" id="modalTtl">업체 추가</div>
-
-  <!-- 노출 방식 -->
   <div class="field">
     <label>📡 노출 방식</label>
     <div class="mode-select">
-      <div class="mode-opt sel-both" id="mo-both" onclick="setMode('both')">
-        <div class="mo-icon">🎬🗺️</div>영상 + 지도
-      </div>
-      <div class="mode-opt" id="mo-feed" onclick="setMode('feed')">
-        <div class="mo-icon">🎬</div>영상만
-      </div>
-      <div class="mode-opt" id="mo-map" onclick="setMode('map')">
-        <div class="mo-icon">🗺️</div>지도만
-      </div>
+      <div class="mode-opt sel-both" id="mo-both" onclick="setMode('both')"><div class="mo-icon">🎬🗺️</div>영상+지도</div>
+      <div class="mode-opt" id="mo-feed" onclick="setMode('feed')"><div class="mo-icon">🎬</div>영상만</div>
+      <div class="mode-opt" id="mo-map"  onclick="setMode('map')"><div class="mo-icon">🗺️</div>지도만</div>
     </div>
     <input type="hidden" id="f-mode" value="both"/>
   </div>
-
-  <!-- 기본 정보 -->
-  <div class="field">
-    <label>업체명 *</label>
-    <input id="f-name" type="text" placeholder="예: 밸런스 엘 스트레칭"/>
-  </div>
+  <div class="field"><label>업체명 *</label><input id="f-name" type="text" placeholder="예: 밸런스 엘 스트레칭"/></div>
   <div class="row2">
-    <div class="field">
-      <label>카테고리 *</label>
+    <div class="field"><label>카테고리 *</label>
       <select id="f-cat">
         <option>마사지</option><option>헤드스파</option><option>피부관리</option>
-        <option>헤어</option><option>메이크업</option><option>왁싱</option><option>반영구</option>
-        <option>병원</option><option>그외</option>
+        <option>헤어</option><option>메이크업</option><option>왁싱</option>
+        <option>반영구</option><option>병원</option><option>그외</option>
       </select>
     </div>
-    <div class="field">
-      <label>가격대</label>
-      <input id="f-price" type="text" placeholder="예: 5만원~"/>
-    </div>
+    <div class="field"><label>가격대</label><input id="f-price" type="text" placeholder="예: 5만원~"/></div>
   </div>
-
-  <!-- 썸네일 -->
   <div class="field">
     <label>🖼️ 썸네일 이미지</label>
     <div class="thumb-wrap">
       <img id="thumbPreview" class="thumb-preview"
-        src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 60'%3E%3Crect width='60' height='60' fill='%23222'/%3E%3Ctext x='30' y='38' font-size='24' text-anchor='middle'%3E📷%3C/text%3E%3C/svg%3E"/>
+        src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 60'%3E%3Crect width='60' height='60' fill='%23222'/%3E%3Ctext x='30' y='38' font-size='24' text-anchor='middle'%3E%F0%9F%93%B7%3C/text%3E%3C/svg%3E"/>
       <div class="thumb-right">
-        <label class="upload-btn" for="thumbFile">
-          <i class="fas fa-upload"></i> 파일 선택
-        </label>
+        <label class="upload-btn" for="thumbFile"><i class="fas fa-upload"></i> 파일 선택</label>
         <input type="file" id="thumbFile" accept="image/*" style="display:none" onchange="handleThumbFile(event)"/>
-        <input class="thumb-url-inp" id="f-thumb" type="text" placeholder="또는 이미지 URL 직접 입력"
-          oninput="updateThumbPreview(this.value)"/>
+        <input class="thumb-url-inp" id="f-thumb" type="text" placeholder="또는 이미지 URL" oninput="updateThumbPreview(this.value)"/>
       </div>
     </div>
   </div>
-
-  <!-- 유튜브 -->
   <div class="field" id="ytField">
     <label>🎬 유튜브 URL (또는 영상 ID)</label>
-    <input id="f-yt" type="text" placeholder="https://youtu.be/xxxxx 또는 영상ID"
-      oninput="previewYt(this.value)"/>
-    <div class="yt-preview" id="ytPreview">
-      <iframe id="ytFrame" src="" allow="autoplay;encrypted-media" allowfullscreen></iframe>
-    </div>
+    <input id="f-yt" type="text" placeholder="https://youtu.be/xxxxx" oninput="previewYt(this.value)"/>
+    <div class="yt-preview" id="ytPreview"><iframe id="ytFrame" src="" allow="autoplay;encrypted-media" allowfullscreen></iframe></div>
   </div>
-
-  <!-- 주소 -->
   <div class="field" id="addrField">
     <label>📍 주소 *</label>
     <div class="geo-row">
       <input id="f-addr" type="text" placeholder="예: 서울 강남구 논현로 123" style="flex:1"
         onkeydown="if(event.key==='Enter'){event.preventDefault();geocodeAddr()}"/>
-      <button class="geo-btn" onclick="geocodeAddr()" id="geoBtn">
-        <i class="fas fa-crosshairs"></i> 좌표찾기
-      </button>
+      <button class="geo-btn" onclick="geocodeAddr()" id="geoBtn"><i class="fas fa-crosshairs"></i> 좌표찾기</button>
     </div>
     <div class="geo-status" id="geoStatus"></div>
   </div>
   <div class="row2" id="distRow">
-    <div class="field">
-      <label>구/지역 <small style="color:rgba(255,255,255,.25)">(자동)</small></label>
-      <input id="f-dist" type="text" placeholder="강남구"/>
-    </div>
-    <div class="field">
-      <label>전화번호</label>
-      <input id="f-phone" type="text" placeholder="02-1234-5678"/>
-    </div>
+    <div class="field"><label>구/지역 <small style="color:var(--t4)">(자동)</small></label><input id="f-dist" type="text" placeholder="강남구"/></div>
+    <div class="field"><label>전화번호</label><input id="f-phone" type="text" placeholder="02-1234-5678"/></div>
   </div>
   <div class="row2" id="latRow">
-    <div class="field">
-      <label>위도 <small style="color:rgba(255,255,255,.25)">(자동)</small></label>
-      <input id="f-lat" type="number" step="0.000001" placeholder="자동입력"/>
-    </div>
-    <div class="field">
-      <label>경도 <small style="color:rgba(255,255,255,.25)">(자동)</small></label>
-      <input id="f-lng" type="number" step="0.000001" placeholder="자동입력"/>
-    </div>
+    <div class="field"><label>위도 <small style="color:var(--t4)">(자동)</small></label><input id="f-lat" type="number" step="0.000001" placeholder="자동입력"/></div>
+    <div class="field"><label>경도 <small style="color:var(--t4)">(자동)</small></label><input id="f-lng" type="number" step="0.000001" placeholder="자동입력"/></div>
   </div>
-
-  <!-- 스마트플레이스 -->
-  <div class="field">
-    <label>📅 네이버 예약 URL</label>
-    <input id="f-url" type="text" placeholder="https://naver.me/xxxxx"/>
-  </div>
-
-  <!-- 기타 -->
-  <div class="field">
-    <label>태그 (쉼표로 구분)</label>
-    <input id="f-tags" type="text" placeholder="리프팅, 보습, 트러블케어"/>
-  </div>
-  <div class="field">
-    <label>업체 소개</label>
-    <textarea id="f-desc" placeholder="업체 간단 소개"></textarea>
-  </div>
+  <div class="field"><label>📅 네이버 예약 URL</label><input id="f-url" type="text" placeholder="https://naver.me/xxxxx"/></div>
+  <div class="field"><label>태그 (쉼표로 구분)</label><input id="f-tags" type="text" placeholder="리프팅, 보습, 트러블케어"/></div>
+  <div class="field"><label>업체 소개</label><textarea id="f-desc" placeholder="업체 간단 소개"></textarea></div>
   <div class="row2">
-    <div class="field">
-      <label>상단 노출</label>
-      <select id="f-feat">
-        <option value="false">일반</option>
-        <option value="true">⭐ 추천 상단</option>
-      </select>
+    <div class="field"><label>상단 노출</label>
+      <select id="f-feat"><option value="false">일반</option><option value="true">⭐ 추천 상단</option></select>
     </div>
-    <div class="field">
-      <label>공개 여부</label>
-      <select id="f-active">
-        <option value="true">공개</option>
-        <option value="false">비공개</option>
-      </select>
+    <div class="field"><label>공개 여부</label>
+      <select id="f-active"><option value="true">공개</option><option value="false">비공개</option></select>
     </div>
   </div>
-
   <div class="modal-actions">
     <button class="btn-cancel" onclick="closeModal()">취소</button>
-    <button class="btn-save"   onclick="saveShop()"><i class="fas fa-save"></i> 저장하기</button>
+    <button class="btn-save" onclick="saveShop()"><i class="fas fa-save"></i> 저장하기</button>
   </div>
 </div>
 </div>
 
-<!-- ───── 결제 수정 모달 ───── -->
+<!-- 결제 수정 모달 -->
 <div class="pay-modal-bg hidden" id="payModalBg" onclick="if(event.target===this)closePayModal()">
 <div class="pay-modal" id="payModal">
   <div class="pm-handle"></div>
-  <div class="pm-ttl">💳 결제 / 구독 관리</div>
+  <div class="pm-ttl">💳 구독 관리</div>
   <div class="pm-sub" id="pmShopName">업체명</div>
-
-  <!-- 플랜 선택 -->
-  <div class="field"><label>📦 플랜 선택</label></div>
+  <div class="field"><label>📦 플랜</label></div>
   <div class="pm-plan-grid">
     <div class="pm-plan-opt sel-shoot" id="pm-plan-shoot" onclick="setPmPlan('shoot')">
-      <div class="po-icon">🎬</div>
-      <div class="po-name">촬영 플랜</div>
+      <div class="po-icon">🎬</div><div class="po-name">촬영 플랜</div>
       <div class="po-price">촬영비 3만원 · 6개월 무료<br>이후 월 10,000원</div>
     </div>
     <div class="pm-plan-opt" id="pm-plan-basic" onclick="setPmPlan('basic')">
-      <div class="po-icon">📍</div>
-      <div class="po-name">기본 플랜</div>
+      <div class="po-icon">📍</div><div class="po-name">기본 플랜</div>
       <div class="po-price">영상 없이 맵만<br>월 10,000원</div>
     </div>
   </div>
-
-  <!-- 결제 상태 -->
   <div class="field"><label>📊 결제 상태</label></div>
   <div class="pm-status-grid">
     <div class="pm-status-opt" id="pm-st-paid"    onclick="setPmStatus('paid')">✅<br>결제완료</div>
     <div class="pm-status-opt" id="pm-st-free"    onclick="setPmStatus('free')">🎁<br>무료기간</div>
     <div class="pm-status-opt" id="pm-st-unpaid"  onclick="setPmStatus('unpaid')">💳<br>미결제</div>
-    <div class="pm-status-opt" id="pm-st-expired" onclick="setPmStatus('expired')" style="grid-column:span 1">⚠️<br>만료</div>
-    <div></div><div></div>
+    <div class="pm-status-opt" id="pm-st-expired" onclick="setPmStatus('expired')">⚠️<br>만료</div>
   </div>
-
-  <!-- 만료일 -->
   <div class="field">
-    <label>📆 구독 만료일 <small style="color:rgba(255,255,255,.25)">(빈칸 = 미설정)</small></label>
-    <input id="pm-until" type="date" style="width:100%;background:rgba(255,255,255,.07);border:1.5px solid rgba(255,255,255,.1);border-radius:10px;padding:10px 12px;color:#fff;font-size:14px;font-family:inherit;outline:none"/>
+    <label>📆 구독 만료일</label>
+    <input id="pm-until" type="date" style="width:100%;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.09);border-radius:10px;padding:10px 12px;color:#fff;font-size:14px;font-family:inherit;outline:none"/>
   </div>
-
-  <!-- 빠른 만료일 설정 -->
-  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:-6px;margin-bottom:14px">
-    <button onclick="addMonths(1)"  style="flex:1;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.6);border-radius:8px;padding:7px 6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">+1개월</button>
-    <button onclick="addMonths(3)"  style="flex:1;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.6);border-radius:8px;padding:7px 6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">+3개월</button>
-    <button onclick="addMonths(6)"  style="flex:1;background:rgba(3,199,90,.12);border:1px solid rgba(3,199,90,.25);color:#03C75A;border-radius:8px;padding:7px 6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">+6개월</button>
-    <button onclick="addMonths(12)" style="flex:1;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.6);border-radius:8px;padding:7px 6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">+12개월</button>
+  <div style="display:flex;gap:6px;margin-top:-6px;margin-bottom:14px">
+    <button onclick="addMonths(1)"  style="flex:1;background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--t2);border-radius:8px;padding:7px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">+1개월</button>
+    <button onclick="addMonths(3)"  style="flex:1;background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--t2);border-radius:8px;padding:7px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">+3개월</button>
+    <button onclick="addMonths(6)"  style="flex:1;background:rgba(3,199,90,.1);border:1px solid rgba(3,199,90,.22);color:var(--green);border-radius:8px;padding:7px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">+6개월</button>
+    <button onclick="addMonths(12)" style="flex:1;background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--t2);border-radius:8px;padding:7px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">+12개월</button>
   </div>
-
-  <!-- 메모 -->
   <div class="field">
-    <label>📝 메모 <small style="color:rgba(255,255,255,.25)">(입금자명, 결제방식 등)</small></label>
-    <textarea id="pm-memo" placeholder="예) 홍길동 계좌이체 30,000원 24.01.15" style="width:100%;background:rgba(255,255,255,.07);border:1.5px solid rgba(255,255,255,.1);border-radius:10px;padding:10px 12px;color:#fff;font-size:13px;font-family:inherit;outline:none;resize:vertical;min-height:60px"></textarea>
+    <label>📝 메모</label>
+    <textarea id="pm-memo" placeholder="예) 홍길동 계좌이체 30,000원 24.01.15"
+      style="width:100%;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.09);border-radius:10px;padding:10px 12px;color:#fff;font-size:13px;font-family:inherit;outline:none;resize:vertical;min-height:60px"></textarea>
   </div>
-
   <div class="modal-actions">
     <button class="btn-cancel" onclick="closePayModal()">취소</button>
-    <button class="btn-save"   onclick="savePayment()"><i class="fas fa-save"></i> 저장하기</button>
+    <button class="btn-save" onclick="savePayment()"><i class="fas fa-save"></i> 저장하기</button>
   </div>
 </div>
 </div>
 
 <script>
-/* ═══════════════════════════════════════════════════════
-   상태
-═══════════════════════════════════════════════════════ */
-let editId   = null;
-let payEditId = null;
-let pmPlan   = 'shoot';
-let pmStatus = 'unpaid';
-let curTab   = 'shops';
+// ── 전역 상태
+let editId = null, payEditId = null;
+let pmPlan = 'shoot', pmStatus = 'unpaid';
+let curTab = 'stats';
 let shopData = [];
 let thumbDataUrl = '';
+let _stats = null, _dvRows = [], _chartMode = 'view', _rankMode = 'today';
 
-/* ═══════════════════════════════════════════════════════
-   탭 전환
-═══════════════════════════════════════════════════════ */
+// ── 탭 전환
 function switchTab(t) {
   curTab = t;
-  ['shops','stats','pay','inq'].forEach(x => {
+  ['stats','shops','pay','inq'].forEach(x => {
     document.getElementById('tab-'+x).classList.toggle('on', x===t);
     document.getElementById('panel-'+x).style.display = x===t ? 'block' : 'none';
   });
-  document.getElementById('summaryBox').style.display =
-    (t==='shops'||t==='stats') ? 'grid' : 'none';
-  document.querySelector('.add-btn').style.display =
-    t==='shops' ? 'flex' : 'none';
+  document.querySelector('.add-btn').style.display = t==='shops' ? 'flex' : 'none';
   if (t==='inq') loadInquiries();
-  if (t==='pay') renderPayments();
+  if (t==='pay') renderPayTab();
 }
 
-/* ═══════════════════════════════════════════════════════
-   구독관리 탭 렌더
-═══════════════════════════════════════════════════════ */
-let payFilter = 'all';
-
-function renderPayments(filter) {
-  if (filter !== undefined) payFilter = filter;
-  const p = document.getElementById('panel-pay');
-  const list = shopData;
-  if (!list.length) { p.innerHTML = '<div class="empty">등록된 업체가 없어요</div>'; return; }
-  const fallback = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 60'%3E%3Crect width='60' height='60' fill='%23222'/%3E%3Ctext x='30' y='38' font-size='24' text-anchor='middle'%3E💄%3C/text%3E%3C/svg%3E";
-
-  // 요약 집계
-  const total   = list.length;
-  const paid    = list.filter(s => s.paymentStatus==='paid').length;
-  const free    = list.filter(s => s.paymentStatus==='free').length;
-  const unpaid  = list.filter(s => s.paymentStatus==='unpaid').length;
-  const expired = list.filter(s => s.paymentStatus==='expired').length;
-
-  // 만료 임박(30일 이내) 계산
-  const soon = list.filter(s => {
-    if (!s.paidUntil) return false;
-    const diff = Math.ceil((new Date(s.paidUntil) - new Date()) / 86400000);
-    return diff >= 0 && diff <= 30;
-  }).length;
-
-  // 필터링
-  let filtered = list;
-  if (payFilter === 'paid')    filtered = list.filter(s => s.paymentStatus==='paid');
-  else if (payFilter === 'free')    filtered = list.filter(s => s.paymentStatus==='free');
-  else if (payFilter === 'unpaid')  filtered = list.filter(s => s.paymentStatus==='unpaid');
-  else if (payFilter === 'expired') filtered = list.filter(s => s.paymentStatus==='expired');
-  else if (payFilter === 'soon')    filtered = list.filter(s => {
-    if (!s.paidUntil) return false;
-    const diff = Math.ceil((new Date(s.paidUntil) - new Date()) / 86400000);
-    return diff >= 0 && diff <= 30;
-  });
-
-  // 정렬: 만료임박 → 만료 → 미결제 → 무료 → 결제완료
-  const order = {expired:0, unpaid:1, soon:2, free:3, paid:4};
-  filtered = [...filtered].sort((a,b) => {
-    const ao = order[a.paymentStatus]??9;
-    const bo = order[b.paymentStatus]??9;
-    if (ao !== bo) return ao - bo;
-    if (a.paidUntil && b.paidUntil)
-      return new Date(a.paidUntil) - new Date(b.paidUntil);
-    return 0;
-  });
-
-  const filterBtns = [
-    {k:'all',   label:\`전체 \${total}\`},
-    {k:'paid',  label:\`✅ 결제 \${paid}\`},
-    {k:'free',  label:\`🎁 무료 \${free}\`},
-    {k:'unpaid',label:\`💳 미결제 \${unpaid}\`},
-    {k:'expired',label:\`⚠️ 만료 \${expired}\`},
-    {k:'soon',  label:\`🔔 임박 \${soon}\`},
-  ].map(b => \`<button class="pf-btn\${payFilter===b.k?' on':''}" onclick="renderPayments('\${b.k}')">\${b.label}</button>\`).join('');
-
-  const cards = filtered.map(s => {
-    const img = s.thumbnail || (s.youtubeId ? 'https://img.youtube.com/vi/'+s.youtubeId+'/maxresdefault.jpg' : fallback);
-    const plan = s.plan || 'basic';
-    const st   = s.paymentStatus || 'unpaid';
-    const statusClass = \`status-\${st}\`;
-
-    // 만료일 표시
-    let expiryHtml = '<strong>미설정</strong>';
-    if (s.paidUntil) {
-      const d    = new Date(s.paidUntil);
-      const diff = Math.ceil((d - new Date()) / 86400000);
-      const dateStr = d.toLocaleDateString('ko-KR',{year:'2-digit',month:'2-digit',day:'2-digit'});
-      if (diff > 30)       expiryHtml = \`<strong style="color:#03C75A">\${dateStr}</strong>\`;
-      else if (diff > 0)   expiryHtml = \`<strong style="color:#FFA500">\${dateStr} (\${diff}일 남음)</strong>\`;
-      else                 expiryHtml = \`<strong style="color:var(--pink)">\${dateStr} (\${Math.abs(diff)}일 경과)</strong>\`;
-    }
-
-    // 결제상태 텍스트
-    const stMap = {paid:'✅ 결제완료', free:'🎁 무료기간', unpaid:'💳 미결제', expired:'⚠️ 만료'};
-    const stColor = {paid:'#03C75A', free:'#6495ed', unpaid:'#FFA500', expired:'var(--pink)'};
-
-    return \`
-    <div class="pay-card \${statusClass}">
-      <div class="pay-top">
-        <img class="pay-thumb" src="\${img}" onerror="this.src='\${fallback}'"/>
-        <div class="pay-info">
-          <div class="pay-name">\${s.name}</div>
-          <div class="pay-sub">\${s.category} · \${s.district||''}</div>
-          <div class="pay-badges">
-            \${plan==='shoot'
-              ? '<span class="badge b-plan-shoot">🎬 촬영플랜</span>'
-              : '<span class="badge b-plan-basic">📍 기본플랜</span>'}
-            <span class="badge" style="background:rgba(255,255,255,.07);color:\${stColor[st]||'#fff'}">\${stMap[st]||st}</span>
-          </div>
-        </div>
-      </div>
-      <div class="pay-body">
-        <div class="pay-kv">📆 만료일\${expiryHtml}</div>
-        <div class="pay-kv">📋 플랜<strong>\${plan==='shoot'?'촬영 (3만+월1만)':'기본 (월1만)'}</strong></div>
-      </div>
-      \${s.paymentMemo ? \`<div class="pay-memo"><i class="fas fa-sticky-note" style="color:rgba(255,255,255,.25);flex-shrink:0;margin-top:1px"></i><span>\${s.paymentMemo}</span></div>\` : ''}
-      <div class="pay-btns">
-        <button class="btn-pay-edit" data-id="\${s.id}" onclick="openPayModal(+this.dataset.id)">
-          <i class="fas fa-edit"></i> 결제 정보 수정
-        </button>
-      </div>
-    </div>\`;
-  }).join('') || '<div class="empty">해당 항목이 없어요</div>';
-
-  p.innerHTML = \`
-    <div class="pay-summary">
-      <div class="pay-sv"><div class="pay-sv-n" style="color:#03C75A">\${paid}</div><div class="pay-sv-l">✅ 결제완료</div></div>
-      <div class="pay-sv"><div class="pay-sv-n" style="color:#6495ed">\${free}</div><div class="pay-sv-l">🎁 무료기간</div></div>
-      <div class="pay-sv"><div class="pay-sv-n" style="color:#FFA500">\${unpaid}</div><div class="pay-sv-l">💳 미결제</div></div>
-      <div class="pay-sv"><div class="pay-sv-n" style="color:var(--pink)">\${expired}</div><div class="pay-sv-l">⚠️ 만료</div></div>
-    </div>
-    <div class="pay-filter">\${filterBtns}</div>
-    \${cards}
-  \`;
-}
-
-/* ═══════════════════════════════════════════════════════
-   결제 모달
-═══════════════════════════════════════════════════════ */
-function openPayModal(id) {
-  const s = shopData.find(x => x.id === id);
-  if (!s) return;
-  payEditId = id;
-  document.getElementById('pmShopName').textContent = s.name + ' · ' + (s.category||'');
-  setPmPlan(s.plan || 'basic');
-  setPmStatus(s.paymentStatus || 'unpaid');
-  // 만료일
-  const until = s.paidUntil ? s.paidUntil.slice(0,10) : '';
-  document.getElementById('pm-until').value = until;
-  document.getElementById('pm-memo').value  = s.paymentMemo || '';
-  document.getElementById('payModalBg').classList.remove('hidden');
-}
-
-function closePayModal() {
-  document.getElementById('payModalBg').classList.add('hidden');
-}
-
-function setPmPlan(plan) {
-  pmPlan = plan;
-  ['shoot','basic'].forEach(k => {
-    document.getElementById('pm-plan-'+k).className =
-      'pm-plan-opt' + (k===plan ? ' sel-'+k : '');
-  });
-}
-
-function setPmStatus(st) {
-  pmStatus = st;
-  ['paid','free','unpaid','expired'].forEach(k => {
-    document.getElementById('pm-st-'+k).className =
-      'pm-status-opt' + (k===st ? ' sel-'+k : '');
-  });
-}
-
-function addMonths(n) {
-  const base = document.getElementById('pm-until').value
-    ? new Date(document.getElementById('pm-until').value)
-    : new Date();
-  base.setMonth(base.getMonth() + n);
-  document.getElementById('pm-until').value = base.toISOString().slice(0,10);
-}
-
-async function savePayment() {
-  if (!payEditId) return;
-  const body = {
-    plan:          pmPlan,
-    paymentStatus: pmStatus,
-    paidUntil:     document.getElementById('pm-until').value || null,
-    paymentMemo:   document.getElementById('pm-memo').value.trim(),
-  };
-  const r = await fetch('/api/admin/shops/'+payEditId+'/payment', {
-    method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
-  });
-  if (r.ok) {
-    closePayModal();
-    await loadAll();
-    if (curTab === 'pay') renderPayments();
-    showPayToast('✅ 결제 정보가 저장됐어요');
-  } else {
-    alert('저장 실패: ' + r.status);
+// ── 토스트
+let _toastTmr;
+function toast(msg) {
+  let el = document.getElementById('_toast');
+  if (!el) {
+    el = document.createElement('div'); el.id = '_toast';
+    el.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:10px 20px;border-radius:999px;font-size:13px;font-weight:700;z-index:9999;transition:opacity .3s;pointer-events:none;white-space:nowrap;box-shadow:0 4px 20px rgba(0,0,0,.5)';
+    document.body.appendChild(el);
   }
+  el.textContent = msg; el.style.opacity = '1';
+  clearTimeout(_toastTmr);
+  _toastTmr = setTimeout(() => { el.style.opacity = '0'; }, 2500);
 }
 
-let payToastTmr;
-function showPayToast(msg) {
-  let t = document.getElementById('payToast');
-  if (!t) {
-    t = document.createElement('div');
-    t.id = 'payToast';
-    t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:10px 20px;border-radius:999px;font-size:13px;font-weight:700;z-index:9999;transition:opacity .3s;pointer-events:none;white-space:nowrap;box-shadow:0 4px 20px rgba(0,0,0,.5)';
-    document.body.appendChild(t);
-  }
-  t.textContent = msg; t.style.opacity = '1';
-  clearTimeout(payToastTmr);
-  payToastTmr = setTimeout(() => { t.style.opacity = '0'; }, 2500);
+// ── 증감 헬퍼
+function deltaHtml(today, yest) {
+  if (yest===0 && today===0) return '<span class="kpi-delta flat">—</span>';
+  if (yest===0 && today>0)   return '<span class="kpi-delta up">▲ NEW</span>';
+  const d = today-yest, p = Math.round(Math.abs(d)/yest*100);
+  if (d>0) return '<span class="kpi-delta up">▲ +' + d.toLocaleString() + ' (' + p + '%)</span>';
+  if (d<0) return '<span class="kpi-delta down">▼ ' + d.toLocaleString() + ' (' + p + '%)</span>';
+  return '<span class="kpi-delta flat">— 동일</span>';
 }
 
-/* ═══════════════════════════════════════════════════════
-   데이터 로드
-═══════════════════════════════════════════════════════ */
+// ── 데이터 로드
 async function loadAll() {
-  const [d, dvRows] = await Promise.all([
+  const [d, dv] = await Promise.all([
     fetch('/api/admin/stats').then(r=>r.json()),
     fetch('/api/admin/daily-visits').then(r=>r.json()),
   ]);
-
-  // 오늘 방문자
-  const todayStr  = new Date().toISOString().slice(0,10);
-  const yestStr   = new Date(Date.now()-86400000).toISOString().slice(0,10);
-  const todayRow  = dvRows.find(r => r.visit_date === todayStr);
-  const yestRow   = dvRows.find(r => r.visit_date === yestStr);
-  const todayVisits = todayRow ? (parseInt(todayRow.visit_cnt)||0) : 0;
-  const yestVisits  = yestRow  ? (parseInt(yestRow.visit_cnt)||0)  : 0;
-
-  // 오늘 조회/클릭
-  const todayViews  = (d.todayViews  || 0);
-  const todayClicks = (d.todayFeedSP || 0) + (d.todayMapSP || 0);
-  const yestViews   = (d.yestViews   || 0);
-  const yestClicks  = (d.yestFeedSP  || 0) + (d.yestMapSP  || 0);
-
-  // 요약카드 채우기
-  document.getElementById('sv-shops').textContent   = d.totalShops;
-  document.getElementById('sv-visits').textContent  = todayVisits.toLocaleString();
-  document.getElementById('sv-views').textContent   = todayViews.toLocaleString();
-  document.getElementById('sv-clicks').textContent  = todayClicks.toLocaleString();
-
-  // 어제 대비 증감 델타
-  setDelta('sv-visits-delta', todayVisits, yestVisits);
-  setDelta('sv-views-delta',  todayViews,  yestViews);
-  setDelta('sv-clicks-delta', todayClicks, yestClicks);
-
-  shopData = d.stats;
-  renderShops(d.stats);
-  renderStats(d, dvRows);
+  _stats  = d;
+  _dvRows = dv;
+  shopData = d.stats || [];
+  renderDashboard();
+  if (curTab==='shops') renderShops(shopData);
+  if (curTab==='pay')   renderPayTab();
 }
 
-// 증감 표시 헬퍼
-function setDelta(elId, today, yest) {
-  const el = document.getElementById(elId);
-  if (!el) return;
-  if (yest === 0 && today === 0) {
-    el.className = 'sv-delta flat'; el.innerHTML = '— 데이터 없음';
-  } else if (yest === 0) {
-    el.className = 'sv-delta up'; el.innerHTML = '▲ 새로운 기록';
+// ======================================================
+// 대시보드 탭
+// ======================================================
+function renderDashboard() {
+  const d   = _stats;
+  const dv  = _dvRows;
+  const p   = document.getElementById('panel-stats');
+  if (!d) return;
+
+  const todayStr = new Date().toISOString().slice(0,10);
+  const yestStr  = new Date(Date.now()-86400000).toISOString().slice(0,10);
+  const todayRow = dv.find(r=>r.visit_date===todayStr);
+  const yestRow  = dv.find(r=>r.visit_date===yestStr);
+  const todayVisit = todayRow ? (parseInt(todayRow.visit_cnt)||0) : 0;
+  const yestVisit  = yestRow  ? (parseInt(yestRow.visit_cnt)||0)  : 0;
+
+  const tV  = d.todayViews  ||0, yV  = d.yestViews  ||0;
+  const tF  = d.todayFeedSP ||0, yF  = d.yestFeedSP ||0;
+  const tM  = d.todayMapSP  ||0, yM  = d.yestMapSP  ||0;
+  const todayLabel = new Date().toLocaleDateString('ko-KR',{month:'long',day:'numeric',weekday:'short'});
+
+  // 1) 오늘 KPI
+  const kpi =
+    '<div class="section-title">📅 오늘 현황 <span style="font-size:10px;font-weight:500;color:var(--t3);margin-left:4px">' + todayLabel + '</span></div>' +
+    '<div class="kpi-grid">' +
+      '<div class="kpi-card kpi-visit"><div class="kpi-icon">🙋</div><div class="kpi-val">' + todayVisit.toLocaleString() + '</div><div class="kpi-lbl">방문자</div>' + deltaHtml(todayVisit,yestVisit) + '</div>' +
+      '<div class="kpi-card kpi-view"><div class="kpi-icon">👁</div><div class="kpi-val">' + tV.toLocaleString() + '</div><div class="kpi-lbl">영상 조회</div>' + deltaHtml(tV,yV) + '</div>' +
+      '<div class="kpi-card kpi-feed"><div class="kpi-icon">📹</div><div class="kpi-val">' + tF.toLocaleString() + '</div><div class="kpi-lbl">피드 클릭</div>' + deltaHtml(tF,yF) + '</div>' +
+      '<div class="kpi-card kpi-map"><div class="kpi-icon">🗺️</div><div class="kpi-val">' + tM.toLocaleString() + '</div><div class="kpi-lbl">지도 클릭</div>' + deltaHtml(tM,yM) + '</div>' +
+    '</div>';
+
+  // 2) 누적 요약
+  const totalClicks = (d.totalFeedSP||0)+(d.totalMapSP||0);
+  const accum =
+    '<div class="section-title">📊 누적 합계</div>' +
+    '<div class="summary-bar">' +
+      '<div class="sb-item"><div class="sb-val" style="color:#FF8FA3">' + (d.totalViews||0).toLocaleString() + '</div><div class="sb-lbl">총 영상조회</div></div>' +
+      '<div class="sb-item"><div class="sb-val" style="color:var(--green)">' + totalClicks.toLocaleString() + '</div><div class="sb-lbl">총 예약클릭</div></div>' +
+      '<div class="sb-item"><div class="sb-val" style="color:#a78bfa">' + (d.totalShops||0) + '</div><div class="sb-lbl">등록 업체</div></div>' +
+    '</div>';
+
+  // 3) 14일 차트
+  const chart = buildChart14(_chartMode);
+
+  // 4) 오늘 업체 랭킹
+  const rank = buildRank(_rankMode);
+
+  p.innerHTML = kpi + accum + chart + rank;
+}
+
+// ── 14일 차트 빌드
+function buildChart14(mode) {
+  const today = new Date();
+  const days = [];
+  for (let i=13;i>=0;i--) {
+    const d = new Date(today); d.setDate(today.getDate()-i);
+    days.push(d.toISOString().slice(0,10));
+  }
+  const todayStr = today.toISOString().slice(0,10);
+  const chart = (_stats && _stats.weekChart) || [];
+  const dv    = _dvRows;
+
+  let counts, barClass, modeLabel;
+  if (mode==='view') {
+    const m={}; chart.forEach(r=>{m[r.date]=r.views||0;});
+    counts=days.map(d=>m[d]||0); barClass='bar-view'; modeLabel='👁 영상조회';
+  } else if (mode==='feed') {
+    const m={}; chart.forEach(r=>{m[r.date]=r.feedSP||0;});
+    counts=days.map(d=>m[d]||0); barClass='bar-feed'; modeLabel='📹 피드클릭';
+  } else if (mode==='map') {
+    const m={}; chart.forEach(r=>{m[r.date]=r.mapSP||0;});
+    counts=days.map(d=>m[d]||0); barClass='bar-map'; modeLabel='🗺️ 지도클릭';
   } else {
-    const diff = today - yest;
-    const pct  = Math.round(Math.abs(diff) / yest * 100);
-    if (diff > 0) {
-      el.className = 'sv-delta up';   el.innerHTML = '▲ +' + diff.toLocaleString() + ' (' + pct + '%)';
-    } else if (diff < 0) {
-      el.className = 'sv-delta down'; el.innerHTML = '▼ ' + diff.toLocaleString() + ' (' + pct + '%)';
-    } else {
-      el.className = 'sv-delta flat'; el.innerHTML = '— 어제와 동일';
+    const m={}; dv.forEach(r=>{m[r.visit_date]=parseInt(r.visit_cnt)||0;});
+    counts=days.map(d=>m[d]||0); barClass='bar-visit'; modeLabel='🙋 방문자';
+  }
+
+  const maxV = Math.max(...counts,1);
+  const total = counts.reduce((a,b)=>a+b,0);
+  const empty = counts.every(c=>c===0);
+
+  const tabOn = {view:'on-v', feed:'on-f', map:'on-m', visit:'on-a'};
+
+  const barsHtml = empty ? '<div class="chart-empty">데이터가 쌓이면 여기에 표시돼요</div>' :
+    '<div class="chart-body">' +
+    days.map((d,i)=>{
+      const c=counts[i], h=Math.max(Math.round((c/maxV)*72),c>0?4:2);
+      const isT=d===todayStr;
+      return '<div class="bar-col">' +
+        '<div class="bar-cnt">'+(c>0?c:'')+'</div>' +
+        '<div class="bar-fill '+(isT?'bar-today':barClass)+'" style="height:'+h+'px"></div>' +
+        '<div class="bar-date">'+(isT?'오늘':d.slice(5))+'</div>' +
+      '</div>';
+    }).join('') +
+    '</div>';
+
+  return '<div class="section-title">📈 14일 추이</div>' +
+    '<div class="chart-card">' +
+      '<div class="chart-header">' +
+        '<span class="chart-title">' + modeLabel + ' · 14일 합계 ' +
+          '<strong style="color:var(--t1)">' + total.toLocaleString() + '</strong></span>' +
+        '<div class="chart-tabs">' +
+          '<button class="ctab '+(mode==='visit'?tabOn.visit:'')+'" data-m="visit" onclick="switchChart(this.dataset.m)">방문</button>' +
+          '<button class="ctab '+(mode==='view'?tabOn.view:'')+'" data-m="view" onclick="switchChart(this.dataset.m)">영상</button>' +
+          '<button class="ctab '+(mode==='feed'?tabOn.feed:'')+'" data-m="feed" onclick="switchChart(this.dataset.m)">피드</button>' +
+          '<button class="ctab '+(mode==='map'?tabOn.map:'')+'" data-m="map" onclick="switchChart(this.dataset.m)">지도</button>' +
+        '</div>' +
+      '</div>' +
+      barsHtml +
+      '<div class="chart-footer">' +
+        '<span class="chart-legend">🟡 오늘</span>' +
+        '<button class="reset-btn" onclick="confirmReset()">🗑 통계 초기화</button>' +
+      '</div>' +
+    '</div>';
+}
+
+function switchChart(m) { _chartMode=m; renderDashboard(); }
+
+// ── 업체 랭킹 빌드
+function buildRank(mode) {
+  const list = shopData || [];
+  if (!list.length) return '<div class="empty">등록된 업체가 없어요</div>';
+  const fb = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 60'%3E%3Crect width='60' height='60' fill='%23222'/%3E%3Ctext x='30' y='38' font-size='24' text-anchor='middle'%3E%F0%9F%92%84%3C/text%3E%3C/svg%3E";
+
+  // 정렬: 오늘 or 누적
+  const sorted = [...list].sort((a,b) => {
+    if (mode==='today') {
+      const at=(a.todayViews||0)+(a.todayFeedSP||0)+(a.todayMapSP||0);
+      const bt=(b.todayViews||0)+(b.todayFeedSP||0)+(b.todayMapSP||0);
+      return bt-at;
     }
-  }
-}
+    return ((b.views||0)+(b.feedSP||0)+(b.mapSP||0)) - ((a.views||0)+(a.feedSP||0)+(a.mapSP||0));
+  });
 
-async function loadInquiries() {
-  const panel = document.getElementById('panel-inq');
-  panel.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i></div>';
-  const rows = await (await fetch('/api/admin/inquiries')).json();
-  if (!rows.length) {
-    panel.innerHTML = '<div class="empty">📭 접수된 입점문의가 없어요</div>';
-    return;
-  }
-  panel.innerHTML = rows.map(r => {
-    const d = new Date(r.created_at);
-    const dt = d.toLocaleDateString('ko-KR',{month:'2-digit',day:'2-digit'})
-             + ' ' + d.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
-    return \`
-    <div class="inq-card">
-      <div class="inq-top">
-        <span class="inq-name">\${r.owner||r.name||'이름없음'}</span>
-        \${r.category ? \`<span class="inq-badge">\${r.category}</span>\` : ''}
-        <span class="inq-time">\${dt}</span>
-      </div>
-      <div class="inq-row">
-        <span class="inq-kv">🏪 샵명 <strong>\${r.name||'-'}</strong></span>
-        <span class="inq-kv">📍 지역 <strong>\${r.area||'-'}</strong></span>
-        <span class="inq-kv">📞 연락처 <strong>\${r.phone||'-'}</strong></span>
-      </div>
-      \${r.url ? \`<div class="inq-row"><span class="inq-kv">🔗 URL <strong style="color:#6495ed">\${r.url}</strong></span></div>\` : ''}
-      \${r.message ? \`<div class="inq-msg">💬 \${r.message}</div>\` : ''}
-    </div>\`;
+  const tabOn_today = mode==='today'?' on':'';
+  const tabOn_total = mode==='total'?' on':'';
+
+  const header =
+    '<div class="section-title">🏆 업체별 성과</div>' +
+    '<div class="rank-tabs">' +
+      '<button class="rank-tab'+tabOn_today+'" data-m="today" onclick="switchRank(this.dataset.m)">오늘 성과</button>' +
+      '<button class="rank-tab'+tabOn_total+'" data-m="total" onclick="switchRank(this.dataset.m)">누적 성과</button>' +
+    '</div>';
+
+  const items = sorted.map((s,i) => {
+    const img = s.thumbnail || (s.youtubeId ? 'https://img.youtube.com/vi/'+s.youtubeId+'/maxresdefault.jpg' : fb);
+    const rc  = i===0?'rn1':i===1?'rn2':i===2?'rn3':'rnN';
+    const vv  = mode==='today' ? (s.todayViews||0)  : (s.views||0);
+    const fv  = mode==='today' ? (s.todayFeedSP||0) : (s.feedSP||0);
+    const mv  = mode==='today' ? (s.todayMapSP||0)  : (s.mapSP||0);
+    const tot = vv+fv+mv;
+    const unit = mode==='today' ? '오늘' : '누적';
+    return '<div class="rank-item">' +
+      '<div class="rank-num '+rc+'">'+(i+1)+'</div>' +
+      '<img class="rank-thumb" src="'+img+'" onerror="this.src=this.dataset.fb" data-fb="'+fb+'"/>' +
+      '<div class="rank-info">' +
+        '<div class="rank-name">'+s.name+'</div>' +
+        '<div class="rank-cat">'+s.category+(s.district?' · '+s.district:'')+'</div>' +
+        '<div class="rank-stats">' +
+          '<span class="rank-stat rs-view">👁 '+vv.toLocaleString()+'</span>' +
+          '<span class="rank-stat rs-feed">📹 '+fv.toLocaleString()+'</span>' +
+          '<span class="rank-stat rs-map">🗺️ '+mv.toLocaleString()+'</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="rank-total">'+tot.toLocaleString()+'<small>'+unit+' 합계</small></div>' +
+    '</div>';
   }).join('');
+
+  return header + items;
 }
 
-/* ═══════════════════════════════════════════════════════
-   업체 렌더
-═══════════════════════════════════════════════════════ */
+function switchRank(m) { _rankMode=m; renderDashboard(); }
+
+async function confirmReset() {
+  if (!confirm('통계를 초기화할까요? (방문자/영상조회/예약클릭 모두 리셋)')) return;
+  const r = await fetch('/api/admin/reset-stats', {method:'POST'});
+  if (r.ok) { toast('통계가 초기화됐어요'); loadAll(); }
+  else toast('초기화 실패');
+}
+
+// ======================================================
+// 업체 관리 탭
+// ======================================================
 function modeLabel(m) {
   if (m==='feed') return '<span class="sc-mode mode-feed">🎬 영상전용</span>';
   if (m==='map')  return '<span class="sc-mode mode-map">🗺️ 지도전용</span>';
   return '<span class="sc-mode mode-both">🎬🗺️ 영상+지도</span>';
 }
-
-function planLabel(s) {
-  const plan = s.plan || 'basic';
-  const st   = s.paymentStatus || 'unpaid';
-  // 플랜 뱃지
-  const planBadge = plan === 'shoot'
+function planBadge(s) {
+  const plan = s.plan||'basic', st = s.paymentStatus||'unpaid';
+  const pB = plan==='shoot'
     ? '<span class="badge b-plan-shoot">🎬 촬영플랜</span>'
     : '<span class="badge b-plan-basic">📍 기본플랜</span>';
-  // 결제 상태 뱃지
-  let stBadge = '';
-  if (st === 'paid')    stBadge = '<span class="badge b-paid">✅ 결제완료</span>';
-  else if (st === 'free') stBadge = '<span class="badge b-free">🎁 무료기간</span>';
-  else if (st === 'expired') stBadge = '<span class="badge b-expired">⚠️ 만료</span>';
-  else                  stBadge = '<span class="badge b-unpaid">💳 미결제</span>';
-  // 만료일
-  let expiry = '';
+  let sB = '';
+  if (st==='paid')    sB='<span class="badge b-paid">✅ 결제완료</span>';
+  else if (st==='free') sB='<span class="badge b-free">🎁 무료기간</span>';
+  else if (st==='expired') sB='<span class="badge b-expired">⚠️ 만료</span>';
+  else sB='<span class="badge b-unpaid">💳 미결제</span>';
+  let exp='';
   if (s.paidUntil) {
-    const d   = new Date(s.paidUntil);
-    const now = new Date();
-    const diff = Math.ceil((d - now) / 86400000);
-    const dateStr = d.toLocaleDateString('ko-KR',{month:'2-digit',day:'2-digit'});
-    expiry = diff > 0
-      ? \`<span class="badge" style="background:rgba(255,255,255,.08);color:rgba(255,255,255,.45)">📆 \${dateStr} (\${diff}일)</span>\`
-      : \`<span class="badge b-expired">📆 만료 (\${Math.abs(diff)}일 경과)</span>\`;
+    const d=new Date(s.paidUntil), diff=Math.ceil((d-new Date())/86400000);
+    const ds=d.toLocaleDateString('ko-KR',{month:'2-digit',day:'2-digit'});
+    exp = diff>0
+      ? '<span class="badge" style="background:rgba(255,255,255,.06);color:var(--t3)">📆 '+ds+' ('+diff+'일)</span>'
+      : '<span class="badge b-expired">📆 만료 ('+Math.abs(diff)+'일 경과)</span>';
   }
-  return planBadge + stBadge + expiry;
+  return pB+sB+exp;
 }
 
 function renderShops(list) {
   const p = document.getElementById('panel-shops');
   if (!list.length) { p.innerHTML='<div class="empty">등록된 업체가 없어요</div>'; return; }
-  const fallback = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 60'%3E%3Crect width='60' height='60' fill='%23222'/%3E%3Ctext x='30' y='38' font-size='24' text-anchor='middle'%3E💄%3C/text%3E%3C/svg%3E";
-  const thumb = s => s.thumbnail || (s.youtubeId ? 'https://img.youtube.com/vi/'+s.youtubeId+'/maxresdefault.jpg' : fallback);
-  p.innerHTML = list.map(s => \`
-    <div class="shop-card" id="card-\${s.id}">
-      <div class="sc-top">
-        <img class="sc-thumb" src="\${thumb(s)}" onerror="this.src='\${fallback}'"/>
-        <div class="sc-info">
-          <div class="sc-name">
-            \${s.name}
-            \${s.featured ? '<span class="badge b-feat">추천</span>' : ''}
-            \${!s.active  ? '<span class="badge b-hide">비공개</span>' : ''}
-          </div>
-          <div class="sc-cat">\${s.category}</div>
-          <div class="sc-addr">\${s.address||''}</div>
-          \${modeLabel(s.displayMode||'both')}
-        </div>
-      </div>
-      <!-- 플랜 + 결제상태 뱃지 -->
-      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
-        \${planLabel(s)}
-        \${s.paymentMemo ? \`<span class="badge" style="background:rgba(255,255,255,.06);color:rgba(255,255,255,.4);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="\${s.paymentMemo}">📝 \${s.paymentMemo}</span>\` : ''}
-      </div>
-      <div class="sc-fields">
-        <div class="sc-f">🎬 유튜브<strong>\${s.youtubeId||'미등록'}</strong></div>
-        <div class="sc-f">📅 예약URL<strong>\${s.smartPlaceUrl?'등록됨':'미등록'}</strong></div>
-        <div class="sc-f">👁 조회<strong>\${(s.views||0).toLocaleString()}</strong></div>
-        <div class="sc-f">📍 예약클릭<strong>\${((s.feedSP||0)+(s.mapSP||0)).toLocaleString()}</strong></div>
-      </div>
-      <div class="sc-btns">
-        <button class="btn-edit" data-id="\${s.id}" onclick="openModal(+this.dataset.id)"><i class="fas fa-edit"></i> 수정</button>
-        <button class="btn-pay-edit" data-id="\${s.id}" onclick="openPayModal(+this.dataset.id)"><i class="fas fa-credit-card"></i> 결제</button>
-        <button class="btn-del"  data-id="\${s.id}" data-name="\${s.name.replace(/"/g,'&quot;')}" onclick="delShop(+this.dataset.id,this.dataset.name)"><i class="fas fa-trash"></i></button>
-      </div>
-    </div>
-  \`).join('');
-}
-
-/* ═══════════════════════════════════════════════════════
-   통계 렌더 (전면 개선판)
-═══════════════════════════════════════════════════════ */
-let _statsData = null;
-let _dvRows    = [];
-let _chartMode = 'visit'; // 'visit' | 'view' | 'click'
-
-function renderStats(d, dvRows) {
-  _statsData = d;
-  _dvRows    = dvRows || [];
-  const p    = document.getElementById('panel-stats');
-
-  const todayStr  = new Date().toISOString().slice(0,10);
-  const yestStr   = new Date(Date.now()-86400000).toISOString().slice(0,10);
-  const todayRow  = _dvRows.find(r=>r.visit_date===todayStr);
-  const yestRow   = _dvRows.find(r=>r.visit_date===yestStr);
-  const todayVisit = todayRow ? (parseInt(todayRow.visit_cnt)||0) : 0;
-  const yestVisit  = yestRow  ? (parseInt(yestRow.visit_cnt)||0)  : 0;
-
-  const todayViews  = d.todayViews  || 0;
-  const todayClicks = (d.todayFeedSP||0) + (d.todayMapSP||0);
-  const yestViews   = d.yestViews   || 0;
-  const yestClicks  = (d.yestFeedSP||0) + (d.yestMapSP||0);
-
-  const todayLabel = new Date().toLocaleDateString('ko-KR',{month:'long',day:'numeric',weekday:'short'});
-
-  function kpiDelta(today, yest) {
-    if (yest===0 && today===0) return '<div class="st-kpi-vs flat">—</div>';
-    if (yest===0) return '<div class="st-kpi-vs up">▲ 새로운 기록</div>';
-    const diff = today - yest;
-    const pct  = Math.round(Math.abs(diff)/yest*100);
-    if (diff>0) return '<div class="st-kpi-vs up">▲ +' + diff.toLocaleString() + ' (' + pct + '%)</div>';
-    if (diff<0) return '<div class="st-kpi-vs down">▼ ' + diff.toLocaleString() + ' (' + pct + '%)</div>';
-    return '<div class="st-kpi-vs flat">— 어제와 동일</div>';
-  }
-
-  const kpiHtml =
-    '<div class="st-today-section">' +
-      '<div class="st-today-header">' +
-        '<span class="st-today-title">📅 오늘 통계</span>' +
-        '<span class="st-today-date">' + todayLabel + '</span>' +
-      '</div>' +
-      '<div class="st-kpi-grid">' +
-        '<div class="st-kpi kpi-view">' +
-          '<div class="st-kpi-val">' + todayVisit.toLocaleString() + '</div>' +
-          '<div class="st-kpi-lbl">🙋 방문자</div>' +
-          kpiDelta(todayVisit, yestVisit) +
-        '</div>' +
-        '<div class="st-kpi kpi-feed">' +
-          '<div class="st-kpi-val">' + todayViews.toLocaleString() + '</div>' +
-          '<div class="st-kpi-lbl">👁 영상조회</div>' +
-          kpiDelta(todayViews, yestViews) +
-        '</div>' +
-        '<div class="st-kpi kpi-map">' +
-          '<div class="st-kpi-val">' + todayClicks.toLocaleString() + '</div>' +
-          '<div class="st-kpi-lbl">📍 예약클릭</div>' +
-          kpiDelta(todayClicks, yestClicks) +
-        '</div>' +
-      '</div>' +
-    '</div>';
-
-  const chartHtml = buildChart(_chartMode);
-
-  const fallback = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 60'%3E%3Crect width='60' height='60' fill='%23222'/%3E%3Ctext x='30' y='38' font-size='24' text-anchor='middle'%3E%F0%9F%92%84%3C/text%3E%3C/svg%3E";
-  const list = d.stats || [];
-  let rankHtml;
-  if (!list.length) {
-    rankHtml = '<div class="empty" style="margin-top:0">아직 조회 데이터가 없어요</div>';
-  } else {
-    const rows = [...list]
-      .sort((a,b)=>(b.views+b.feedSP+b.mapSP)-(a.views+a.feedSP+a.mapSP))
-      .map((s,i) => {
-        const rc  = i===0?'rank1':i===1?'rank2':i===2?'rank3':'rankN';
-        const img = s.thumbnail || (s.youtubeId ? 'https://img.youtube.com/vi/'+s.youtubeId+'/maxresdefault.jpg' : fallback);
-        const total = (s.views||0)+(s.feedSP||0)+(s.mapSP||0);
-        return '<div class="stat-card">' +
-          '<img class="stat-thumb" src="' + img + '" onerror="this.src=this.dataset.fb" data-fb="' + fallback + '"/>' +
-          '<div class="stat-body">' +
-            '<div class="stat-top">' +
-              '<div class="stat-rank ' + rc + '">' + (i+1) + '</div>' +
-              '<div class="stat-name">' + s.name + '</div>' +
-              '<div style="font-size:10px;color:rgba(255,255,255,.25);font-weight:600;margin-left:auto;white-space:nowrap">합계 ' + total.toLocaleString() + '</div>' +
-            '</div>' +
-            '<div class="stat-nums">' +
-              '<div class="stat-num c-view"><div class="sn-n">' + (s.views||0).toLocaleString() + '</div><div class="sn-l">👁 영상</div></div>' +
-              '<div class="stat-num c-feed"><div class="sn-n">' + (s.feedSP||0).toLocaleString() + '</div><div class="sn-l">📹 피드</div></div>' +
-              '<div class="stat-num c-map"><div class="sn-n">'  + (s.mapSP||0).toLocaleString()  + '</div><div class="sn-l">🗺 지도</div></div>' +
-            '</div>' +
+  const fb="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 60'%3E%3Crect width='60' height='60' fill='%23222'/%3E%3Ctext x='30' y='38' font-size='24' text-anchor='middle'%3E%F0%9F%92%84%3C/text%3E%3C/svg%3E";
+  const thumb = s => s.thumbnail||(s.youtubeId?'https://img.youtube.com/vi/'+s.youtubeId+'/maxresdefault.jpg':fb);
+  p.innerHTML = '<div class="section-title">🏪 업체 목록 <span style="font-weight:500;font-size:10px">'+list.length+'개</span></div>' +
+  list.map(s => {
+    const totToday=(s.todayViews||0)+(s.todayFeedSP||0)+(s.todayMapSP||0);
+    return '<div class="shop-card" id="card-'+s.id+'">' +
+      '<div class="sc-top">' +
+        '<img class="sc-thumb" src="'+thumb(s)+'" onerror="this.src=this.dataset.fb" data-fb="'+fb+'"/>' +
+        '<div class="sc-info">' +
+          '<div class="sc-name">'+s.name+
+            (s.featured?'<span class="badge b-feat">추천</span>':'')+
+            (!s.active?'<span class="badge b-hide">비공개</span>':'') +
           '</div>' +
-        '</div>';
-      });
-    rankHtml = '<div class="sec-label" style="margin-top:16px">🏆 누적 업체 랭킹</div>' + rows.join('');
-  }
-
-  p.innerHTML = kpiHtml + chartHtml + rankHtml;
-}
-
-/* ── 일별 통합 차트 (방문/영상/클릭 탭 전환) ── */
-function buildChart(mode) {
-  const today = new Date();
-  const days  = [];
-  for (let i=13; i>=0; i--) {
-    const d = new Date(today);
-    d.setDate(today.getDate()-i);
-    days.push(d.toISOString().slice(0,10));
-  }
-  const todayStr = today.toISOString().slice(0,10);
-
-  let counts, barClass, label14, totalSuffix;
-  if (mode === 'visit') {
-    const map = {};
-    _dvRows.forEach(r=>{ map[r.visit_date]=parseInt(r.visit_cnt)||0; });
-    counts      = days.map(d=>map[d]||0);
-    barClass    = 'visit-bar';
-    label14     = '🙋 방문자 (14일)';
-    totalSuffix = '명';
-  } else if (mode === 'view') {
-    const chart = (_statsData && _statsData.weekChart) || [];
-    const map = {};
-    chart.forEach(r=>{ map[r.date]=parseInt(r.views)||0; });
-    counts      = days.map(d=>map[d]||0);
-    barClass    = 'view-bar';
-    label14     = '👁 영상조회 (14일)';
-    totalSuffix = '회';
-  } else {
-    const chart = (_statsData && _statsData.weekChart) || [];
-    const map = {};
-    chart.forEach(r=>{ map[r.date]=(parseInt(r.feedSP)||0)+(parseInt(r.mapSP)||0); });
-    counts      = days.map(d=>map[d]||0);
-    barClass    = 'click-bar';
-    label14     = '📍 예약클릭 (14일)';
-    totalSuffix = '회';
-  }
-
-  const maxCnt   = Math.max(...counts, 1);
-  const totalVal = counts.reduce((a,b)=>a+b,0);
-  const barsHtml = days.map((d,i)=>{
-    const cnt     = counts[i];
-    const h       = Math.max(Math.round((cnt/maxCnt)*64), cnt>0?4:2);
-    const isToday = d===todayStr;
-    const label   = d.slice(5);
-    return '<div class="dv-bar-wrap">' +
-      '<div class="dv-bar-cnt">' + (cnt>0?cnt:'') + '</div>' +
-      '<div class="dv-bar ' + (isToday?'dv-today-bar':barClass) + '" style="height:' + h + 'px"></div>' +
-      '<div class="dv-bar-date">' + (isToday?'오늘':label) + '</div>' +
+          '<div class="sc-cat">'+s.category+'</div>' +
+          '<div class="sc-addr">'+( s.address||'')+'</div>' +
+          modeLabel(s.displayMode||'both') +
+        '</div>' +
+      '</div>' +
+      '<div class="sc-mid">'+planBadge(s)+
+        (s.paymentMemo?'<span class="badge" style="background:rgba(255,255,255,.05);color:var(--t3);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+s.paymentMemo+'">📝 '+s.paymentMemo+'</span>':'')+
+      '</div>' +
+      '<div class="sc-nums">' +
+        '<div class="sc-num c-view"><div class="sn-v">'+(s.views||0).toLocaleString()+'</div><div class="sn-l">👁 누적조회</div></div>' +
+        '<div class="sc-num c-feed"><div class="sn-v">'+(s.feedSP||0).toLocaleString()+'</div><div class="sn-l">📹 피드클릭</div></div>' +
+        '<div class="sc-num c-map"><div class="sn-v">'+(s.mapSP||0).toLocaleString()+'</div><div class="sn-l">🗺 지도클릭</div></div>' +
+      '</div>' +
+      (totToday>0?'<div style="margin-top:8px;padding:6px 10px;background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.2);border-radius:8px;font-size:10px;color:#f59e0b;font-weight:700">오늘 👁'+( s.todayViews||0)+' 📹'+(s.todayFeedSP||0)+' 🗺️'+(s.todayMapSP||0)+'</div>':'') +
+      '<div class="sc-btns">' +
+        '<button class="btn-edit" data-id="'+s.id+'" onclick="openModal(+this.dataset.id)"><i class="fas fa-edit"></i> 수정</button>' +
+        '<button class="btn-pay-edit" data-id="'+s.id+'" onclick="openPayModal(+this.dataset.id)"><i class="fas fa-credit-card"></i> 결제</button>' +
+        '<button class="btn-del" data-id="'+s.id+'" data-name="'+s.name.replace(/"/g,'&quot;')+'" onclick="delShop(+this.dataset.id,this.dataset.name)"><i class="fas fa-trash"></i></button>' +
+      '</div>' +
     '</div>';
   }).join('');
-
-  const empty  = counts.every(c=>c===0);
-  const tabOn  = { visit:'on-visit', view:'on-view', click:'on-click' };
-
-  return '<div class="dv-section">' +
-    '<div class="dv-header">' +
-      '<span class="dv-title">' + label14 +
-        ' <span style="font-size:10px;color:rgba(255,255,255,.3);font-weight:500">누적 ' + totalVal.toLocaleString() + totalSuffix + '</span></span>' +
-      '<button class="dv-reset-btn" onclick="confirmReset()">🗑 초기화</button>' +
-    '</div>' +
-    '<div class="dv-chart-tabs">' +
-      '<button class="dv-ctab ' + (mode==='visit'?tabOn.visit:'') + '" data-m="visit" onclick="switchChart(this.dataset.m)">🙋 방문</button>' +
-      '<button class="dv-ctab ' + (mode==='view'?tabOn.view:'')   + '" data-m="view" onclick="switchChart(this.dataset.m)">👁 영상</button>' +
-      '<button class="dv-ctab ' + (mode==='click'?tabOn.click:'') + '" data-m="click" onclick="switchChart(this.dataset.m)">📍 클릭</button>' +
-    '</div>' +
-    (empty
-      ? '<div class="dv-empty">데이터가 쌓이면 여기에 표시돼요</div>'
-      : '<div class="dv-bars">' + barsHtml + '</div>') +
-    '<div class="dv-legend">🟡 오늘 · 나머지는 해당 유형 색상</div>' +
-  '</div>';
 }
 
-function switchChart(mode) {
-  _chartMode = mode;
-  if (_statsData) renderStats(_statsData, _dvRows);
-}
+// ======================================================
+// 구독관리 탭
+// ======================================================
+let payFilter='all';
+function renderPayTab(filter) {
+  if (filter!==undefined) payFilter=filter;
+  const p = document.getElementById('panel-pay');
+  const list = shopData;
+  if (!list.length) { p.innerHTML='<div class="empty">등록된 업체가 없어요</div>'; return; }
+  const fb="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 60'%3E%3Crect width='60' height='60' fill='%23222'/%3E%3Ctext x='30' y='38' font-size='24' text-anchor='middle'%3E%F0%9F%92%84%3C/text%3E%3C/svg%3E";
 
-/* ── 통계 초기화 확인 ── */
-async function confirmReset() {
-  if (!confirm('⚠️ 오늘하루 통계를 초기화할게요? (방문자 · 영상조회 · 예약클릭 모두 0으로 리셋)')) return;
-  const r = await fetch('/api/admin/reset-stats', { method: 'POST' });
-  if (r.ok) {
-    showPayToast('✅ 통계가 초기화되었습니다');
-    loadAll();
-  } else {
-    showPayToast('❌ 초기화 실패');
-  }
-}
+  const paid=list.filter(s=>s.paymentStatus==='paid').length;
+  const free=list.filter(s=>s.paymentStatus==='free').length;
+  const unpaid=list.filter(s=>s.paymentStatus==='unpaid').length;
+  const expired=list.filter(s=>s.paymentStatus==='expired').length;
+  const soon=list.filter(s=>{
+    if(!s.paidUntil)return false;
+    const d=Math.ceil((new Date(s.paidUntil)-new Date())/86400000);
+    return d>=0&&d<=30;
+  }).length;
 
-/* ═══════════════════════════════════════════════════════
-   노출 방식 선택
-═══════════════════════════════════════════════════════ */
-function setMode(m) {
-  document.getElementById('f-mode').value = m;
-  ['both','feed','map'].forEach(x => {
-    const el = document.getElementById('mo-'+x);
-    el.className = 'mode-opt' + (x===m ? ' sel-'+x : '');
+  let filtered=list;
+  if (payFilter==='paid')    filtered=list.filter(s=>s.paymentStatus==='paid');
+  else if(payFilter==='free')    filtered=list.filter(s=>s.paymentStatus==='free');
+  else if(payFilter==='unpaid')  filtered=list.filter(s=>s.paymentStatus==='unpaid');
+  else if(payFilter==='expired') filtered=list.filter(s=>s.paymentStatus==='expired');
+  else if(payFilter==='soon')    filtered=list.filter(s=>{
+    if(!s.paidUntil)return false;
+    const d=Math.ceil((new Date(s.paidUntil)-new Date())/86400000);
+    return d>=0&&d<=30;
   });
+
+  filtered=[...filtered].sort((a,b)=>{
+    const o={expired:0,unpaid:1,free:2,paid:3};
+    const ao=o[a.paymentStatus]??9, bo=o[b.paymentStatus]??9;
+    if(ao!==bo)return ao-bo;
+    if(a.paidUntil&&b.paidUntil)return new Date(a.paidUntil)-new Date(b.paidUntil);
+    return 0;
+  });
+
+  const fbtns=[
+    {k:'all',l:'전체 '+list.length},
+    {k:'paid',l:'✅ 결제 '+paid},
+    {k:'free',l:'🎁 무료 '+free},
+    {k:'unpaid',l:'💳 미결제 '+unpaid},
+    {k:'expired',l:'⚠️ 만료 '+expired},
+    {k:'soon',l:'🔔 임박 '+soon},
+  ].map(b=>'<button class="pf-btn'+(payFilter===b.k?' on':'')+'" data-k="'+b.k+'" onclick="renderPayTab(this.dataset.k)">'+b.l+'</button>').join('');
+
+  const stMap={paid:'✅ 결제완료',free:'🎁 무료기간',unpaid:'💳 미결제',expired:'⚠️ 만료'};
+  const stColor={paid:'var(--green)',free:'var(--blue)',unpaid:'#FFA500',expired:'var(--pink)'};
+
+  const cards=filtered.map(s=>{
+    const img=s.thumbnail||(s.youtubeId?'https://img.youtube.com/vi/'+s.youtubeId+'/maxresdefault.jpg':fb);
+    const plan=s.plan||'basic', st=s.paymentStatus||'unpaid';
+    let expHtml='<strong>미설정</strong>';
+    if(s.paidUntil){
+      const d=new Date(s.paidUntil),diff=Math.ceil((d-new Date())/86400000);
+      const ds=d.toLocaleDateString('ko-KR',{year:'2-digit',month:'2-digit',day:'2-digit'});
+      if(diff>30) expHtml='<strong style="color:var(--green)">'+ds+'</strong>';
+      else if(diff>0) expHtml='<strong style="color:#FFA500">'+ds+' ('+diff+'일 남음)</strong>';
+      else expHtml='<strong style="color:var(--pink)">'+ds+' ('+Math.abs(diff)+'일 경과)</strong>';
+    }
+    return '<div class="pay-card status-'+st+'">' +
+      '<div class="pay-top">' +
+        '<img class="pay-thumb" src="'+img+'" onerror="this.src=this.dataset.fb" data-fb="'+fb+'"/>' +
+        '<div class="pay-info">' +
+          '<div class="pay-name">'+s.name+'</div>' +
+          '<div class="pay-sub">'+s.category+' · '+(s.district||'')+'</div>' +
+          '<div class="pay-badges">' +
+            (plan==='shoot'?'<span class="badge b-plan-shoot">🎬 촬영플랜</span>':'<span class="badge b-plan-basic">📍 기본플랜</span>') +
+            '<span class="badge" style="background:rgba(255,255,255,.06);color:'+( stColor[st]||'#fff')+'">'+( stMap[st]||st)+'</span>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="pay-body">' +
+        '<div class="pay-kv">📆 만료일'+expHtml+'</div>' +
+        '<div class="pay-kv">📋 플랜<strong>'+(plan==='shoot'?'촬영 (3만+월1만)':'기본 (월1만)')+'</strong></div>' +
+      '</div>' +
+      (s.paymentMemo?'<div class="pay-memo"><i class="fas fa-sticky-note" style="color:var(--t4);flex-shrink:0;margin-top:1px"></i><span>'+s.paymentMemo+'</span></div>':'') +
+      '<div class="pay-btns"><button class="btn-pay-edit" data-id="'+s.id+'" onclick="openPayModal(+this.dataset.id)"><i class="fas fa-edit"></i> 결제 정보 수정</button></div>' +
+    '</div>';
+  }).join('')||'<div class="empty">해당 항목이 없어요</div>';
+
+  p.innerHTML =
+    '<div class="section-title">💳 구독 현황</div>' +
+    '<div class="pay-summary">' +
+      '<div class="pay-sv"><div class="pay-sv-n" style="color:var(--green)">'+paid+'</div><div class="pay-sv-l">✅ 결제완료</div></div>' +
+      '<div class="pay-sv"><div class="pay-sv-n" style="color:var(--blue)">'+free+'</div><div class="pay-sv-l">🎁 무료기간</div></div>' +
+      '<div class="pay-sv"><div class="pay-sv-n" style="color:#FFA500">'+unpaid+'</div><div class="pay-sv-l">💳 미결제</div></div>' +
+      '<div class="pay-sv"><div class="pay-sv-n" style="color:var(--pink)">'+expired+'</div><div class="pay-sv-l">⚠️ 만료</div></div>' +
+    '</div>' +
+    '<div class="pay-filter">'+fbtns+'</div>' +
+    cards;
 }
 
-/* ═══════════════════════════════════════════════════════
-   썸네일
-═══════════════════════════════════════════════════════ */
-function handleThumbFile(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = ev => {
-    thumbDataUrl = ev.target.result;
-    document.getElementById('f-thumb').value = '';
-    document.getElementById('thumbPreview').src = thumbDataUrl;
-  };
+// ── 결제 모달
+function openPayModal(id) {
+  const s=shopData.find(x=>x.id===id); if(!s)return;
+  payEditId=id;
+  document.getElementById('pmShopName').textContent=s.name+' · '+(s.category||'');
+  setPmPlan(s.plan||'basic'); setPmStatus(s.paymentStatus||'unpaid');
+  document.getElementById('pm-until').value=s.paidUntil?s.paidUntil.slice(0,10):'';
+  document.getElementById('pm-memo').value=s.paymentMemo||'';
+  document.getElementById('payModalBg').classList.remove('hidden');
+}
+function closePayModal(){document.getElementById('payModalBg').classList.add('hidden');}
+function setPmPlan(plan){
+  pmPlan=plan;
+  ['shoot','basic'].forEach(k=>{document.getElementById('pm-plan-'+k).className='pm-plan-opt'+(k===plan?' sel-'+k:'');});
+}
+function setPmStatus(st){
+  pmStatus=st;
+  ['paid','free','unpaid','expired'].forEach(k=>{document.getElementById('pm-st-'+k).className='pm-status-opt'+(k===st?' sel-'+k:'');});
+}
+function addMonths(n){
+  const base=document.getElementById('pm-until').value?new Date(document.getElementById('pm-until').value):new Date();
+  base.setMonth(base.getMonth()+n);
+  document.getElementById('pm-until').value=base.toISOString().slice(0,10);
+}
+async function savePayment(){
+  if(!payEditId)return;
+  const body={plan:pmPlan,paymentStatus:pmStatus,paidUntil:document.getElementById('pm-until').value||null,paymentMemo:document.getElementById('pm-memo').value.trim()};
+  const r=await fetch('/api/admin/shops/'+payEditId+'/payment',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(r.ok){closePayModal();await loadAll();if(curTab==='pay')renderPayTab();toast('결제 정보가 저장됐어요');}
+  else alert('저장 실패: '+r.status);
+}
+
+// ======================================================
+// 입점문의
+// ======================================================
+async function loadInquiries(){
+  const p=document.getElementById('panel-inq');
+  p.innerHTML='<div class="empty"><i class="fas fa-spinner fa-spin"></i></div>';
+  const rows=await(await fetch('/api/admin/inquiries')).json();
+  if(!rows.length){p.innerHTML='<div class="empty">📭 접수된 입점문의가 없어요</div>';return;}
+  p.innerHTML='<div class="section-title">📬 입점 문의</div>'+rows.map(r=>{
+    const d=new Date(r.created_at);
+    const dt=d.toLocaleDateString('ko-KR',{month:'2-digit',day:'2-digit'})+' '+d.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+    return '<div class="inq-card"><div class="inq-top"><span class="inq-name">'+(r.owner||r.name||'이름없음')+'</span>'+(r.category?'<span class="inq-badge">'+r.category+'</span>':'')+'<span class="inq-time">'+dt+'</span></div><div class="inq-row"><span class="inq-kv">🏪 샵명 <strong>'+(r.name||'-')+'</strong></span><span class="inq-kv">📍 지역 <strong>'+(r.area||'-')+'</strong></span><span class="inq-kv">📞 <strong>'+(r.phone||'-')+'</strong></span></div>'+(r.url?'<div class="inq-row"><span class="inq-kv">🔗 <strong style="color:var(--blue)">'+r.url+'</strong></span></div>':'')+(r.message?'<div class="inq-msg">💬 '+r.message+'</div>':'')+'</div>';
+  }).join('');
+}
+
+// ======================================================
+// 업체 추가/수정 모달
+// ======================================================
+function openModal(id) {
+  editId=id||null;
+  document.getElementById('modalTtl').textContent=id?'업체 수정':'업체 추가';
+  if(id){
+    const s=shopData.find(x=>x.id===id); if(!s)return;
+    document.getElementById('f-name').value=s.name||'';
+    document.getElementById('f-cat').value=s.category||'마사지';
+    document.getElementById('f-price').value=s.priceRange||'';
+    document.getElementById('f-thumb').value=s.thumbnail||'';
+    document.getElementById('thumbPreview').src=s.thumbnail||(s.youtubeId?'https://img.youtube.com/vi/'+s.youtubeId+'/maxresdefault.jpg':'');
+    document.getElementById('f-yt').value=s.youtubeId||'';
+    document.getElementById('f-addr').value=s.address||'';
+    document.getElementById('f-dist').value=s.district||'';
+    document.getElementById('f-phone').value=s.phone||'';
+    document.getElementById('f-lat').value=s.lat||'';
+    document.getElementById('f-lng').value=s.lng||'';
+    document.getElementById('f-url').value=s.smartPlaceUrl||'';
+    document.getElementById('f-tags').value=(s.tags||[]).join(', ');
+    document.getElementById('f-desc').value=s.description||'';
+    document.getElementById('f-feat').value=String(s.featured||false);
+    document.getElementById('f-active').value=String(s.active!==false);
+    setMode(s.displayMode||'both');
+    thumbDataUrl='';
+    previewYt(s.youtubeId||'');
+  } else {
+    ['f-name','f-price','f-thumb','f-yt','f-addr','f-dist','f-phone','f-tags','f-desc'].forEach(id=>{document.getElementById(id).value='';});
+    document.getElementById('f-lat').value=''; document.getElementById('f-lng').value='';
+    document.getElementById('f-cat').value='마사지';
+    document.getElementById('f-feat').value='false'; document.getElementById('f-active').value='true';
+    document.getElementById('thumbPreview').src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 60 60%22%3E%3Crect width=%2260%22 height=%2260%22 fill=%22%23222%22/%3E%3Ctext x=%2230%22 y=%2238%22 font-size=%2224%22 text-anchor=%22middle%22%3E%F0%9F%93%B7%3C/text%3E%3C/svg%3E';
+    setMode('both'); thumbDataUrl='';
+    document.getElementById('ytPreview').style.display='none';
+  }
+  document.getElementById('modalBg').classList.remove('hidden');
+}
+function closeModal(){document.getElementById('modalBg').classList.add('hidden');}
+function bgClick(e){if(e.target===document.getElementById('modalBg'))closeModal();}
+
+function setMode(m){
+  document.getElementById('f-mode').value=m;
+  ['both','feed','map'].forEach(x=>{document.getElementById('mo-'+x).className='mode-opt'+(x===m?' sel-'+x:'');});
+  const isMap=m==='map';
+  ['ytField'].forEach(id=>{document.getElementById(id).style.display=isMap?'none':'block';});
+  ['addrField','distRow','latRow'].forEach(id=>{document.getElementById(id).style.display='block';});
+}
+
+function handleThumbFile(e){
+  const file=e.target.files[0]; if(!file)return;
+  const reader=new FileReader();
+  reader.onload=ev=>{thumbDataUrl=ev.target.result;document.getElementById('f-thumb').value='';document.getElementById('thumbPreview').src=thumbDataUrl;};
   reader.readAsDataURL(file);
 }
+function updateThumbPreview(v){if(v)document.getElementById('thumbPreview').src=v;}
+function previewYt(v){
+  const id=v?extractYtId(v):'';
+  const el=document.getElementById('ytPreview');
+  if(id){el.style.display='block';document.getElementById('ytFrame').src='https://www.youtube.com/embed/'+id+'?mute=1';}
+  else el.style.display='none';
+}
+function extractYtId(s){
+  s=s.trim();
+  if(/^[A-Za-z0-9_-]{11}$/.test(s))return s;
+  const m=s.match(new RegExp('(?:v=|youtu\\.be/|embed/)([A-Za-z0-9_-]{11})'));
+  return m?m[1]:'';
+}
 
-function updateThumbPreview(url) {
-  thumbDataUrl = '';
-  if (url.trim()) {
-    document.getElementById('thumbPreview').src = url.trim();
+async function geocodeAddr(){
+  const addr=document.getElementById('f-addr').value.trim();
+  if(!addr)return;
+  const btn=document.getElementById('geoBtn'), st=document.getElementById('geoStatus');
+  btn.disabled=true; btn.textContent='검색중...';
+  st.style.display='block'; st.style.color='rgba(255,255,255,.4)'; st.textContent='좌표를 검색하는 중...';
+  try{
+    const r=await fetch('/api/geocode?q='+encodeURIComponent(addr));
+    const d=await r.json();
+    if(d.lat&&d.lng){
+      document.getElementById('f-lat').value=d.lat;
+      document.getElementById('f-lng').value=d.lng;
+      if(d.district)document.getElementById('f-dist').value=d.district;
+      st.style.color='#03C75A'; st.textContent='좌표 확인: '+d.lat+', '+d.lng;
+    } else { st.style.color='var(--pink)'; st.textContent='주소를 찾을 수 없어요'; }
+  } catch { st.style.color='var(--pink)'; st.textContent='오류가 발생했어요'; }
+  btn.disabled=false; btn.innerHTML='<i class="fas fa-crosshairs"></i> 좌표찾기';
+}
+
+async function saveShop(){
+  const name=document.getElementById('f-name').value.trim();
+  const addr=document.getElementById('f-addr').value.trim();
+  const mode=document.getElementById('f-mode').value;
+  if(!name){alert('업체명을 입력해주세요');return;}
+  if((mode==='both'||mode==='map')&&!addr){alert('주소를 입력해주세요');return;}
+  let thumbUrl=document.getElementById('f-thumb').value.trim();
+  if(thumbDataUrl){
+    try{
+      const ur=await fetch('/api/admin/upload-thumbnail',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:thumbDataUrl})});
+      const ud=await ur.json(); if(ud.url)thumbUrl=ud.url;
+    }catch{}
   }
-}
-
-/* ═══════════════════════════════════════════════════════
-   유튜브
-═══════════════════════════════════════════════════════ */
-function extractYoutubeId(input) {
-  const s = (input||'').trim();
-  if (!s) return '';
-  if (/^[A-Za-z0-9_-]{11}$/.test(s)) return s;
-  const re = new RegExp('(?:youtu\\.be/|youtube\\.com/(?:watch\\?(?:.*&)?v=|embed/|shorts/|v/))([A-Za-z0-9_-]{11})');
-  const m = s.match(re);
-  return m ? m[1] : s;
-}
-
-function previewYt(input) {
-  const id  = extractYoutubeId(input);
-  const box = document.getElementById('ytPreview');
-  if (!id) { box.style.display='none'; return; }
-  box.style.display='block';
-  document.getElementById('ytFrame').src =
-    'https://www.youtube.com/embed/'+id+'?mute=1&controls=1';
-}
-
-/* ═══════════════════════════════════════════════════════
-   지오코딩
-═══════════════════════════════════════════════════════ */
-async function geocodeAddr() {
-  const addr = document.getElementById('f-addr').value.trim();
-  if (!addr) { alert('주소를 먼저 입력하세요'); return; }
-  const btn = document.getElementById('geoBtn');
-  const st  = document.getElementById('geoStatus');
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 검색중...';
-  st.style.display = 'block';
-  st.style.color   = 'rgba(255,255,255,.4)';
-  st.textContent   = '주소를 검색하고 있어요...';
-  try {
-    const res  = await fetch('/api/geocode?query='+encodeURIComponent(addr));
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error||'찾을 수 없어요');
-    document.getElementById('f-lat').value  = data.lat;
-    document.getElementById('f-lng').value  = data.lng;
-    document.getElementById('f-addr').value = data.address;
-    if (data.district && !document.getElementById('f-dist').value)
-      document.getElementById('f-dist').value = data.district;
-    st.style.color = '#03C75A';
-    st.textContent = '✅ 좌표 입력 완료! 위도 '+data.lat.toFixed(6)+' / 경도 '+data.lng.toFixed(6);
-  } catch(err) {
-    st.style.color = '#FF4D7D';
-    st.textContent = '❌ '+err.message;
-  }
-  btn.disabled = false;
-  btn.innerHTML = '<i class="fas fa-crosshairs"></i> 좌표찾기';
-}
-
-/* ═══════════════════════════════════════════════════════
-   모달 열기/닫기
-═══════════════════════════════════════════════════════ */
-const FALLBACK_SVG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 60'%3E%3Crect width='60' height='60' fill='%23222'/%3E%3Ctext x='30' y='38' font-size='24' text-anchor='middle'%3E📷%3C/text%3E%3C/svg%3E";
-
-async function openModal(id=null) {
-  editId = id;
-  thumbDataUrl = '';
-  document.getElementById('modalTtl').textContent = id ? '업체 수정' : '업체 추가';
-
-  // 초기화
-  ['name','addr','dist','phone','yt','url','tags','desc'].forEach(k =>
-    document.getElementById('f-'+k).value = '');
-  document.getElementById('f-price').value  = '';
-  document.getElementById('f-lat').value    = '';
-  document.getElementById('f-lng').value    = '';
-  document.getElementById('f-feat').value   = 'false';
-  document.getElementById('f-active').value = 'true';
-  document.getElementById('f-thumb').value  = '';
-  document.getElementById('f-cat').value    = '마사지';
-  document.getElementById('thumbPreview').src = FALLBACK_SVG;
-  document.getElementById('ytPreview').style.display = 'none';
-  document.getElementById('geoStatus').style.display = 'none';
-  document.getElementById('thumbFile').value = '';
-  setMode('both');
-
-  if (id) {
-    const s = await (await fetch('/api/shops/'+id)).json();
-    document.getElementById('f-name').value  = s.name||'';
-    document.getElementById('f-cat').value   = s.category||'마사지';
-    document.getElementById('f-price').value = s.price||'';
-    document.getElementById('f-addr').value  = s.address||'';
-    document.getElementById('f-dist').value  = s.district||'';
-    document.getElementById('f-phone').value = s.phone||'';
-    document.getElementById('f-lat').value   = s.lat||'';
-    document.getElementById('f-lng').value   = s.lng||'';
-    document.getElementById('f-yt').value    = s.youtubeId||'';
-    document.getElementById('f-url').value   = s.smartPlaceUrl||'';
-    document.getElementById('f-thumb').value = s.thumbnail||'';
-    document.getElementById('f-tags').value  = (s.tags||[]).join(', ');
-    document.getElementById('f-desc').value  = s.desc||'';
-    document.getElementById('f-feat').value  = String(s.featured||false);
-    document.getElementById('f-active').value= String(s.active!==false);
-    setMode(s.displayMode||'both');
-    // 썸네일 미리보기
-    const th = s.thumbnail || (s.youtubeId ? 'https://img.youtube.com/vi/'+s.youtubeId+'/maxresdefault.jpg' : FALLBACK_SVG);
-    document.getElementById('thumbPreview').src = th;
-    if (s.youtubeId) previewYt(s.youtubeId);
-  }
-
-  document.getElementById('modalBg').classList.remove('hidden');
-  document.getElementById('modal').scrollTop = 0;
-}
-
-function closeModal() { document.getElementById('modalBg').classList.add('hidden'); }
-function bgClick(e)   { if (e.target===document.getElementById('modalBg')) closeModal(); }
-
-/* ═══════════════════════════════════════════════════════
-   저장
-═══════════════════════════════════════════════════════ */
-async function saveShop() {
-  const name = document.getElementById('f-name').value.trim();
-  const lat  = document.getElementById('f-lat').value.trim();
-  const lng  = document.getElementById('f-lng').value.trim();
-  if (!name)      { alert('업체명을 입력하세요'); return; }
-  if (!lat||!lng) { alert('주소를 입력하고 [좌표찾기]를 눌러주세요'); return; }
-
-  // 썸네일: 파일 업로드 우선, 없으면 URL
-  let thumbnail = thumbDataUrl || document.getElementById('f-thumb').value.trim();
-
-  const body = {
-    name,
-    category:     document.getElementById('f-cat').value,
-    price:        document.getElementById('f-price').value.trim(),
-    address:      document.getElementById('f-addr').value.trim(),
-    district:     document.getElementById('f-dist').value.trim(),
-    phone:        document.getElementById('f-phone').value.trim(),
-    lat:          parseFloat(lat),
-    lng:          parseFloat(lng),
-    youtubeId:    extractYoutubeId(document.getElementById('f-yt').value),
+  const body={
+    name,category:document.getElementById('f-cat').value,
+    priceRange:document.getElementById('f-price').value.trim(),
+    thumbnail:thumbUrl,youtubeId:extractYtId(document.getElementById('f-yt').value),
+    address:addr,district:document.getElementById('f-dist').value.trim(),
+    phone:document.getElementById('f-phone').value.trim(),
+    lat:parseFloat(document.getElementById('f-lat').value)||null,
+    lng:parseFloat(document.getElementById('f-lng').value)||null,
     smartPlaceUrl:document.getElementById('f-url').value.trim(),
-    thumbnail,
-    tags:         document.getElementById('f-tags').value.split(',').map(t=>t.trim()).filter(Boolean),
-    desc:         document.getElementById('f-desc').value.trim(),
-    featured:     document.getElementById('f-feat').value==='true',
-    active:       document.getElementById('f-active').value==='true',
-    displayMode:  document.getElementById('f-mode').value,
+    tags:document.getElementById('f-tags').value.split(',').map(t=>t.trim()).filter(Boolean),
+    description:document.getElementById('f-desc').value.trim(),
+    featured:document.getElementById('f-feat').value==='true',
+    active:document.getElementById('f-active').value==='true',
+    displayMode:mode,
   };
-
-  const url    = editId ? '/api/admin/shops/'+editId : '/api/admin/shops';
-  const method = editId ? 'PUT' : 'POST';
-  const r = await fetch(url, {
-    method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
-  });
-  if (r.ok) {
-    // 파일 업로드한 경우 별도 API 호출
-    if (thumbDataUrl && editId) {
-      const saved = await r.json();
-      await fetch('/api/admin/upload-thumbnail', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ shopId: saved.id||editId, dataUrl: thumbDataUrl })
-      });
-    }
-    closeModal();
-    loadAll();
-  } else { alert('저장 실패: '+r.status); }
+  const url=editId?'/api/admin/shops/'+editId:'/api/admin/shops';
+  const method=editId?'PUT':'POST';
+  const r=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(r.ok){closeModal();await loadAll();toast(editId?'업체가 수정됐어요':'업체가 추가됐어요');}
+  else alert('저장 실패: '+r.status);
 }
 
-/* ═══════════════════════════════════════════════════════
-   삭제
-═══════════════════════════════════════════════════════ */
-async function delShop(id, name) {
-  if (!confirm(\`[\${name}] 업체를 삭제할까요?\`)) return;
-  const r = await fetch('/api/admin/shops/'+id, {method:'DELETE'});
-  if (r.ok) loadAll();
-  else alert('삭제 실패');
+async function delShop(id,name){
+  if(!confirm('['+name+'] 업체를 삭제할까요?'))return;
+  const r=await fetch('/api/admin/shops/'+id,{method:'DELETE'});
+  if(r.ok)loadAll(); else alert('삭제 실패');
 }
 
 /* 시작 */
@@ -4133,6 +3840,5 @@ setInterval(loadAll, 30000);
 </body>
 </html>`
 }
-
 
 export default app
