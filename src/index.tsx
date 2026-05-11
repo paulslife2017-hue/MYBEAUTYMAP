@@ -156,22 +156,46 @@ app.get('/api/shops', async (c) => {
 app.get('/api/geocode', async (c) => {
   const query = c.req.query('query') ?? ''
   if (!query) return c.json({ error: 'query required' }, 400)
-  try {
+
+  // 네이버 Geocode API는 "로/길 + 공백 + 숫자" 사이 공백이 있으면 못 찾는 버그가 있음
+  // 예: "서현로210번길 2" → "서현로210번길2" 로 붙여야 인식
+  // 전처리: (로|길|번길) + 공백 + 숫자 → 공백 제거
+  const normalize = (q: string) =>
+    q.replace(/(로|길|번길)\s+(\d)/g, '$1$2')
+
+  // 재시도 후보 목록 생성
+  // 1) 전처리된 쿼리, 2) 원본, 3) 뒤 토큰 하나씩 제거(건물명 등 제거용)
+  const candidates: string[] = []
+  const norm = normalize(query)
+  if (norm !== query) candidates.push(norm)   // 전처리 버전 우선
+  candidates.push(query)                       // 원본
+  // 마지막 토큰 제거한 버전도 추가 (건물명 붙어있는 경우 대비)
+  const tokens = norm.trim().split(/\s+/)
+  if (tokens.length > 3) candidates.push(tokens.slice(0, -1).join(' '))
+
+  const ncpFetch = async (q: string) => {
     const res = await fetch(
-      `https://maps.apigw.ntruss.com/map-geocode/v2/geocode?query=${encodeURIComponent(query)}`,
+      `https://maps.apigw.ntruss.com/map-geocode/v2/geocode?query=${encodeURIComponent(q)}`,
       { headers: {
         'X-NCP-APIGW-API-KEY-ID': 'xjjg4490h8',
         'X-NCP-APIGW-API-KEY':    'RB4DFA4ZEF2iHtkerlNrqzoG8P8YHwE2UddGrAtD',
       }}
     )
-    const data = await res.json() as any
-    if (!data.addresses?.length) return c.json({ error: '주소를 찾을 수 없어요' }, 404)
-    const addr = data.addresses[0]
-    // 시/도 + 구 + 동 조합 (예: 서울시 강남구 논현동)
+    return res.json() as Promise<any>
+  }
+
+  try {
+    let addr: any = null
+    for (const candidate of candidates) {
+      const data = await ncpFetch(candidate)
+      if (data.addresses?.length) { addr = data.addresses[0]; break }
+    }
+    if (!addr) return c.json({ error: '주소를 찾을 수 없어요' }, 404)
+
     const elements = addr.addressElements || []
-    const sido   = elements.find((e:any) => e.types?.includes('SIDO'))?.longName || ''
-    const sigungu= elements.find((e:any) => e.types?.includes('SIGUGUN'))?.longName || ''
-    const dong   = elements.find((e:any) => e.types?.includes('DONGMYUN') || e.types?.includes('RI'))?.longName || ''
+    const sido    = elements.find((e:any) => e.types?.includes('SIDO'))?.longName || ''
+    const sigungu = elements.find((e:any) => e.types?.includes('SIGUGUN'))?.longName || ''
+    const dong    = elements.find((e:any) => e.types?.includes('DONGMYUN') || e.types?.includes('RI'))?.longName || ''
     const district = [sido, sigungu, dong].filter(Boolean).join(' ')
       || addr.roadAddress?.split(' ').slice(0,3).join(' ') || ''
     return c.json({
@@ -4102,7 +4126,7 @@ async function geocodeAddr(){
   btn.disabled=true; btn.textContent='검색중...';
   st.style.display='block'; st.style.color='rgba(255,255,255,.4)'; st.textContent='좌표를 검색하는 중...';
   try{
-    const r=await fetch('/api/geocode?q='+encodeURIComponent(addr));
+    const r=await fetch('/api/geocode?query='+encodeURIComponent(addr));
     const d=await r.json();
     if(d.lat&&d.lng){
       document.getElementById('f-lat').value=d.lat;
