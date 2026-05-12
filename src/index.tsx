@@ -814,6 +814,15 @@ app.get('/robots.txt', (c) => {
   )
 })
 
+// ads.txt – 구글 애드센스 크롤러용 (pub-ID는 애드센스 계정에서 확인)
+app.get('/ads.txt', (c) => {
+  return c.text(
+    'google.com, pub-6943282483618134, DIRECT, f08c47fec0942fa0',
+    200,
+    { 'Content-Type': 'text/plain; charset=utf-8' }
+  )
+})
+
 // sitemap.xml – 동적 생성 (업체 추가만 하면 자동으로 사이트맵에 포함됨)
 app.get('/sitemap.xml', async (c) => {
   const proto   = c.req.header('x-forwarded-proto') || 'https'
@@ -1994,15 +2003,18 @@ let searchTimer = null;
 // ─────────────────────────────────────────────
 
 function feedCardHTML(s) {
-  // iframe을 바로 박음. src는 비워두고 Observer가 보일 때 채움
-  // data-src에 URL 저장, src는 비워둠 → Observer가 보일 때 src로 이동
-  const ytSrc = 'https://www.youtube.com/embed/' + s.youtubeId
-    + '?playsinline=1&rel=0&modestbranding=1&color=white';
+  // 썸네일 이미지 + 재생버튼 오버레이 방식
+  // 클릭 시: trackView(shopId) + autoplay mute=0 iframe 교체 → 광고수익 O, 조회카운팅 O
   const ytArea = s.youtubeId
-    ? '<div class="yt-area">'
-        + '<iframe data-src="' + ytSrc + '" src="about:blank"'
-        + ' allow="autoplay; encrypted-media; picture-in-picture; fullscreen"'
-        + ' allowfullscreen></iframe>'
+    ? '<div class="yt-area" style="cursor:pointer" onclick="feedPlayVideo(this,' + s.id + ',\'' + s.youtubeId + '\')">'
+        + '<img src="https://img.youtube.com/vi/' + s.youtubeId + '/hqdefault.jpg"'
+        + ' style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border:none"'
+        + ' onerror="this.src=\'https://img.youtube.com/vi/' + s.youtubeId + '/mqdefault.jpg\'">'
+        + '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none">'
+          + '<div style="width:60px;height:60px;background:rgba(255,0,0,.88);border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(0,0,0,.5)">'
+            + '<svg width="24" height="24" viewBox="0 0 24 24" fill="white" style="margin-left:3px"><polygon points="5,3 19,12 5,21"/></svg>'
+          + '</div>'
+        + '</div>'
       + '</div>'
     : '<div class="yt-area" style="background:linear-gradient(135deg,#1a1a1a,#111)"></div>';
   // data-shop JSON 이스케이프 버그 → data-id/url/name 개별 속성으로 분리
@@ -2090,36 +2102,22 @@ async function loadFeed(cat='all', q='') {
   scr.innerHTML = merged.map(feedCardHTML).join('');
   scr.scrollTop = 0;
 
-  // 이전 Observer 해제
-  if (scr._obs) scr._obs.disconnect();
+  // 썸네일+클릭재생 방식으로 변경 → Observer 불필요
+}
 
-  // 화면에 보이는 카드 iframe만 src 활성화 → 로딩 집중, 메모리 절약
-  // root:null = 뷰포트 기준 (feedScreen이 fixed라 동일)
-  // root:scr 쓰면 display:none 상태에선 Observer 트리거 안됨 → 영상 미노출
-  const obs = new IntersectionObserver((entries) => {
-    entries.forEach((en) => {
-      const ifr = en.target.querySelector('iframe[data-src]');
-      if (!ifr) return;
-      if (en.isIntersecting) {
-        if (ifr.src !== ifr.dataset.src) {
-          ifr.src = ifr.dataset.src;
-        }
-        ifr.classList.add('playing');    // 보일 때만 터치 허용
-      } else {
-        if (ifr.src !== 'about:blank') ifr.src = 'about:blank';
-        ifr.classList.remove('playing'); // 안 보이면 터치 차단
-      }
-    });
-  }, { root: null, threshold: 0.5 });
-
-  scr._obs = obs;
-  scr.querySelectorAll('.fi').forEach((card) => obs.observe(card));
-
-  // Observer가 첫 카드를 놓칠 경우 대비 — 첫 번째 iframe 즉시 강제 세팅
-  const firstIfr = scr.querySelector('iframe[data-src]');
-  if (firstIfr && firstIfr.src !== firstIfr.dataset.src) {
-    firstIfr.src = firstIfr.dataset.src;
-  }
+// ── 피드 영상 재생: 썸네일 클릭 시 호출 ──
+// trackView(shopId) → 광고수익 O + 조회카운팅 O
+// autoplay=1, mute=0 → 유튜브 광고수익 발생
+function feedPlayVideo(el, shopId, ytId) {
+  trackView(shopId);
+  el.style.cursor = 'default';
+  el.onclick = null;
+  el.innerHTML = '<iframe'
+    + ' style="position:absolute;inset:0;width:100%;height:100%;border:none"'
+    + ' src="https://www.youtube.com/embed/' + ytId
+    + '?autoplay=1&playsinline=1&rel=0&modestbranding=1&color=white"'
+    + ' allow="autoplay;encrypted-media;picture-in-picture;fullscreen"'
+    + ' allowfullscreen></iframe>';
 }
 
 function filterFeed(btn, cat) {
