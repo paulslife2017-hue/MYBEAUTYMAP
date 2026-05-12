@@ -4501,8 +4501,8 @@ function buildRank(mode) {
     '</div>';
 
   const items = sorted.map((s,i) => {
-    const img = s.thumbnail || (s.youtubeId ? 'https://img.youtube.com/vi/'+s.youtubeId+'/maxresdefault.jpg' : fb);
-    const hq  = s.youtubeId ? 'https://img.youtube.com/vi/'+s.youtubeId+'/hqdefault.jpg' : fb;
+    const img = s.thumbnail || (s.youtubeId ? 'https://img.youtube.com/vi/'+s.youtubeId+'/hqdefault.jpg' : fb);
+    const hq  = img;
     const rc  = i===0?'rn1':i===1?'rn2':i===2?'rn3':'rnN';
     const vv  = mode==='today' ? (s.todayViews||0)  : (s.views||0);
     const fv  = mode==='today' ? (s.todayFeedSP||0) : (s.feedSP||0);
@@ -4570,8 +4570,8 @@ function renderShops(list) {
   const p = document.getElementById('panel-shops');
   if (!list.length) { p.innerHTML='<div class="empty">등록된 업체가 없어요</div>'; return; }
   const fb="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 60'%3E%3Crect width='60' height='60' fill='%23222'/%3E%3Ctext x='30' y='38' font-size='24' text-anchor='middle'%3E%F0%9F%92%84%3C/text%3E%3C/svg%3E";
-  const thumb   = s => s.thumbnail||(s.youtubeId?'https://img.youtube.com/vi/'+s.youtubeId+'/maxresdefault.jpg':fb);
-  const thumbHq = s => s.youtubeId?'https://img.youtube.com/vi/'+s.youtubeId+'/hqdefault.jpg':fb;
+  const thumb   = s => s.thumbnail||(s.youtubeId?'https://img.youtube.com/vi/'+s.youtubeId+'/hqdefault.jpg':fb);
+  const thumbHq = thumb;
   p.innerHTML = '<div class="section-title">🏪 업체 목록 <span style="font-weight:500;font-size:10px">'+list.length+'개</span></div>' +
   list.map(s => {
     const totToday=(s.todayViews||0)+(s.todayFeedSP||0)+(s.todayMapSP||0);
@@ -4659,8 +4659,8 @@ function renderPayTab(filter) {
   const stColor={paid:'var(--green)',free:'var(--blue)',unpaid:'#FFA500',expired:'var(--pink)'};
 
   const cards=filtered.map(s=>{
-    const img=s.thumbnail||(s.youtubeId?'https://img.youtube.com/vi/'+s.youtubeId+'/maxresdefault.jpg':fb);
-    const hq=s.youtubeId?'https://img.youtube.com/vi/'+s.youtubeId+'/hqdefault.jpg':fb;
+    const img=s.thumbnail||(s.youtubeId?'https://img.youtube.com/vi/'+s.youtubeId+'/hqdefault.jpg':fb);
+    const hq=img;
     const plan=s.plan||'basic', st=s.paymentStatus||'unpaid';
     let expHtml='<strong>미설정</strong>';
     if(s.paidUntil){
