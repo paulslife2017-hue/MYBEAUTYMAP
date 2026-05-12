@@ -1914,6 +1914,15 @@ let curShop    = null;
 let naverMap   = null;
 let mapInited  = false;
 let nvMarkers  = {};   // id -> {marker, overlay}
+// ── 영상조회 중복 방지: 세션 내 업체당 1회만 카운팅 ─────────────────────
+const _viewedIds = new Set();
+function trackView(shopId) {
+  if (!shopId) return;
+  const id = String(shopId);
+  if (_viewedIds.has(id)) return; // 이미 이번 세션에서 카운팅됨
+  _viewedIds.add(id);
+  fetch('/api/track/view/'+id, {method:'POST'}).catch(()=>{});
+}
 let userMarker = null;
 
 const CAT_CLASS = {
@@ -2093,9 +2102,6 @@ async function loadFeed(cat='all', q='') {
       if (en.isIntersecting) {
         if (ifr.src !== ifr.dataset.src) {
           ifr.src = ifr.dataset.src;
-          // 피드 영상이 화면에 처음 등장할 때 → 영상조회 카운팅
-          const shopId = en.target.dataset.id;
-          if (shopId) fetch('/api/track/view/'+shopId, {method:'POST'});
         }
         ifr.classList.add('playing');    // 보일 때만 터치 허용
       } else {
@@ -2505,8 +2511,8 @@ function openMapPopup(shop) {
 }
 
 function loadYtInPopup(ytId) {
-  // 지도 팝업 썸네일 클릭 → 영상조회 카운팅
-  if (curShop?.id) fetch('/api/track/view/'+curShop.id, {method:'POST'});
+  // 지도 팝업 썸네일 클릭 → 영상조회 카운팅 (세션 내 1회)
+  if (curShop?.id) trackView(curShop.id);
   document.getElementById('mpYt').innerHTML = \`
     <div style="position:relative;width:100%;padding-top:52%;background:#000">
       <iframe style="position:absolute;inset:0;width:100%;height:100%;border:none"
@@ -3401,8 +3407,8 @@ function closeCard() {
 function playVideo() {
   // 유튜브 없으면 아무것도 안 함
   if (!curShop?.youtubeId) return;
-  // 지도 하단 카드 썸네일 클릭 → 영상조회 카운팅
-  fetch('/api/track/view/'+curShop.id, {method:'POST'});
+  // 지도 하단 카드 썸네일 클릭 → 영상조회 카운팅 (세션 내 1회)
+  trackView(curShop.id);
   const iframe = document.getElementById('cardIframe');
   // 썸네일 직접 클릭 → mute 없이 재생 (광고 수익 활성화)
   iframe.src = \`https://www.youtube.com/embed/\${curShop.youtubeId}?autoplay=1&playsinline=1&rel=0&modestbranding=1&color=white\`;
