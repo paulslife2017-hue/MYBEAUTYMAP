@@ -4511,7 +4511,7 @@ function buildRank(mode) {
     const unit = mode==='today' ? '오늘' : '누적';
     return '<div class="rank-item">' +
       '<div class="rank-num '+rc+'">'+(i+1)+'</div>' +
-      '<img class="rank-thumb" src="'+img+'" onerror="if(this.src.includes(\'maxresdefault\')){this.src=this.dataset.hq}else{this.src=this.dataset.fb}" data-hq="'+hq+'" data-fb="'+fb+'"/>' +
+      '<img class="rank-thumb" src="'+img+'" onerror="this.src=this.dataset.hq&&this.src!==this.dataset.hq?this.dataset.hq:this.dataset.fb" data-hq="'+hq+'" data-fb="'+fb+'"/>' +
       '<div class="rank-info">' +
         '<div class="rank-name">'+s.name+'</div>' +
         '<div class="rank-cat">'+s.category+(s.district?' · '+s.district:'')+'</div>' +
@@ -4577,7 +4577,7 @@ function renderShops(list) {
     const totToday=(s.todayViews||0)+(s.todayFeedSP||0)+(s.todayMapSP||0);
     return '<div class="shop-card" id="card-'+s.id+'">' +
       '<div class="sc-top">' +
-        '<img class="sc-thumb" src="'+thumb(s)+'" onerror="if(this.src.includes(\'maxresdefault\')){this.src=this.dataset.hq}else{this.src=this.dataset.fb}" data-hq="'+thumbHq(s)+'" data-fb="'+fb+'"/>' +
+        '<img class="sc-thumb" src="'+thumb(s)+'" onerror="this.src=this.dataset.hq&&this.src!==this.dataset.hq?this.dataset.hq:this.dataset.fb" data-hq="'+thumbHq(s)+'" data-fb="'+fb+'"/>' +
         '<div class="sc-info">' +
           '<div class="sc-name">'+s.name+
             (s.featured?'<span class="badge b-feat">추천</span>':'')+
@@ -4672,7 +4672,7 @@ function renderPayTab(filter) {
     }
     return '<div class="pay-card status-'+st+'">' +
       '<div class="pay-top">' +
-        '<img class="pay-thumb" src="'+img+'" onerror="if(this.src.includes(\'maxresdefault\')){this.src=this.dataset.hq}else{this.src=this.dataset.fb}" data-hq="'+hq+'" data-fb="'+fb+'"/>' +
+        '<img class="pay-thumb" src="'+img+'" onerror="this.src=this.dataset.hq&&this.src!==this.dataset.hq?this.dataset.hq:this.dataset.fb" data-hq="'+hq+'" data-fb="'+fb+'"/>' +
         '<div class="pay-info">' +
           '<div class="pay-name">'+s.name+'</div>' +
           '<div class="pay-sub">'+s.category+' · '+(s.district||'')+'</div>' +
