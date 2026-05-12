@@ -1914,13 +1914,14 @@ let curShop    = null;
 let naverMap   = null;
 let mapInited  = false;
 let nvMarkers  = {};   // id -> {marker, overlay}
-// ── 영상조회 중복 방지: 세션 내 업체당 1회만 카운팅 ─────────────────────
-const _viewedIds = new Set();
+// ── 영상조회: 실제 클릭(재생)할 때만, 세션 내 업체당 1회만 카운팅 ──────────
+// sessionStorage 사용 → 새로고침해도 탭 닫기 전까지 중복 방지
 function trackView(shopId) {
   if (!shopId) return;
   const id = String(shopId);
-  if (_viewedIds.has(id)) return; // 이미 이번 세션에서 카운팅됨
-  _viewedIds.add(id);
+  const key = 'viewed_' + id;
+  if (sessionStorage.getItem(key)) return; // 이미 이 탭에서 카운팅됨
+  sessionStorage.setItem(key, '1');
   fetch('/api/track/view/'+id, {method:'POST'}).catch(()=>{});
 }
 let userMarker = null;
