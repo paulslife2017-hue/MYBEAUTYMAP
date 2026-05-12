@@ -4502,6 +4502,7 @@ function buildRank(mode) {
 
   const items = sorted.map((s,i) => {
     const img = s.thumbnail || (s.youtubeId ? 'https://img.youtube.com/vi/'+s.youtubeId+'/maxresdefault.jpg' : fb);
+    const hq  = s.youtubeId ? 'https://img.youtube.com/vi/'+s.youtubeId+'/hqdefault.jpg' : fb;
     const rc  = i===0?'rn1':i===1?'rn2':i===2?'rn3':'rnN';
     const vv  = mode==='today' ? (s.todayViews||0)  : (s.views||0);
     const fv  = mode==='today' ? (s.todayFeedSP||0) : (s.feedSP||0);
@@ -4510,7 +4511,7 @@ function buildRank(mode) {
     const unit = mode==='today' ? '오늘' : '누적';
     return '<div class="rank-item">' +
       '<div class="rank-num '+rc+'">'+(i+1)+'</div>' +
-      '<img class="rank-thumb" src="'+img+'" onerror="this.src=this.dataset.fb" data-fb="'+fb+'"/>' +
+      '<img class="rank-thumb" src="'+img+'" onerror="if(this.src.includes(\'maxresdefault\')){this.src=this.dataset.hq}else{this.src=this.dataset.fb}" data-hq="'+hq+'" data-fb="'+fb+'"/>' +
       '<div class="rank-info">' +
         '<div class="rank-name">'+s.name+'</div>' +
         '<div class="rank-cat">'+s.category+(s.district?' · '+s.district:'')+'</div>' +
@@ -4569,13 +4570,14 @@ function renderShops(list) {
   const p = document.getElementById('panel-shops');
   if (!list.length) { p.innerHTML='<div class="empty">등록된 업체가 없어요</div>'; return; }
   const fb="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 60'%3E%3Crect width='60' height='60' fill='%23222'/%3E%3Ctext x='30' y='38' font-size='24' text-anchor='middle'%3E%F0%9F%92%84%3C/text%3E%3C/svg%3E";
-  const thumb = s => s.thumbnail||(s.youtubeId?'https://img.youtube.com/vi/'+s.youtubeId+'/maxresdefault.jpg':fb);
+  const thumb   = s => s.thumbnail||(s.youtubeId?'https://img.youtube.com/vi/'+s.youtubeId+'/maxresdefault.jpg':fb);
+  const thumbHq = s => s.youtubeId?'https://img.youtube.com/vi/'+s.youtubeId+'/hqdefault.jpg':fb;
   p.innerHTML = '<div class="section-title">🏪 업체 목록 <span style="font-weight:500;font-size:10px">'+list.length+'개</span></div>' +
   list.map(s => {
     const totToday=(s.todayViews||0)+(s.todayFeedSP||0)+(s.todayMapSP||0);
     return '<div class="shop-card" id="card-'+s.id+'">' +
       '<div class="sc-top">' +
-        '<img class="sc-thumb" src="'+thumb(s)+'" onerror="this.src=this.dataset.fb" data-fb="'+fb+'"/>' +
+        '<img class="sc-thumb" src="'+thumb(s)+'" onerror="if(this.src.includes(\'maxresdefault\')){this.src=this.dataset.hq}else{this.src=this.dataset.fb}" data-hq="'+thumbHq(s)+'" data-fb="'+fb+'"/>' +
         '<div class="sc-info">' +
           '<div class="sc-name">'+s.name+
             (s.featured?'<span class="badge b-feat">추천</span>':'')+
@@ -4658,6 +4660,7 @@ function renderPayTab(filter) {
 
   const cards=filtered.map(s=>{
     const img=s.thumbnail||(s.youtubeId?'https://img.youtube.com/vi/'+s.youtubeId+'/maxresdefault.jpg':fb);
+    const hq=s.youtubeId?'https://img.youtube.com/vi/'+s.youtubeId+'/hqdefault.jpg':fb;
     const plan=s.plan||'basic', st=s.paymentStatus||'unpaid';
     let expHtml='<strong>미설정</strong>';
     if(s.paidUntil){
@@ -4669,7 +4672,7 @@ function renderPayTab(filter) {
     }
     return '<div class="pay-card status-'+st+'">' +
       '<div class="pay-top">' +
-        '<img class="pay-thumb" src="'+img+'" onerror="this.src=this.dataset.fb" data-fb="'+fb+'"/>' +
+        '<img class="pay-thumb" src="'+img+'" onerror="if(this.src.includes(\'maxresdefault\')){this.src=this.dataset.hq}else{this.src=this.dataset.fb}" data-hq="'+hq+'" data-fb="'+fb+'"/>' +
         '<div class="pay-info">' +
           '<div class="pay-name">'+s.name+'</div>' +
           '<div class="pay-sub">'+s.category+' · '+(s.district||'')+'</div>' +
