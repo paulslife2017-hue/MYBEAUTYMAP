@@ -2005,11 +2005,14 @@ let searchTimer = null;
 function feedCardHTML(s) {
   // 썸네일 이미지 + 재생버튼 오버레이 방식
   // 클릭 시: trackView(shopId) + autoplay mute=0 iframe 교체 → 광고수익 O, 조회카운팅 O
+  // onclick에 따옴표 직접 삽입 시 HTML 렌더링 후 이스케이프가 깨지므로
+  // data-ytid 속성으로 ytId 전달 → 따옴표 이스케이프 문제 완전 회피
   const ytArea = s.youtubeId
-    ? '<div class="yt-area" style="cursor:pointer" onclick="feedPlayVideo(this,' + s.id + ',\'' + s.youtubeId + '\')">'
+    ? '<div class="yt-area" style="cursor:pointer"'
+        + ' data-shopid="' + s.id + '" data-ytid="' + s.youtubeId + '"'
+        + ' onclick="feedPlayVideo(this)">'
         + '<img src="https://img.youtube.com/vi/' + s.youtubeId + '/hqdefault.jpg"'
-        + ' style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border:none"'
-        + ' onerror="this.src=\'https://img.youtube.com/vi/' + s.youtubeId + '/mqdefault.jpg\'">'
+        + ' style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border:none">'  
         + '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none">'
           + '<div style="width:60px;height:60px;background:rgba(255,0,0,.88);border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(0,0,0,.5)">'
             + '<svg width="24" height="24" viewBox="0 0 24 24" fill="white" style="margin-left:3px"><polygon points="5,3 19,12 5,21"/></svg>'
@@ -2108,7 +2111,10 @@ async function loadFeed(cat='all', q='') {
 // ── 피드 영상 재생: 썸네일 클릭 시 호출 ──
 // trackView(shopId) → 광고수익 O + 조회카운팅 O
 // autoplay=1, mute=0 → 유튜브 광고수익 발생
-function feedPlayVideo(el, shopId, ytId) {
+function feedPlayVideo(el) {
+  const shopId = el.dataset.shopid;
+  const ytId   = el.dataset.ytid;
+  if (!ytId) return;
   trackView(shopId);
   el.style.cursor = 'default';
   el.onclick = null;
