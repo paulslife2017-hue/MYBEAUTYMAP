@@ -476,24 +476,84 @@ app.post('/api/track/view/:id', async (c) => {
 app.post('/api/track/sp/:id', async (c) => {
   const id = +c.req.param('id')
   const today = kstToday()
-  await Promise.all([
-    sql`INSERT INTO stats (shop_id, feed_sp) VALUES (${id}, 1)
-        ON CONFLICT (shop_id) DO UPDATE SET feed_sp = stats.feed_sp + 1`,
-    sql`INSERT INTO daily_stats (shop_id, stat_date, feed_sp) VALUES (${id}, ${today}, 1)
-        ON CONFLICT (shop_id, stat_date) DO UPDATE SET feed_sp = daily_stats.feed_sp + 1`,
-  ])
+  // viewSrc: 영상을 본 출처 ('feed'|'catalog'|'map'|null) — 전환 분석용
+  let viewSrc: string | null = null
+  try { const b = await c.req.json(); viewSrc = b?.viewSrc || null } catch (_) {}
+
+  // view_to_sp 컬럼 자동 추가 (마이그레이션)
+  try {
+    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS vts_feed    INTEGER NOT NULL DEFAULT 0`
+    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS vts_catalog INTEGER NOT NULL DEFAULT 0`
+    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS vts_map     INTEGER NOT NULL DEFAULT 0`
+  } catch (_) {}
+
+  // feed_sp 누적 (합계)
+  await sql`INSERT INTO stats (shop_id, feed_sp) VALUES (${id}, 1)
+      ON CONFLICT (shop_id) DO UPDATE SET feed_sp = stats.feed_sp + 1`
+
+  // daily_stats: feed_sp + 출처별 전환 컬럼
+  if (viewSrc === 'feed') {
+    await sql`INSERT INTO daily_stats (shop_id, stat_date, feed_sp, vts_feed)
+                VALUES (${id}, ${today}, 1, 1)
+              ON CONFLICT (shop_id, stat_date) DO UPDATE
+                SET feed_sp  = daily_stats.feed_sp  + 1,
+                    vts_feed = daily_stats.vts_feed + 1`
+  } else if (viewSrc === 'catalog') {
+    await sql`INSERT INTO daily_stats (shop_id, stat_date, feed_sp, vts_catalog)
+                VALUES (${id}, ${today}, 1, 1)
+              ON CONFLICT (shop_id, stat_date) DO UPDATE
+                SET feed_sp     = daily_stats.feed_sp     + 1,
+                    vts_catalog = daily_stats.vts_catalog + 1`
+  } else if (viewSrc === 'map') {
+    await sql`INSERT INTO daily_stats (shop_id, stat_date, feed_sp, vts_map)
+                VALUES (${id}, ${today}, 1, 1)
+              ON CONFLICT (shop_id, stat_date) DO UPDATE
+                SET feed_sp = daily_stats.feed_sp + 1,
+                    vts_map = daily_stats.vts_map + 1`
+  } else {
+    await sql`INSERT INTO daily_stats (shop_id, stat_date, feed_sp)
+                VALUES (${id}, ${today}, 1)
+              ON CONFLICT (shop_id, stat_date) DO UPDATE
+                SET feed_sp = daily_stats.feed_sp + 1`
+  }
   return c.json({ ok: true })
 })
 // 트래킹 — 지도 예약클릭
 app.post('/api/track/mapsp/:id', async (c) => {
   const id = +c.req.param('id')
   const today = kstToday()
-  await Promise.all([
-    sql`INSERT INTO stats (shop_id, map_sp) VALUES (${id}, 1)
-        ON CONFLICT (shop_id) DO UPDATE SET map_sp = stats.map_sp + 1`,
-    sql`INSERT INTO daily_stats (shop_id, stat_date, map_sp) VALUES (${id}, ${today}, 1)
-        ON CONFLICT (shop_id, stat_date) DO UPDATE SET map_sp = daily_stats.map_sp + 1`,
-  ])
+  let viewSrc: string | null = null
+  try { const b = await c.req.json(); viewSrc = b?.viewSrc || null } catch (_) {}
+
+  try {
+    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS vts_feed    INTEGER NOT NULL DEFAULT 0`
+    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS vts_catalog INTEGER NOT NULL DEFAULT 0`
+    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS vts_map     INTEGER NOT NULL DEFAULT 0`
+  } catch (_) {}
+
+  await sql`INSERT INTO stats (shop_id, map_sp) VALUES (${id}, 1)
+      ON CONFLICT (shop_id) DO UPDATE SET map_sp = stats.map_sp + 1`
+
+  if (viewSrc === 'feed') {
+    await sql`INSERT INTO daily_stats (shop_id, stat_date, map_sp, vts_feed)
+                VALUES (${id}, ${today}, 1, 1)
+              ON CONFLICT (shop_id, stat_date) DO UPDATE
+                SET map_sp   = daily_stats.map_sp   + 1,
+                    vts_feed = daily_stats.vts_feed + 1`
+  } else if (viewSrc === 'catalog') {
+    await sql`INSERT INTO daily_stats (shop_id, stat_date, map_sp, vts_catalog)
+                VALUES (${id}, ${today}, 1, 1)
+              ON CONFLICT (shop_id, stat_date) DO UPDATE
+                SET map_sp      = daily_stats.map_sp      + 1,
+                    vts_catalog = daily_stats.vts_catalog + 1`
+  } else {
+    // viewSrc === 'map' or null
+    await sql`INSERT INTO daily_stats (shop_id, stat_date, map_sp, vts_map)
+                VALUES (${id}, ${today}, 1, 1)
+              ON CONFLICT (shop_id, stat_date) DO UPDATE
+                SET map_sp  = daily_stats.map_sp  + 1,
+                    vts_map = daily_stats.vts_map + 1`
+  }
   return c.json({ ok: true })
 })
 
@@ -627,7 +687,7 @@ app.get('/api/admin/stats', async (c) => {
   const td = todayTotals[0] || {}
   const yd = yestTotals[0]  || {}
 
-  // 업체별 오늘 통계 (피드/지도 클릭 + 출처별 조회 분리)
+  // 업체별 오늘 통계 (피드/지도 클릭 + 출처별 조회 + 출처별 전환)
   const todayShopRows = await sql`
     SELECT shop_id,
            COALESCE(view_cnt,0)     as view_cnt,
@@ -635,7 +695,10 @@ app.get('/api/admin/stats', async (c) => {
            COALESCE(map_sp,0)       as map_sp,
            COALESCE(feed_view,0)    as feed_view,
            COALESCE(catalog_view,0) as catalog_view,
-           COALESCE(map_view,0)     as map_view
+           COALESCE(map_view,0)     as map_view,
+           COALESCE(vts_feed,0)     as vts_feed,
+           COALESCE(vts_catalog,0)  as vts_catalog,
+           COALESCE(vts_map,0)      as vts_map
     FROM daily_stats WHERE stat_date = ${today}
   `
   const todayShopMap: Record<number,any> = {}
@@ -647,6 +710,9 @@ app.get('/api/admin/stats', async (c) => {
       todayFeedView:    parseInt(r.feed_view)    || 0,
       todayCatalogView: parseInt(r.catalog_view) || 0,
       todayMapView:     parseInt(r.map_view)     || 0,
+      todayVtsFeed:     parseInt(r.vts_feed)     || 0,
+      todayVtsCatalog:  parseInt(r.vts_catalog)  || 0,
+      todayVtsMap:      parseInt(r.vts_map)      || 0,
     }
   })
 
@@ -683,6 +749,10 @@ app.get('/api/admin/stats', async (c) => {
       todayFeedView:    todayShopMap[r.id]?.todayFeedView    || 0,
       todayCatalogView: todayShopMap[r.id]?.todayCatalogView || 0,
       todayMapView:     todayShopMap[r.id]?.todayMapView     || 0,
+      // 오늘 출처별 전환 (영상→예약)
+      todayVtsFeed:     todayShopMap[r.id]?.todayVtsFeed     || 0,
+      todayVtsCatalog:  todayShopMap[r.id]?.todayVtsCatalog  || 0,
+      todayVtsMap:      todayShopMap[r.id]?.todayVtsMap      || 0,
     })),
     // 누적
     totalViews:  parseInt(t.total_views)   || 0,
@@ -1005,32 +1075,38 @@ app.post('/api/report/:token/verify', async (c) => {
   const today = kstToday()
   const thisMonth = today.slice(0, 7) // YYYY-MM
 
-  // 이번 달 통계 (출처별 조회 포함)
+  // 이번 달 통계 (출처별 조회 + 전환 포함)
   const thisMonthStats = await sql`
     SELECT COALESCE(SUM(view_cnt),0)     as views,
            COALESCE(SUM(feed_sp),0)      as feed_sp,
            COALESCE(SUM(map_sp),0)       as map_sp,
            COALESCE(SUM(feed_view),0)    as feed_view,
            COALESCE(SUM(catalog_view),0) as catalog_view,
-           COALESCE(SUM(map_view),0)     as map_view
+           COALESCE(SUM(map_view),0)     as map_view,
+           COALESCE(SUM(vts_feed),0)     as vts_feed,
+           COALESCE(SUM(vts_catalog),0)  as vts_catalog,
+           COALESCE(SUM(vts_map),0)      as vts_map
     FROM daily_stats
     WHERE shop_id = ${shop.id}
       AND stat_date >= (DATE_TRUNC('month', CURRENT_DATE))
   `
-  // 지난 달 통계 (출처별 조회 포함)
+  // 지난 달 통계 (출처별 조회 + 전환 포함)
   const lastMonthStats = await sql`
     SELECT COALESCE(SUM(view_cnt),0)     as views,
            COALESCE(SUM(feed_sp),0)      as feed_sp,
            COALESCE(SUM(map_sp),0)       as map_sp,
            COALESCE(SUM(feed_view),0)    as feed_view,
            COALESCE(SUM(catalog_view),0) as catalog_view,
-           COALESCE(SUM(map_view),0)     as map_view
+           COALESCE(SUM(map_view),0)     as map_view,
+           COALESCE(SUM(vts_feed),0)     as vts_feed,
+           COALESCE(SUM(vts_catalog),0)  as vts_catalog,
+           COALESCE(SUM(vts_map),0)      as vts_map
     FROM daily_stats
     WHERE shop_id = ${shop.id}
       AND stat_date >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')
       AND stat_date <  DATE_TRUNC('month', CURRENT_DATE)
   `
-  // 최근 30일 일별 추이 (출처별 포함)
+  // 최근 30일 일별 추이 (출처별 조회 + 전환 포함)
   const daily30 = await sql`
     SELECT stat_date::text as d,
            COALESCE(view_cnt,0)     as views,
@@ -1038,7 +1114,10 @@ app.post('/api/report/:token/verify', async (c) => {
            COALESCE(map_sp,0)       as map_sp,
            COALESCE(feed_view,0)    as feed_view,
            COALESCE(catalog_view,0) as catalog_view,
-           COALESCE(map_view,0)     as map_view
+           COALESCE(map_view,0)     as map_view,
+           COALESCE(vts_feed,0)     as vts_feed,
+           COALESCE(vts_catalog,0)  as vts_catalog,
+           COALESCE(vts_map,0)      as vts_map
     FROM daily_stats
     WHERE shop_id = ${shop.id}
       AND stat_date >= (CURRENT_DATE - INTERVAL '29 days')
@@ -1081,6 +1160,9 @@ app.post('/api/report/:token/verify', async (c) => {
       feedView:    parseInt(thisMonthStats[0]?.feed_view)    || 0,
       catalogView: parseInt(thisMonthStats[0]?.catalog_view) || 0,
       mapView:     parseInt(thisMonthStats[0]?.map_view)     || 0,
+      vtsFeed:     parseInt(thisMonthStats[0]?.vts_feed)     || 0,
+      vtsCatalog:  parseInt(thisMonthStats[0]?.vts_catalog)  || 0,
+      vtsMap:      parseInt(thisMonthStats[0]?.vts_map)      || 0,
     },
     lastMonth: {
       views:       parseInt(lastMonthStats[0]?.views)        || 0,
@@ -1089,6 +1171,9 @@ app.post('/api/report/:token/verify', async (c) => {
       feedView:    parseInt(lastMonthStats[0]?.feed_view)    || 0,
       catalogView: parseInt(lastMonthStats[0]?.catalog_view) || 0,
       mapView:     parseInt(lastMonthStats[0]?.map_view)     || 0,
+      vtsFeed:     parseInt(lastMonthStats[0]?.vts_feed)     || 0,
+      vtsCatalog:  parseInt(lastMonthStats[0]?.vts_catalog)  || 0,
+      vtsMap:      parseInt(lastMonthStats[0]?.vts_map)      || 0,
     },
     total: {
       views:  parseInt(totalStats[0]?.views)  || 0,
@@ -1899,7 +1984,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
       </div>
       <div class="mp-actions">
         <button class="mp-book" id="mpBook"
-          onclick="if(curShop){fetch('/api/track/mapsp/'+curShop.id,{method:'POST'});curShop&&(()=>{const e=document.getElementById('rsvDim');const m=document.getElementById('rsvModal');const t=document.getElementById('rsvTitle');const f=document.getElementById('rsvFrame');const l=document.getElementById('rsvLoading');document.getElementById('rsvExtBtn').onclick=()=>window.open(curShop.smartPlaceUrl,'_blank','noopener');t.textContent=curShop.name+' 예약하기';f.src='';l.classList.remove('hide');e.classList.add('show');m.classList.add('show');fetch('/api/resolve-naver?url='+encodeURIComponent(curShop.smartPlaceUrl)).then(r=>r.json()).then(d=>{f.src=d.resolved;f.onload=()=>l.classList.add('hide');}).catch(()=>{f.src=curShop.smartPlaceUrl;f.onload=()=>l.classList.add('hide');});})()}">
+          onclick="if(curShop){trackMapSPWithSrc(curShop.id);curShop&&(()=>{const e=document.getElementById('rsvDim');const m=document.getElementById('rsvModal');const t=document.getElementById('rsvTitle');const f=document.getElementById('rsvFrame');const l=document.getElementById('rsvLoading');document.getElementById('rsvExtBtn').onclick=()=>window.open(curShop.smartPlaceUrl,'_blank','noopener');t.textContent=curShop.name+' 예약하기';f.src='';l.classList.remove('hide');e.classList.add('show');m.classList.add('show');fetch('/api/resolve-naver?url='+encodeURIComponent(curShop.smartPlaceUrl)).then(r=>r.json()).then(d=>{f.src=d.resolved;f.onload=()=>l.classList.add('hide');}).catch(()=>{f.src=curShop.smartPlaceUrl;f.onload=()=>l.classList.add('hide');});})()}">
           <i class="fas fa-calendar-check" style="font-size:12px"></i>
           네이버 예약
         </button>
@@ -2121,6 +2206,7 @@ function trackView(shopId, source) {
   const key = 'viewed_' + id + '_' + src; // source별로 독립 카운팅
   if (sessionStorage.getItem(key)) return; // 이미 이 탭에서 카운팅됨
   sessionStorage.setItem(key, '1');
+  lastViewSrc = src; // 예약클릭 전환율 분석용: 마지막 영상 출처 기억
   fetch('/api/track/view/'+id, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -2808,10 +2894,29 @@ function closeFeedSheet() {
   document.getElementById('dim').classList.remove('on');
   document.getElementById('sheet').classList.remove('open');
 }
-// 피드 예약 트래킹
-function trackSP() { if(curShop) fetch('/api/track/sp/'+curShop.id,{method:'POST'}); }
-// 지도 예약 트래킹
-function trackMapSP(id) { fetch('/api/track/mapsp/'+id,{method:'POST'}); }
+// ── 마지막 영상 재생 출처 기억 (예약클릭 전환율 분석용) ──────────────────
+// trackView() 호출 시 갱신 → 예약클릭 시 참조
+let lastViewSrc = null; // 'feed' | 'catalog' | 'map' | null
+
+// 피드 예약 트래킹 (영상 시청 출처 포함)
+function trackSP() {
+  if (!curShop) return;
+  fetch('/api/track/sp/' + curShop.id, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ viewSrc: lastViewSrc }),
+  }).catch(()=>{});
+}
+// 지도 예약 트래킹 (영상 시청 출처 포함)
+function trackMapSP(id) {
+  fetch('/api/track/mapsp/' + id, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ viewSrc: lastViewSrc }),
+  }).catch(()=>{});
+}
+// 지도 팝업 예약버튼 전용 (인라인 onclick 대체)
+function trackMapSPWithSrc(id) { trackMapSP(id); }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // 예약 모달 (m.place.naver.com iframe)
@@ -3618,7 +3723,12 @@ function playVideo() {
 // /reserve iframe → 메인 페이지로 postMessage → openInapp() 실행
 function openReserve() {
   if (!curShop?.smartPlaceUrl) return;
-  fetch('/api/track/mapsp/' + curShop.id, { method: 'POST' }).catch(()=>{});
+  // viewSrc는 지도 iframe 내부이므로 항상 'map'
+  fetch('/api/track/mapsp/' + curShop.id, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ viewSrc: 'map' }),
+  }).catch(()=>{});
   window.parent.postMessage({
     type: 'openInapp',
     shop: {
@@ -3895,6 +4005,27 @@ body{background:#0a0a0f;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFo
 .src-bar-seg{height:100%;transition:width .6s ease}
 .src-hint{font-size:10px;color:#334155;text-align:center;margin-top:8px}
 
+/* ── 출처별 전환율 ── */
+.cvr-desc{font-size:11px;color:#475569;margin:6px 0 12px;line-height:1.5}
+.cvr-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.cvr-card{border-radius:14px;padding:14px 10px;text-align:center;border:1px solid transparent}
+.cvr-feed{background:rgba(16,185,129,.08);border-color:rgba(16,185,129,.2)}
+.cvr-cat{background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.2)}
+.cvr-map{background:rgba(99,102,241,.08);border-color:rgba(99,102,241,.2)}
+.cvr-icon{font-size:18px;margin-bottom:5px}
+.cvr-pct{font-size:22px;font-weight:900}
+.cvr-feed .cvr-pct{color:#10b981}
+.cvr-cat  .cvr-pct{color:#f59e0b}
+.cvr-map  .cvr-pct{color:#818cf8}
+.cvr-lbl{font-size:10px;font-weight:700;color:#64748b;margin-top:3px}
+.cvr-detail{font-size:10px;color:#475569;margin-top:4px}
+.cvr-minibar{height:5px;border-radius:3px;margin-top:7px;background:rgba(255,255,255,.06);overflow:hidden}
+.cvr-minibar-fill{height:100%;border-radius:3px;transition:width .6s ease}
+.cvr-insight{margin-top:12px;padding:10px 14px;background:rgba(255,255,255,.03);
+  border:1px solid rgba(255,255,255,.07);border-radius:10px;
+  font-size:11px;color:#94a3b8;line-height:1.7}
+.cvr-insight strong{color:#e2e8f0}
+
 /* ── 코멘트 ── */
 .comment-box{margin:20px 16px 0;background:linear-gradient(135deg,rgba(6,182,212,.08),rgba(59,130,246,.05));border:1px solid rgba(6,182,212,.2);border-radius:16px;padding:18px 16px;display:flex;gap:12px;align-items:flex-start}
 .comment-icon{font-size:22px;flex-shrink:0;margin-top:2px}
@@ -4016,6 +4147,16 @@ body{background:#0a0a0f;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFo
     </div>
     <div class="src-bar-wrap" id="srcBarWrap"></div>
     <div class="src-hint">어디서 내 영상을 발견했는지 알 수 있어요</div>
+  </div>
+
+  <!-- 출처별 전환율 (영상 → 예약) -->
+  <div class="rp-section" style="margin-top:20px" id="cvrSection">
+    <div class="rp-section-title">이번 달 영상→예약 전환율</div>
+    <div class="cvr-desc">영상을 본 사람 중 실제로 예약버튼을 누른 비율이에요</div>
+    <div class="cvr-grid" id="cvrGrid">
+      <!-- JS로 렌더링 -->
+    </div>
+    <div class="cvr-insight" id="cvrInsight"></div>
   </div>
 
   <!-- 누적 통계 -->
@@ -4197,6 +4338,51 @@ function renderReport(d) {
   } else {
     // 출처 데이터 없으면 섹션 숨김 (기존 데이터 없을 때)
     srcSec.style.display = 'none';
+  }
+
+  // ── 출처별 전환율 섹션 ──
+  const vtF = d.thisMonth.vtsFeed    || 0;
+  const vtC = d.thisMonth.vtsCatalog || 0;
+  const vtM = d.thisMonth.vtsMap     || 0;
+  const cvrSec = document.getElementById('cvrSection');
+  if (vtF + vtC + vtM > 0 || (fv + cv + mv > 0)) {
+    cvrSec.style.display = '';
+    const cvrPct = (view, conv) => view > 0 ? Math.round(conv / view * 100) : null;
+    const pF = cvrPct(fv, vtF), pC = cvrPct(cv, vtC), pM = cvrPct(mv, vtM);
+    const cvrCard = (icon, lbl, cls, pct, conv, view, col) => {
+      const p = pct !== null ? pct + '%' : '—';
+      const w = pct !== null ? Math.min(pct, 100) : 0;
+      return '<div class="cvr-card ' + cls + '">'
+        + '<div class="cvr-icon">' + icon + '</div>'
+        + '<div class="cvr-pct">' + p + '</div>'
+        + '<div class="cvr-lbl">' + lbl + '</div>'
+        + '<div class="cvr-detail">' + conv + '명 / ' + view + '명</div>'
+        + '<div class="cvr-minibar"><div class="cvr-minibar-fill" style="width:' + w + '%;background:' + col + '"></div></div>'
+        + '</div>';
+    };
+    document.getElementById('cvrGrid').innerHTML =
+      cvrCard('📜', '피드',     'cvr-feed', pF, vtF, fv, '#10b981') +
+      cvrCard('📂', '카탈로그', 'cvr-cat',  pC, vtC, cv, '#f59e0b') +
+      cvrCard('🗺', '지도',     'cvr-map',  pM, vtM, mv, '#818cf8');
+    // 가장 높은 전환율 출처 인사이트
+    const bestCvr = [
+      { src: '피드',     pct: pF },
+      { src: '카탈로그', pct: pC },
+      { src: '지도',     pct: pM },
+    ].filter(x => x.pct !== null).sort((a, b) => b.pct - a.pct)[0];
+    const insightEl = document.getElementById('cvrInsight');
+    if (bestCvr) {
+      insightEl.innerHTML =
+        '<strong>' + bestCvr.src + '</strong>에서 본 고객의 전환율이 <strong>' + bestCvr.pct + '%</strong>로 가장 높아요.'
+        + (bestCvr.src === '지도'     ? ' 지도로 찾아온 고객은 예약 의도가 강해요! 🗺' :
+           bestCvr.src === '카탈로그' ? ' 목적이 있는 카탈로그 방문자 전환율이 높아요! 📂' :
+                                        ' 피드에서도 예약으로 이어지고 있어요! 📜');
+      insightEl.style.display = '';
+    } else {
+      insightEl.style.display = 'none';
+    }
+  } else {
+    cvrSec.style.display = 'none';
   }
 
   // AI 코멘트
@@ -4463,6 +4649,15 @@ body{font-family:'Pretendard',sans-serif;background:var(--bg);color:var(--t1);mi
 .vsrc-feed{background:rgba(16,185,129,.12);color:#10B981;border:1px solid rgba(16,185,129,.25)}
 .vsrc-cat{background:rgba(245,158,11,.12);color:#f59e0b;border:1px solid rgba(245,158,11,.25)}
 .vsrc-map{background:rgba(99,102,241,.12);color:#818cf8;border:1px solid rgba(99,102,241,.25)}
+/* 출처별 전환율 */
+.sc-cvr-wrap{margin-top:6px;padding:8px 10px;background:rgba(56,189,248,.05);
+  border:1px solid rgba(56,189,248,.15);border-radius:8px}
+.sc-cvr-title{font-size:9px;color:#38bdf8;font-weight:700;margin-bottom:7px;letter-spacing:.4px}
+.sc-cvr-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+.sc-cvr-item{text-align:center}
+.sc-cvr-src{font-size:9px;color:var(--t3);font-weight:600;margin-bottom:2px}
+.sc-cvr-val{font-size:15px;font-weight:900}
+.sc-cvr-sub{font-size:9px;color:var(--t3);margin-top:1px}
 .sc-btns{display:flex;gap:6px;margin-top:10px}
 .btn-edit{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);
   color:var(--t1);border-radius:8px;padding:8px 0;font-size:12px;font-weight:600;
@@ -5262,6 +5457,41 @@ function renderShops(list) {
               '</div>' +
             '</div>'
           : '') +
+        // ── 출처별 전환율 (영상→예약, 오늘)
+        (function(){
+          const vF=s.todayFeedView||0, vC=s.todayCatalogView||0, vM=s.todayMapView||0;
+          const tF=s.todayVtsFeed||0,  tC=s.todayVtsCatalog||0,  tM=s.todayVtsMap||0;
+          if (tF+tC+tM === 0) return '';
+          const cvr = (v,t) => v>0 ? Math.round(t/v*100)+'%' : '—';
+          const bar = (pct,col) => {
+            const n = parseInt(pct)||0;
+            return '<div style="height:4px;border-radius:2px;background:rgba(255,255,255,.06);margin-top:3px">'
+              +'<div style="height:4px;border-radius:2px;background:'+col+';width:'+Math.min(n,100)+'%"></div></div>';
+          };
+          return '<div class="sc-cvr-wrap">'
+            +'<div class="sc-cvr-title">오늘 영상→예약 전환율</div>'
+            +'<div class="sc-cvr-row">'
+              +'<div class="sc-cvr-item">'
+                +'<div class="sc-cvr-src">📜 피드</div>'
+                +'<div class="sc-cvr-val" style="color:#10b981">'+cvr(vF,tF)+'</div>'
+                +'<div class="sc-cvr-sub">'+tF+'/'+vF+'명'+'</div>'
+                +bar(parseInt(cvr(vF,tF)),'#10b981')
+              +'</div>'
+              +'<div class="sc-cvr-item">'
+                +'<div class="sc-cvr-src">📂 카탈로그</div>'
+                +'<div class="sc-cvr-val" style="color:#f59e0b">'+cvr(vC,tC)+'</div>'
+                +'<div class="sc-cvr-sub">'+tC+'/'+vC+'명'+'</div>'
+                +bar(parseInt(cvr(vC,tC)),'#f59e0b')
+              +'</div>'
+              +'<div class="sc-cvr-item">'
+                +'<div class="sc-cvr-src">🗺 지도</div>'
+                +'<div class="sc-cvr-val" style="color:#818cf8">'+cvr(vM,tM)+'</div>'
+                +'<div class="sc-cvr-sub">'+tM+'/'+vM+'명'+'</div>'
+                +bar(parseInt(cvr(vM,tM)),'#818cf8')
+              +'</div>'
+            +'</div>'
+          +'</div>';
+        }()) +
       '</div>' +
       (totToday>0?'<div style="margin-top:6px;padding:6px 10px;background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.2);border-radius:8px;font-size:10px;color:#f59e0b;font-weight:700">' +
         '오늘 📅'+(s.todayFeedSP||0)+' 📍'+(s.todayMapSP||0)+' <span style="color:#64748b;font-weight:500">👁'+(s.todayViews||0)+'</span></div>':'') +
