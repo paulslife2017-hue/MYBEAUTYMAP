@@ -432,12 +432,44 @@ app.delete('/api/admin/shops/:id', async (c) => {
 app.post('/api/track/view/:id', async (c) => {
   const id = +c.req.param('id')
   const today = kstToday()
-  await Promise.all([
-    sql`INSERT INTO stats (shop_id, view_cnt) VALUES (${id}, 1)
-        ON CONFLICT (shop_id) DO UPDATE SET view_cnt = stats.view_cnt + 1`,
-    sql`INSERT INTO daily_stats (shop_id, stat_date, view_cnt) VALUES (${id}, ${today}, 1)
-        ON CONFLICT (shop_id, stat_date) DO UPDATE SET view_cnt = daily_stats.view_cnt + 1`,
-  ])
+  // source: 'feed' | 'catalog' | 'map'  (클라이언트에서 전송)
+  let source = 'feed'
+  try {
+    const body = await c.req.json()
+    if (['feed','catalog','map'].includes(body?.source)) source = body.source
+  } catch (_) {}
+
+  // stats 테이블: view_cnt 누적 (합계)
+  await sql`INSERT INTO stats (shop_id, view_cnt) VALUES (${id}, 1)
+      ON CONFLICT (shop_id) DO UPDATE SET view_cnt = stats.view_cnt + 1`
+
+  // daily_stats: view_cnt(합계) + 출처별 컬럼 동시 업데이트
+  // feed_view / catalog_view / map_view 컬럼이 없으면 ADD COLUMN (마이그레이션 자동화)
+  try {
+    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS feed_view    INTEGER NOT NULL DEFAULT 0`
+    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS catalog_view INTEGER NOT NULL DEFAULT 0`
+    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS map_view     INTEGER NOT NULL DEFAULT 0`
+  } catch (_) {}
+
+  if (source === 'feed') {
+    await sql`INSERT INTO daily_stats (shop_id, stat_date, view_cnt, feed_view)
+                VALUES (${id}, ${today}, 1, 1)
+              ON CONFLICT (shop_id, stat_date) DO UPDATE
+                SET view_cnt   = daily_stats.view_cnt   + 1,
+                    feed_view  = daily_stats.feed_view  + 1`
+  } else if (source === 'catalog') {
+    await sql`INSERT INTO daily_stats (shop_id, stat_date, view_cnt, catalog_view)
+                VALUES (${id}, ${today}, 1, 1)
+              ON CONFLICT (shop_id, stat_date) DO UPDATE
+                SET view_cnt      = daily_stats.view_cnt      + 1,
+                    catalog_view  = daily_stats.catalog_view  + 1`
+  } else {
+    await sql`INSERT INTO daily_stats (shop_id, stat_date, view_cnt, map_view)
+                VALUES (${id}, ${today}, 1, 1)
+              ON CONFLICT (shop_id, stat_date) DO UPDATE
+                SET view_cnt  = daily_stats.view_cnt  + 1,
+                    map_view  = daily_stats.map_view  + 1`
+  }
   return c.json({ ok: true })
 })
 // 트래킹 — 피드 예약클릭
@@ -498,14 +530,21 @@ app.post('/api/admin/reset-stats', async (c) => {
 app.post('/api/admin/init-daily-stats', async (c) => {
   await sql`
     CREATE TABLE IF NOT EXISTS daily_stats (
-      shop_id   INTEGER NOT NULL,
-      stat_date DATE    NOT NULL,
-      view_cnt  INTEGER NOT NULL DEFAULT 0,
-      feed_sp   INTEGER NOT NULL DEFAULT 0,
-      map_sp    INTEGER NOT NULL DEFAULT 0,
+      shop_id      INTEGER NOT NULL,
+      stat_date    DATE    NOT NULL,
+      view_cnt     INTEGER NOT NULL DEFAULT 0,
+      feed_sp      INTEGER NOT NULL DEFAULT 0,
+      map_sp       INTEGER NOT NULL DEFAULT 0,
+      feed_view    INTEGER NOT NULL DEFAULT 0,
+      catalog_view INTEGER NOT NULL DEFAULT 0,
+      map_view     INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (shop_id, stat_date)
     )
   `
+  // 기존 테이블에 컬럼 추가 (이미 존재하면 무시)
+  await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS feed_view    INTEGER NOT NULL DEFAULT 0`
+  await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS catalog_view INTEGER NOT NULL DEFAULT 0`
+  await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS map_view     INTEGER NOT NULL DEFAULT 0`
   return c.json({ ok: true })
 })
 
@@ -514,17 +553,26 @@ app.get('/api/admin/stats', async (c) => {
   const today     = kstToday()
   const yesterday = kstYesterday()
 
-  // daily_stats 테이블 자동 생성 (없으면)
+  // daily_stats 테이블 자동 생성 (없으면) + 출처별 컬럼 마이그레이션
   await sql`
     CREATE TABLE IF NOT EXISTS daily_stats (
-      shop_id   INTEGER NOT NULL,
-      stat_date DATE    NOT NULL,
-      view_cnt  INTEGER NOT NULL DEFAULT 0,
-      feed_sp   INTEGER NOT NULL DEFAULT 0,
-      map_sp    INTEGER NOT NULL DEFAULT 0,
+      shop_id      INTEGER NOT NULL,
+      stat_date    DATE    NOT NULL,
+      view_cnt     INTEGER NOT NULL DEFAULT 0,
+      feed_sp      INTEGER NOT NULL DEFAULT 0,
+      map_sp       INTEGER NOT NULL DEFAULT 0,
+      feed_view    INTEGER NOT NULL DEFAULT 0,
+      catalog_view INTEGER NOT NULL DEFAULT 0,
+      map_view     INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (shop_id, stat_date)
     )
   `
+  // 기존 테이블에 신규 컬럼 추가 (없으면)
+  try {
+    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS feed_view    INTEGER NOT NULL DEFAULT 0`
+    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS catalog_view INTEGER NOT NULL DEFAULT 0`
+    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS map_view     INTEGER NOT NULL DEFAULT 0`
+  } catch (_) {}
 
   // 업체별 누적 통계 (랭킹용)
   const rows = await sql`
@@ -579,20 +627,26 @@ app.get('/api/admin/stats', async (c) => {
   const td = todayTotals[0] || {}
   const yd = yestTotals[0]  || {}
 
-  // 업체별 오늘 통계 (피드/지도 클릭 분리)
+  // 업체별 오늘 통계 (피드/지도 클릭 + 출처별 조회 분리)
   const todayShopRows = await sql`
     SELECT shop_id,
-           COALESCE(view_cnt,0) as view_cnt,
-           COALESCE(feed_sp,0)  as feed_sp,
-           COALESCE(map_sp,0)   as map_sp
+           COALESCE(view_cnt,0)     as view_cnt,
+           COALESCE(feed_sp,0)      as feed_sp,
+           COALESCE(map_sp,0)       as map_sp,
+           COALESCE(feed_view,0)    as feed_view,
+           COALESCE(catalog_view,0) as catalog_view,
+           COALESCE(map_view,0)     as map_view
     FROM daily_stats WHERE stat_date = ${today}
   `
   const todayShopMap: Record<number,any> = {}
   todayShopRows.forEach((r:any) => {
     todayShopMap[r.shop_id] = {
-      todayViews:  parseInt(r.view_cnt) || 0,
-      todayFeedSP: parseInt(r.feed_sp)  || 0,
-      todayMapSP:  parseInt(r.map_sp)   || 0,
+      todayViews:       parseInt(r.view_cnt)     || 0,
+      todayFeedSP:      parseInt(r.feed_sp)      || 0,
+      todayMapSP:       parseInt(r.map_sp)       || 0,
+      todayFeedView:    parseInt(r.feed_view)    || 0,
+      todayCatalogView: parseInt(r.catalog_view) || 0,
+      todayMapView:     parseInt(r.map_view)     || 0,
     }
   })
 
@@ -623,9 +677,12 @@ app.get('/api/admin/stats', async (c) => {
       tags:          r.tags ?? [],
       description:   r.description ?? '',
       // 오늘 업체별 성과
-      todayViews:  todayShopMap[r.id]?.todayViews  || 0,
-      todayFeedSP: todayShopMap[r.id]?.todayFeedSP || 0,
-      todayMapSP:  todayShopMap[r.id]?.todayMapSP  || 0,
+      todayViews:       todayShopMap[r.id]?.todayViews       || 0,
+      todayFeedSP:      todayShopMap[r.id]?.todayFeedSP      || 0,
+      todayMapSP:       todayShopMap[r.id]?.todayMapSP       || 0,
+      todayFeedView:    todayShopMap[r.id]?.todayFeedView    || 0,
+      todayCatalogView: todayShopMap[r.id]?.todayCatalogView || 0,
+      todayMapView:     todayShopMap[r.id]?.todayMapView     || 0,
     })),
     // 누적
     totalViews:  parseInt(t.total_views)   || 0,
@@ -948,31 +1005,40 @@ app.post('/api/report/:token/verify', async (c) => {
   const today = kstToday()
   const thisMonth = today.slice(0, 7) // YYYY-MM
 
-  // 이번 달 통계
+  // 이번 달 통계 (출처별 조회 포함)
   const thisMonthStats = await sql`
-    SELECT COALESCE(SUM(view_cnt),0) as views,
-           COALESCE(SUM(feed_sp),0)  as feed_sp,
-           COALESCE(SUM(map_sp),0)   as map_sp
+    SELECT COALESCE(SUM(view_cnt),0)     as views,
+           COALESCE(SUM(feed_sp),0)      as feed_sp,
+           COALESCE(SUM(map_sp),0)       as map_sp,
+           COALESCE(SUM(feed_view),0)    as feed_view,
+           COALESCE(SUM(catalog_view),0) as catalog_view,
+           COALESCE(SUM(map_view),0)     as map_view
     FROM daily_stats
     WHERE shop_id = ${shop.id}
       AND stat_date >= (DATE_TRUNC('month', CURRENT_DATE))
   `
-  // 지난 달 통계
+  // 지난 달 통계 (출처별 조회 포함)
   const lastMonthStats = await sql`
-    SELECT COALESCE(SUM(view_cnt),0) as views,
-           COALESCE(SUM(feed_sp),0)  as feed_sp,
-           COALESCE(SUM(map_sp),0)   as map_sp
+    SELECT COALESCE(SUM(view_cnt),0)     as views,
+           COALESCE(SUM(feed_sp),0)      as feed_sp,
+           COALESCE(SUM(map_sp),0)       as map_sp,
+           COALESCE(SUM(feed_view),0)    as feed_view,
+           COALESCE(SUM(catalog_view),0) as catalog_view,
+           COALESCE(SUM(map_view),0)     as map_view
     FROM daily_stats
     WHERE shop_id = ${shop.id}
       AND stat_date >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')
       AND stat_date <  DATE_TRUNC('month', CURRENT_DATE)
   `
-  // 최근 30일 일별 추이
+  // 최근 30일 일별 추이 (출처별 포함)
   const daily30 = await sql`
     SELECT stat_date::text as d,
-           COALESCE(view_cnt,0) as views,
-           COALESCE(feed_sp,0)  as feed_sp,
-           COALESCE(map_sp,0)   as map_sp
+           COALESCE(view_cnt,0)     as views,
+           COALESCE(feed_sp,0)      as feed_sp,
+           COALESCE(map_sp,0)       as map_sp,
+           COALESCE(feed_view,0)    as feed_view,
+           COALESCE(catalog_view,0) as catalog_view,
+           COALESCE(map_view,0)     as map_view
     FROM daily_stats
     WHERE shop_id = ${shop.id}
       AND stat_date >= (CURRENT_DATE - INTERVAL '29 days')
@@ -1009,14 +1075,20 @@ app.post('/api/report/:token/verify', async (c) => {
       address:  shop.address,
     },
     thisMonth: {
-      views:  parseInt(thisMonthStats[0]?.views)  || 0,
-      feedSP: parseInt(thisMonthStats[0]?.feed_sp) || 0,
-      mapSP:  parseInt(thisMonthStats[0]?.map_sp)  || 0,
+      views:       parseInt(thisMonthStats[0]?.views)        || 0,
+      feedSP:      parseInt(thisMonthStats[0]?.feed_sp)      || 0,
+      mapSP:       parseInt(thisMonthStats[0]?.map_sp)       || 0,
+      feedView:    parseInt(thisMonthStats[0]?.feed_view)    || 0,
+      catalogView: parseInt(thisMonthStats[0]?.catalog_view) || 0,
+      mapView:     parseInt(thisMonthStats[0]?.map_view)     || 0,
     },
     lastMonth: {
-      views:  parseInt(lastMonthStats[0]?.views)  || 0,
-      feedSP: parseInt(lastMonthStats[0]?.feed_sp) || 0,
-      mapSP:  parseInt(lastMonthStats[0]?.map_sp)  || 0,
+      views:       parseInt(lastMonthStats[0]?.views)        || 0,
+      feedSP:      parseInt(lastMonthStats[0]?.feed_sp)      || 0,
+      mapSP:       parseInt(lastMonthStats[0]?.map_sp)       || 0,
+      feedView:    parseInt(lastMonthStats[0]?.feed_view)    || 0,
+      catalogView: parseInt(lastMonthStats[0]?.catalog_view) || 0,
+      mapView:     parseInt(lastMonthStats[0]?.map_view)     || 0,
     },
     total: {
       views:  parseInt(totalStats[0]?.views)  || 0,
@@ -2041,13 +2113,19 @@ let mapInited  = false;
 let nvMarkers  = {};   // id -> {marker, overlay}
 // ── 영상조회: 실제 클릭(재생)할 때만, 세션 내 업체당 1회만 카운팅 ──────────
 // sessionStorage 사용 → 새로고침해도 탭 닫기 전까지 중복 방지
-function trackView(shopId) {
+// source: 'feed' | 'catalog' | 'map'  (어디서 영상을 재생했는지)
+function trackView(shopId, source) {
   if (!shopId) return;
-  const id = String(shopId);
-  const key = 'viewed_' + id;
+  const id  = String(shopId);
+  const src = source || 'feed';
+  const key = 'viewed_' + id + '_' + src; // source별로 독립 카운팅
   if (sessionStorage.getItem(key)) return; // 이미 이 탭에서 카운팅됨
   sessionStorage.setItem(key, '1');
-  fetch('/api/track/view/'+id, {method:'POST'}).catch(()=>{});
+  fetch('/api/track/view/'+id, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source: src }),
+  }).catch(()=>{});
 }
 let userMarker = null;
 
@@ -2231,7 +2309,9 @@ function feedPlayVideo(el) {
   const shopId = el.dataset.shopid;
   const ytId   = el.dataset.ytid;
   if (!ytId) return;
-  trackView(shopId);
+  // feedCat === 'all' 이면 피드 전체 스크롤, 특정 카테고리면 카탈로그
+  const source = (feedCat && feedCat !== 'all') ? 'catalog' : 'feed';
+  trackView(shopId, source);
   el.style.cursor = 'default';
   el.onclick = null;
   el.innerHTML = '<iframe'
@@ -2632,8 +2712,8 @@ function openMapPopup(shop) {
 }
 
 function loadYtInPopup(ytId) {
-  // 지도 팝업 썸네일 클릭 → 영상조회 카운팅 (세션 내 1회)
-  if (curShop?.id) trackView(curShop.id);
+  // 지도 팝업 썸네일 클릭 → 영상조회 카운팅 (세션 내 1회, 출처: map)
+  if (curShop?.id) trackView(curShop.id, 'map');
   document.getElementById('mpYt').innerHTML = \`
     <div style="position:relative;width:100%;padding-top:52%;background:#000">
       <iframe style="position:absolute;inset:0;width:100%;height:100%;border:none"
@@ -3525,8 +3605,8 @@ function closeCard() {
 function playVideo() {
   // 유튜브 없으면 아무것도 안 함
   if (!curShop?.youtubeId) return;
-  // 지도 하단 카드 썸네일 클릭 → 영상조회 카운팅 (세션 내 1회)
-  trackView(curShop.id);
+  // 지도 하단 카드 썸네일 클릭 → 영상조회 카운팅 (세션 내 1회, 출처: map)
+  trackView(curShop.id, 'map');
   const iframe = document.getElementById('cardIframe');
   // 썸네일 직접 클릭 → mute 없이 재생 (광고 수익 활성화)
   iframe.src = \`https://www.youtube.com/embed/\${curShop.youtubeId}?autoplay=1&playsinline=1&rel=0&modestbranding=1&color=white\`;
@@ -3798,6 +3878,23 @@ body{background:#0a0a0f;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFo
 .total-val{font-size:18px;font-weight:800;color:#a78bfa}
 .total-lbl{font-size:10px;color:#475569;margin-top:3px}
 
+/* ── 출처별 영상조회 ── */
+.src-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
+.src-card{border-radius:14px;padding:14px 10px;text-align:center;border:1px solid transparent}
+.src-feed{background:rgba(16,185,129,.08);border-color:rgba(16,185,129,.2)}
+.src-cat{background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.2)}
+.src-map{background:rgba(99,102,241,.08);border-color:rgba(99,102,241,.2)}
+.src-icon{font-size:20px;margin-bottom:6px}
+.src-val{font-size:18px;font-weight:800;color:#fff}
+.src-feed .src-val{color:#10b981}
+.src-cat  .src-val{color:#f59e0b}
+.src-map  .src-val{color:#818cf8}
+.src-lbl{font-size:10px;font-weight:700;color:#64748b;margin-top:3px}
+.src-sub{font-size:10px;color:#475569;margin-top:2px;font-weight:600}
+.src-bar-wrap{margin-top:14px;background:rgba(255,255,255,.04);border-radius:8px;overflow:hidden;height:10px;display:flex}
+.src-bar-seg{height:100%;transition:width .6s ease}
+.src-hint{font-size:10px;color:#334155;text-align:center;margin-top:8px}
+
 /* ── 코멘트 ── */
 .comment-box{margin:20px 16px 0;background:linear-gradient(135deg,rgba(6,182,212,.08),rgba(59,130,246,.05));border:1px solid rgba(6,182,212,.2);border-radius:16px;padding:18px 16px;display:flex;gap:12px;align-items:flex-start}
 .comment-icon{font-size:22px;flex-shrink:0;margin-top:2px}
@@ -3892,6 +3989,33 @@ body{background:#0a0a0f;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFo
       <div class="chart-title">영상조회 · 예약클릭 · 지도클릭</div>
       <canvas id="trendChart" height="160"></canvas>
     </div>
+  </div>
+
+  <!-- 이번 달 영상조회 출처 분석 -->
+  <div class="rp-section" style="margin-top:20px" id="srcSection" style="display:none">
+    <div class="rp-section-title">이번 달 영상조회 출처</div>
+    <div class="src-grid">
+      <div class="src-card src-feed">
+        <div class="src-icon">📜</div>
+        <div class="src-val" id="sFeedView">—</div>
+        <div class="src-lbl">피드 스크롤</div>
+        <div class="src-sub" id="sFeedPct"></div>
+      </div>
+      <div class="src-card src-cat">
+        <div class="src-icon">📂</div>
+        <div class="src-val" id="sCatView">—</div>
+        <div class="src-lbl">카탈로그</div>
+        <div class="src-sub" id="sCatPct"></div>
+      </div>
+      <div class="src-card src-map">
+        <div class="src-icon">🗺</div>
+        <div class="src-val" id="sMapView">—</div>
+        <div class="src-lbl">지도</div>
+        <div class="src-sub" id="sMapPct"></div>
+      </div>
+    </div>
+    <div class="src-bar-wrap" id="srcBarWrap"></div>
+    <div class="src-hint">어디서 내 영상을 발견했는지 알 수 있어요</div>
   </div>
 
   <!-- 누적 통계 -->
@@ -4049,6 +4173,31 @@ function renderReport(d) {
   document.getElementById('tViews').textContent = fmt(d.total.views);
   document.getElementById('tFeed').textContent  = fmt(d.total.feedSP);
   document.getElementById('tMap').textContent   = fmt(d.total.mapSP);
+
+  // ── 출처별 영상조회 섹션 ──
+  const fv  = d.thisMonth.feedView    || 0;
+  const cv  = d.thisMonth.catalogView || 0;
+  const mv  = d.thisMonth.mapView     || 0;
+  const svTotal = fv + cv + mv;
+  const srcSec = document.getElementById('srcSection');
+  if (svTotal > 0) {
+    srcSec.style.display = '';
+    const pct = (n) => svTotal > 0 ? Math.round(n / svTotal * 100) + '%' : '0%';
+    document.getElementById('sFeedView').textContent = fmt(fv);
+    document.getElementById('sCatView').textContent  = fmt(cv);
+    document.getElementById('sMapView').textContent  = fmt(mv);
+    document.getElementById('sFeedPct').textContent  = pct(fv);
+    document.getElementById('sCatPct').textContent   = pct(cv);
+    document.getElementById('sMapPct').textContent   = pct(mv);
+    // 비율 바
+    document.getElementById('srcBarWrap').innerHTML =
+      '<div class="src-bar-seg" style="width:'+pct(fv)+';background:#10b981"></div>' +
+      '<div class="src-bar-seg" style="width:'+pct(cv)+';background:#f59e0b"></div>' +
+      '<div class="src-bar-seg" style="width:'+pct(mv)+';background:#818cf8"></div>';
+  } else {
+    // 출처 데이터 없으면 섹션 숨김 (기존 데이터 없을 때)
+    srcSec.style.display = 'none';
+  }
 
   // AI 코멘트
   const totalAct = d.thisMonth.views + d.thisMonth.feedSP + d.thisMonth.mapSP;
@@ -4305,6 +4454,15 @@ body{font-family:'Pretendard',sans-serif;background:var(--bg);color:var(--t1);mi
   border-radius:8px;padding:7px 10px}
 .stc-val{font-size:16px;font-weight:900;color:#fff}
 .stc-lbl{font-size:10px;color:var(--t3);font-weight:600}
+/* 출처별 영상조회 분석 칩 */
+.sc-view-src{margin-top:6px;padding:7px 10px;background:rgba(167,139,250,.06);
+  border:1px solid rgba(167,139,250,.18);border-radius:8px}
+.vsrc-title{font-size:9px;color:#a78bfa;font-weight:700;margin-bottom:5px;letter-spacing:.4px}
+.vsrc-row{display:flex;gap:5px;flex-wrap:wrap}
+.vsrc-chip{font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;white-space:nowrap}
+.vsrc-feed{background:rgba(16,185,129,.12);color:#10B981;border:1px solid rgba(16,185,129,.25)}
+.vsrc-cat{background:rgba(245,158,11,.12);color:#f59e0b;border:1px solid rgba(245,158,11,.25)}
+.vsrc-map{background:rgba(99,102,241,.12);color:#818cf8;border:1px solid rgba(99,102,241,.25)}
 .sc-btns{display:flex;gap:6px;margin-top:10px}
 .btn-edit{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);
   color:var(--t1);border-radius:8px;padding:8px 0;font-size:12px;font-weight:600;
@@ -5088,11 +5246,22 @@ function renderShops(list) {
             '<div class="sn-l main-lbl">지도 예약클릭</div>' +
           '</div>' +
         '</div>' +
-        // ── 총 클릭 + 보조: 영상조회
+        // ── 총 클릭 + 보조: 영상조회 합계
         '<div class="sc-total-click">' +
           '<div><div class="stc-lbl">총 예약클릭</div><div class="stc-val">'+((s.feedSP||0)+(s.mapSP||0)).toLocaleString()+'</div></div>' +
           '<div style="text-align:right"><div class="stc-lbl">👁 영상조회</div><div class="sn-v sub">'+(s.views||0).toLocaleString()+'</div></div>' +
         '</div>' +
+        // ── 출처별 영상조회 분석 (오늘)
+        ((s.todayFeedView||0)+(s.todayCatalogView||0)+(s.todayMapView||0) > 0
+          ? '<div class="sc-view-src">' +
+              '<div class="vsrc-title">오늘 영상조회 출처</div>' +
+              '<div class="vsrc-row">' +
+                '<span class="vsrc-chip vsrc-feed">📜 피드 '+(s.todayFeedView||0)+'</span>' +
+                '<span class="vsrc-chip vsrc-cat">📂 카탈로그 '+(s.todayCatalogView||0)+'</span>' +
+                '<span class="vsrc-chip vsrc-map">🗺 지도 '+(s.todayMapView||0)+'</span>' +
+              '</div>' +
+            '</div>'
+          : '') +
       '</div>' +
       (totToday>0?'<div style="margin-top:6px;padding:6px 10px;background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.2);border-radius:8px;font-size:10px;color:#f59e0b;font-weight:700">' +
         '오늘 📅'+(s.todayFeedSP||0)+' 📍'+(s.todayMapSP||0)+' <span style="color:#64748b;font-weight:500">👁'+(s.todayViews||0)+'</span></div>':'') +
