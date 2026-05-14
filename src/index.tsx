@@ -203,6 +203,23 @@ function calcDist(la1: number, lo1: number, la2: number, lo2: number) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
+// 앱 시작 시 자동 마이그레이션 (컬럼 없으면 추가)
+// ══════════════════════════════════════════════════════════════════════════
+;(async () => {
+  try {
+    await sql`ALTER TABLE shops ADD COLUMN IF NOT EXISTS report_token TEXT`
+  } catch (_) {}
+  try {
+    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS feed_view    INTEGER NOT NULL DEFAULT 0`
+    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS catalog_view INTEGER NOT NULL DEFAULT 0`
+    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS map_view     INTEGER NOT NULL DEFAULT 0`
+    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS vts_feed     INTEGER NOT NULL DEFAULT 0`
+    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS vts_catalog  INTEGER NOT NULL DEFAULT 0`
+    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS vts_map      INTEGER NOT NULL DEFAULT 0`
+  } catch (_) {}
+})()
+
+// ══════════════════════════════════════════════════════════════════════════
 // API 라우트
 // ══════════════════════════════════════════════════════════════════════════
 
@@ -1050,6 +1067,10 @@ app.get('/c/:category/:region', async (c) => {
 // ── report_token 생성 (관리자용) ─────────────────────────────────────────
 app.post('/api/admin/shops/:id/report-token', async (c) => {
   const id = +c.req.param('id')
+  // report_token 컬럼 자동 마이그레이션
+  try {
+    await sql`ALTER TABLE shops ADD COLUMN IF NOT EXISTS report_token TEXT`
+  } catch (_) {}
   // 랜덤 토큰 생성 (12자리 hex)
   const token = Array.from({length: 12}, () => Math.floor(Math.random()*16).toString(16)).join('')
   const rows = await sql`
@@ -4026,6 +4047,15 @@ body{background:#0a0a0f;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFo
   font-size:11px;color:#94a3b8;line-height:1.7}
 .cvr-insight strong{color:#e2e8f0}
 
+/* ── 30일 vts 추이 차트 ── */
+.vts-tab-row{display:flex;gap:6px;margin-top:10px}
+.vts-tab{flex:1;padding:7px 0;border-radius:8px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:#64748b;font-size:12px;font-weight:600;cursor:pointer;transition:all .2s}
+.vts-tab-on{background:rgba(167,139,250,.18);border-color:rgba(167,139,250,.4);color:#c4b5fd}
+.vts-legend-row{display:flex;align-items:center;gap:8px;margin-top:10px;justify-content:center;flex-wrap:wrap}
+.vts-dot{display:inline-block;width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.vts-leg-lbl{font-size:11px;color:#64748b;margin-right:6px}
+.vts-no-data{text-align:center;font-size:12px;color:#475569;padding:24px 0}
+
 /* ── 코멘트 ── */
 .comment-box{margin:20px 16px 0;background:linear-gradient(135deg,rgba(6,182,212,.08),rgba(59,130,246,.05));border:1px solid rgba(6,182,212,.2);border-radius:16px;padding:18px 16px;display:flex;gap:12px;align-items:flex-start}
 .comment-icon{font-size:22px;flex-shrink:0;margin-top:2px}
@@ -4157,6 +4187,27 @@ body{background:#0a0a0f;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFo
       <!-- JS로 렌더링 -->
     </div>
     <div class="cvr-insight" id="cvrInsight"></div>
+  </div>
+
+  <!-- 30일 출처별 전환율 추이 차트 -->
+  <div class="rp-section" style="margin-top:20px" id="vts30Section">
+    <div class="rp-section-title">30일 전환율 추이</div>
+    <div class="cvr-desc">출처별로 영상→예약 전환율이 어떻게 변했는지 보여줘요</div>
+    <div class="vts-tab-row">
+      <button class="vts-tab vts-tab-on" id="vtsTabPct" onclick="switchVtsTab('pct')">전환율 (%)</button>
+      <button class="vts-tab" id="vtsTabCnt" onclick="switchVtsTab('cnt')">전환 건수</button>
+    </div>
+    <div class="chart-wrap" style="margin-top:8px;padding:12px 8px 8px">
+      <canvas id="vtsChart" height="170"></canvas>
+    </div>
+    <div class="vts-legend-row">
+      <span class="vts-dot" style="background:#10b981"></span><span class="vts-leg-lbl">피드</span>
+      <span class="vts-dot" style="background:#f59e0b"></span><span class="vts-leg-lbl">카탈로그</span>
+      <span class="vts-dot" style="background:#818cf8"></span><span class="vts-leg-lbl">지도</span>
+    </div>
+    <div class="vts-no-data" id="vtsNoData" style="display:none">
+      아직 출처별 전환 데이터가 쌓이는 중이에요 📊
+    </div>
   </div>
 
   <!-- 누적 통계 -->
@@ -4384,6 +4435,114 @@ function renderReport(d) {
   } else {
     cvrSec.style.display = 'none';
   }
+
+  // ── 30일 출처별 전환율 추이 차트 ──
+  (function() {
+    const rows = d.daily30 || [];
+    // vts 데이터가 하나라도 있는 날이 있으면 섹션 표시
+    const hasVts = rows.some(r =>
+      (parseInt(r.vts_feed)||0) + (parseInt(r.vts_catalog)||0) + (parseInt(r.vts_map)||0) > 0
+    );
+    const vts30Sec  = document.getElementById('vts30Section');
+    const vtsNoData = document.getElementById('vtsNoData');
+    const vtsCanvas = document.getElementById('vtsChart');
+    if (!hasVts) {
+      // 데이터 없으면 캔버스 숨기고 안내문 표시
+      vts30Sec.style.display = '';
+      vtsCanvas.style.display = 'none';
+      document.querySelector('.vts-tab-row').style.display = 'none';
+      document.querySelector('.vts-legend-row').style.display = 'none';
+      vtsNoData.style.display = '';
+      return;
+    }
+
+    // 날짜 라벨 + 데이터 배열 구성
+    const lbl = [], vF = [], vC = [], vM = [], cF = [], cC = [], cM = [];
+    rows.forEach(r => {
+      const dt = new Date(r.d);
+      lbl.push((dt.getMonth()+1) + '/' + dt.getDate());
+      const fv = parseInt(r.feed_view)    || 0;
+      const cv = parseInt(r.catalog_view) || 0;
+      const mv = parseInt(r.map_view)     || 0;
+      const tf = parseInt(r.vts_feed)     || 0;
+      const tc = parseInt(r.vts_catalog)  || 0;
+      const tm = parseInt(r.vts_map)      || 0;
+      // 전환율(%) — 분모 0이면 null (차트에서 gap으로 표시)
+      vF.push(fv > 0 ? Math.round(tf / fv * 100) : null);
+      vC.push(cv > 0 ? Math.round(tc / cv * 100) : null);
+      vM.push(mv > 0 ? Math.round(tm / mv * 100) : null);
+      // 전환 건수
+      cF.push(tf); cC.push(tc); cM.push(tm);
+    });
+
+    // Chart.js 공통 옵션
+    const commonScales = (yLabel) => ({
+      x: {
+        ticks: { color: '#475569', font: { size: 9 }, maxTicksLimit: 10 },
+        grid:  { color: 'rgba(255,255,255,.04)' }
+      },
+      y: {
+        ticks: { color: '#475569', font: { size: 10 },
+                 callback: (v) => yLabel === '%' ? v + '%' : v + '건' },
+        grid:  { color: 'rgba(255,255,255,.06)' },
+        min: 0,
+        suggestedMax: yLabel === '%' ? 100 : undefined
+      }
+    });
+
+    const makeDatasets = (mode) => [
+      { label: '피드',     data: mode==='pct'?vF:cF, borderColor:'#10b981', backgroundColor:'rgba(16,185,129,.12)',
+        tension:.4, fill:true, pointRadius:3, pointHoverRadius:5,
+        spanGaps: true },
+      { label: '카탈로그', data: mode==='pct'?vC:cC, borderColor:'#f59e0b', backgroundColor:'rgba(245,158,11,.10)',
+        tension:.4, fill:true, pointRadius:3, pointHoverRadius:5,
+        spanGaps: true },
+      { label: '지도',     data: mode==='pct'?vM:cM, borderColor:'#818cf8', backgroundColor:'rgba(129,140,248,.10)',
+        tension:.4, fill:true, pointRadius:3, pointHoverRadius:5,
+        spanGaps: true },
+    ];
+
+    let curMode = 'pct';
+    let vtsChartInst = new Chart(vtsCanvas, {
+      type: 'line',
+      data: { labels: lbl, datasets: makeDatasets('pct') },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: 'rgba(15,23,42,.92)',
+            titleColor: '#94a3b8',
+            bodyColor: '#e2e8f0',
+            borderColor: 'rgba(255,255,255,.1)',
+            borderWidth: 1,
+            padding: 10,
+            callbacks: {
+              label: (ctx) => {
+                const v = ctx.parsed.y;
+                if (v === null || v === undefined) return null;
+                return ' ' + ctx.dataset.label + ': ' + (curMode==='pct' ? v+'%' : v+'건');
+              }
+            }
+          }
+        },
+        scales: commonScales('%')
+      }
+    });
+
+    // 탭 전환 함수 (전역 등록)
+    window.switchVtsTab = function(mode) {
+      if (mode === curMode) return;
+      curMode = mode;
+      document.getElementById('vtsTabPct').className = 'vts-tab' + (mode==='pct' ? ' vts-tab-on' : '');
+      document.getElementById('vtsTabCnt').className = 'vts-tab' + (mode==='cnt' ? ' vts-tab-on' : '');
+      vtsChartInst.data.datasets = makeDatasets(mode);
+      vtsChartInst.options.scales = commonScales(mode==='pct' ? '%' : 'cnt');
+      vtsChartInst.update('active');
+    };
+  })();
 
   // AI 코멘트
   const totalAct = d.thisMonth.views + d.thisMonth.feedSP + d.thisMonth.mapSP;
