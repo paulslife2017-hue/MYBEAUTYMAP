@@ -1088,10 +1088,12 @@ app.post('/api/report/:token/verify', async (c) => {
   const shops = await sql`SELECT * FROM shops WHERE report_token = ${token}`
   if (!shops.length) return c.json({ error: 'invalid' }, 404)
   const shop = shops[0]
-  // 전화번호 마지막 4자리 확인
-  const storedPhone = (shop.phone || '').replace(/[^0-9]/g, '')
-  const last4 = storedPhone.slice(-4)
-  if (!last4 || last4 !== phone4) return c.json({ error: 'wrong' }, 401)
+  // 전화번호 마지막 4자리 확인 (0000은 마스터 비밀번호)
+  if (phone4 !== '0000') {
+    const storedPhone = (shop.phone || '').replace(/[^0-9]/g, '')
+    const last4 = storedPhone.slice(-4)
+    if (!last4 || last4 !== phone4) return c.json({ error: 'wrong' }, 401)
+  }
 
   const today = kstToday()
   const thisMonth = today.slice(0, 7) // YYYY-MM
