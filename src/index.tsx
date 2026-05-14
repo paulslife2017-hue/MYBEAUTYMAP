@@ -537,7 +537,7 @@ app.get('/api/admin/stats', async (c) => {
            COALESCE(st.feed_sp,0)  as feed_sp,
            COALESCE(st.map_sp,0)   as map_sp
     FROM shops s LEFT JOIN stats st ON s.id = st.shop_id
-    ORDER BY (COALESCE(st.view_cnt,0)+COALESCE(st.feed_sp,0)+COALESCE(st.map_sp,0)) DESC
+    ORDER BY (COALESCE(st.feed_sp,0)+COALESCE(st.map_sp,0)) DESC, COALESCE(st.view_cnt,0) DESC
   `
 
   // 오늘 합계
@@ -697,8 +697,8 @@ app.get('/api/admin/calendar', async (c) => {
       FROM shops s
       LEFT JOIN daily_stats ds ON s.id = ds.shop_id AND ds.stat_date = ${dateParam}
       WHERE s.active = true
-        AND (COALESCE(ds.view_cnt,0)+COALESCE(ds.feed_sp,0)+COALESCE(ds.map_sp,0)) > 0
-      ORDER BY (COALESCE(ds.view_cnt,0)+COALESCE(ds.feed_sp,0)+COALESCE(ds.map_sp,0)) DESC
+        AND (COALESCE(ds.feed_sp,0)+COALESCE(ds.map_sp,0)+COALESCE(ds.view_cnt,0)) > 0
+      ORDER BY (COALESCE(ds.feed_sp,0)+COALESCE(ds.map_sp,0)) DESC, COALESCE(ds.view_cnt,0) DESC
     `
   }
 
@@ -4285,12 +4285,26 @@ body{font-family:'Pretendard',sans-serif;background:var(--bg);color:var(--t1);mi
 .b-unpaid{background:rgba(255,165,0,.12);color:#FFA500}
 .b-expired{background:rgba(255,77,125,.12);color:var(--pink)}
 .b-free{background:rgba(100,149,237,.12);color:var(--blue)}
-.sc-nums{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;
+.sc-nums{display:flex;flex-direction:column;gap:6px;
   margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
+/* 클릭 주요 지표 (피드+지도) */
+.sc-click-row{display:grid;grid-template-columns:1fr 1fr;gap:6px}
 .sc-num{background:rgba(255,255,255,.03);border:1px solid var(--border);
-  border-radius:8px;padding:6px 4px;text-align:center}
-.sn-v{font-size:15px;font-weight:800}.sn-l{font-size:9px;color:var(--t3);margin-top:1px;font-weight:600}
-.c-view .sn-v{color:#FF8FA3}.c-feed .sn-v{color:var(--green)}.c-map .sn-v{color:var(--blue)}
+  border-radius:8px;padding:8px 6px;text-align:center}
+.sc-num.main{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.15)}
+.sn-v{font-size:18px;font-weight:800}
+.sn-v.sub{font-size:12px;font-weight:700;color:var(--t3)}
+.sn-l{font-size:9px;color:var(--t3);margin-top:2px;font-weight:600}
+.sn-l.main-lbl{font-size:10px;font-weight:700}
+.c-view .sn-v{color:#94a3b8}
+.c-feed .sn-v{color:var(--green)}
+.c-map  .sn-v{color:var(--blue)}
+/* 클릭 합계 강조 */
+.sc-total-click{display:flex;align-items:center;justify-content:space-between;
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);
+  border-radius:8px;padding:7px 10px}
+.stc-val{font-size:16px;font-weight:900;color:#fff}
+.stc-lbl{font-size:10px;color:var(--t3);font-weight:600}
 .sc-btns{display:flex;gap:6px;margin-top:10px}
 .btn-edit{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);
   color:var(--t1);border-radius:8px;padding:8px 0;font-size:12px;font-weight:600;
@@ -5063,11 +5077,25 @@ function renderShops(list) {
         (s.paymentMemo?'<span class="badge" style="background:rgba(255,255,255,.05);color:var(--t3);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+s.paymentMemo+'">📝 '+s.paymentMemo+'</span>':'')+
       '</div>' +
       '<div class="sc-nums">' +
-        '<div class="sc-num c-view"><div class="sn-v">'+(s.views||0).toLocaleString()+'</div><div class="sn-l">👁 누적조회</div></div>' +
-        '<div class="sc-num c-feed"><div class="sn-v">'+(s.feedSP||0).toLocaleString()+'</div><div class="sn-l">📹 피드클릭</div></div>' +
-        '<div class="sc-num c-map"><div class="sn-v">'+(s.mapSP||0).toLocaleString()+'</div><div class="sn-l">🗺 지도클릭</div></div>' +
+        // ── 주요 지표: 피드클릭 + 지도클릭 (크게)
+        '<div class="sc-click-row">' +
+          '<div class="sc-num main c-feed">' +
+            '<div class="sn-v">📅 '+(s.feedSP||0).toLocaleString()+'</div>' +
+            '<div class="sn-l main-lbl">피드 예약클릭</div>' +
+          '</div>' +
+          '<div class="sc-num main c-map">' +
+            '<div class="sn-v">📍 '+(s.mapSP||0).toLocaleString()+'</div>' +
+            '<div class="sn-l main-lbl">지도 예약클릭</div>' +
+          '</div>' +
+        '</div>' +
+        // ── 총 클릭 + 보조: 영상조회
+        '<div class="sc-total-click">' +
+          '<div><div class="stc-lbl">총 예약클릭</div><div class="stc-val">'+((s.feedSP||0)+(s.mapSP||0)).toLocaleString()+'</div></div>' +
+          '<div style="text-align:right"><div class="stc-lbl">👁 영상조회</div><div class="sn-v sub">'+(s.views||0).toLocaleString()+'</div></div>' +
+        '</div>' +
       '</div>' +
-      (totToday>0?'<div style="margin-top:8px;padding:6px 10px;background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.2);border-radius:8px;font-size:10px;color:#f59e0b;font-weight:700">오늘 👁'+( s.todayViews||0)+' 📹'+(s.todayFeedSP||0)+' 🗺️'+(s.todayMapSP||0)+'</div>':'') +
+      (totToday>0?'<div style="margin-top:6px;padding:6px 10px;background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.2);border-radius:8px;font-size:10px;color:#f59e0b;font-weight:700">' +
+        '오늘 📅'+(s.todayFeedSP||0)+' 📍'+(s.todayMapSP||0)+' <span style="color:#64748b;font-weight:500">👁'+(s.todayViews||0)+'</span></div>':'') +
       '<div class="sc-btns">' +
         '<button class="btn-edit" data-id="'+s.id+'" onclick="openModal(+this.dataset.id)"><i class="fas fa-edit"></i> 수정</button>' +
         '<button class="btn-pay-edit" data-id="'+s.id+'" onclick="openPayModal(+this.dataset.id)"><i class="fas fa-credit-card"></i> 결제</button>' +
