@@ -919,6 +919,122 @@ app.get('/c/:category/:region', async (c) => {
   return c.html(categoryLandingPage(category, region, shops, baseUrl))
 })
 
+
+// ── report_token 생성 (관리자용) ─────────────────────────────────────────
+app.post('/api/admin/shops/:id/report-token', async (c) => {
+  const id = +c.req.param('id')
+  // 랜덤 토큰 생성 (12자리 hex)
+  const token = Array.from({length: 12}, () => Math.floor(Math.random()*16).toString(16)).join('')
+  const rows = await sql`
+    UPDATE shops SET report_token = ${token} WHERE id = ${id} RETURNING id, report_token
+  `
+  if (!rows.length) return c.json({ error: 'not found' }, 404)
+  return c.json({ token: rows[0].report_token })
+})
+
+// ── 리포트 페이지 데이터 API (토큰 + 전화번호 마지막 4자리 인증) ──────────
+app.post('/api/report/:token/verify', async (c) => {
+  const token = c.req.param('token')
+  const { phone4 } = await c.req.json()
+  // 토큰으로 업체 조회
+  const shops = await sql`SELECT * FROM shops WHERE report_token = ${token}`
+  if (!shops.length) return c.json({ error: 'invalid' }, 404)
+  const shop = shops[0]
+  // 전화번호 마지막 4자리 확인
+  const storedPhone = (shop.phone || '').replace(/[^0-9]/g, '')
+  const last4 = storedPhone.slice(-4)
+  if (!last4 || last4 !== phone4) return c.json({ error: 'wrong' }, 401)
+
+  const today = kstToday()
+  const thisMonth = today.slice(0, 7) // YYYY-MM
+
+  // 이번 달 통계
+  const thisMonthStats = await sql`
+    SELECT COALESCE(SUM(view_cnt),0) as views,
+           COALESCE(SUM(feed_sp),0)  as feed_sp,
+           COALESCE(SUM(map_sp),0)   as map_sp
+    FROM daily_stats
+    WHERE shop_id = ${shop.id}
+      AND stat_date >= (DATE_TRUNC('month', CURRENT_DATE))
+  `
+  // 지난 달 통계
+  const lastMonthStats = await sql`
+    SELECT COALESCE(SUM(view_cnt),0) as views,
+           COALESCE(SUM(feed_sp),0)  as feed_sp,
+           COALESCE(SUM(map_sp),0)   as map_sp
+    FROM daily_stats
+    WHERE shop_id = ${shop.id}
+      AND stat_date >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')
+      AND stat_date <  DATE_TRUNC('month', CURRENT_DATE)
+  `
+  // 최근 30일 일별 추이
+  const daily30 = await sql`
+    SELECT stat_date::text as d,
+           COALESCE(view_cnt,0) as views,
+           COALESCE(feed_sp,0)  as feed_sp,
+           COALESCE(map_sp,0)   as map_sp
+    FROM daily_stats
+    WHERE shop_id = ${shop.id}
+      AND stat_date >= (CURRENT_DATE - INTERVAL '29 days')
+    ORDER BY stat_date ASC
+  `
+  // 같은 카테고리 내 순위
+  const rankRows = await sql`
+    SELECT s.id,
+           COALESCE(SUM(ds.view_cnt),0) as total
+    FROM shops s
+    LEFT JOIN daily_stats ds
+      ON s.id = ds.shop_id
+      AND ds.stat_date >= DATE_TRUNC('month', CURRENT_DATE)
+    WHERE s.category = ${shop.category} AND s.active = true
+    GROUP BY s.id
+    ORDER BY total DESC
+  `
+  const rank      = rankRows.findIndex((r:any) => r.id === shop.id) + 1
+  const rankTotal = rankRows.length
+
+  // 누적 통계
+  const totalStats = await sql`
+    SELECT COALESCE(view_cnt,0) as views,
+           COALESCE(feed_sp,0)  as feed_sp,
+           COALESCE(map_sp,0)   as map_sp
+    FROM stats WHERE shop_id = ${shop.id}
+  `
+
+  return c.json({
+    shop: {
+      id:       shop.id,
+      name:     shop.name,
+      category: shop.category,
+      address:  shop.address,
+    },
+    thisMonth: {
+      views:  parseInt(thisMonthStats[0]?.views)  || 0,
+      feedSP: parseInt(thisMonthStats[0]?.feed_sp) || 0,
+      mapSP:  parseInt(thisMonthStats[0]?.map_sp)  || 0,
+    },
+    lastMonth: {
+      views:  parseInt(lastMonthStats[0]?.views)  || 0,
+      feedSP: parseInt(lastMonthStats[0]?.feed_sp) || 0,
+      mapSP:  parseInt(lastMonthStats[0]?.map_sp)  || 0,
+    },
+    total: {
+      views:  parseInt(totalStats[0]?.views)  || 0,
+      feedSP: parseInt(totalStats[0]?.feed_sp) || 0,
+      mapSP:  parseInt(totalStats[0]?.map_sp)  || 0,
+    },
+    daily30: daily30,
+    rank,
+    rankTotal,
+  })
+})
+
+// ── 리포트 페이지 ──────────────────────────────────────────────────────────
+app.get('/report/:token', (c) => {
+  const token = c.req.param('token')
+  return c.html(reportPage(token))
+})
+
 app.get('/admin', (c) => c.html(adminPage()))
 app.get('/map-admin', (c) => c.redirect('/admin'))
 app.get('/map', (c) => c.html(mapPage()))
@@ -3126,9 +3242,6 @@ h1{font-size:26px;font-weight:800;line-height:1.25;margin-bottom:8px;letter-spac
 </html>`
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-// 지도 전용 페이지 (/map) - iframe으로 임베드됨
-// ══════════════════════════════════════════════════════════════════════════
 function mapPage() { return `<!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -3607,6 +3720,356 @@ window.onload = () => waitNaver(initMap);
 // ══════════════════════════════════════════════════════════════════════════
 // 관리자 페이지
 // ══════════════════════════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════════════════════════
+// 업체 리포트 페이지
+// ══════════════════════════════════════════════════════════════════════════
+function reportPage(token: string) { return `<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+<title>마이뷰티맵 · 업체 리포트</title>
+<link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{background:#0a0a0f;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh}
+
+/* ── 잠금 화면 ── */
+#lockScreen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:24px}
+.lock-logo{font-size:13px;font-weight:700;letter-spacing:2px;color:#a78bfa;text-transform:uppercase;margin-bottom:32px}
+.lock-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:32px 28px;width:100%;max-width:360px;text-align:center}
+.lock-icon{font-size:40px;margin-bottom:16px}
+.lock-title{font-size:18px;font-weight:700;margin-bottom:8px}
+.lock-desc{font-size:13px;color:#94a3b8;margin-bottom:28px;line-height:1.6}
+.lock-input{width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:14px 16px;color:#fff;font-size:20px;letter-spacing:6px;text-align:center;outline:none;transition:.2s}
+.lock-input:focus{border-color:#a78bfa;background:rgba(167,139,250,.08)}
+.lock-btn{width:100%;margin-top:16px;padding:14px;background:linear-gradient(135deg,#7c3aed,#a78bfa);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;transition:.2s}
+.lock-btn:active{opacity:.8;transform:scale(.98)}
+.lock-error{margin-top:12px;font-size:13px;color:#f87171;min-height:20px}
+
+/* ── 리포트 화면 ── */
+#reportScreen{display:none;padding:0 0 40px}
+.rp-header{background:linear-gradient(135deg,#1e1040,#0f0a2e);padding:28px 20px 24px;text-align:center;position:relative}
+.rp-logo{font-size:11px;font-weight:700;letter-spacing:2px;color:#a78bfa;text-transform:uppercase;margin-bottom:12px}
+.rp-shop-name{font-size:22px;font-weight:800;color:#fff;margin-bottom:4px}
+.rp-category{font-size:13px;color:#94a3b8;margin-bottom:16px}
+.rp-period{display:inline-flex;align-items:center;gap:6px;background:rgba(167,139,250,.15);border:1px solid rgba(167,139,250,.3);border-radius:20px;padding:6px 14px;font-size:12px;color:#c4b5fd}
+.rp-updated{font-size:11px;color:#475569;margin-top:8px}
+
+/* ── 섹션 ── */
+.rp-section{padding:20px 16px 0}
+.rp-section-title{font-size:11px;font-weight:700;letter-spacing:1.5px;color:#64748b;text-transform:uppercase;margin-bottom:12px}
+
+/* ── 핵심 지표 3개 ── */
+.kpi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.kpi-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:16px 12px;text-align:center;position:relative;overflow:hidden}
+.kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px}
+.kpi-view::before{background:linear-gradient(90deg,#7c3aed,#a78bfa)}
+.kpi-feed::before{background:linear-gradient(90deg,#0891b2,#38bdf8)}
+.kpi-map::before{background:linear-gradient(90deg,#059669,#34d399)}
+.kpi-icon{font-size:18px;margin-bottom:6px}
+.kpi-val{font-size:22px;font-weight:800;color:#fff;line-height:1}
+.kpi-lbl{font-size:10px;color:#64748b;margin-top:4px;font-weight:600}
+.kpi-delta{font-size:10px;margin-top:6px;font-weight:700}
+.kpi-up{color:#34d399} .kpi-down{color:#f87171} .kpi-same{color:#94a3b8}
+
+/* ── 지난달 비교 배너 ── */
+.compare-banner{margin:16px 0 0;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between}
+.cb-label{font-size:12px;color:#94a3b8}
+.cb-val{font-size:16px;font-weight:800}
+.cb-up{color:#34d399} .cb-down{color:#f87171} .cb-same{color:#94a3b8}
+
+/* ── 순위 배지 ── */
+.rank-banner{margin:20px 16px 0;background:linear-gradient(135deg,rgba(124,58,237,.15),rgba(167,139,250,.08));border:1px solid rgba(167,139,250,.25);border-radius:16px;padding:20px;display:flex;align-items:center;gap:16px}
+.rank-badge{width:56px;height:56px;background:linear-gradient(135deg,#7c3aed,#a78bfa);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:900;color:#fff;flex-shrink:0}
+.rank-info .rank-title{font-size:13px;color:#94a3b8;margin-bottom:4px}
+.rank-info .rank-main{font-size:17px;font-weight:800;color:#fff}
+.rank-info .rank-sub{font-size:11px;color:#7c3aed;margin-top:2px}
+
+/* ── 차트 ── */
+.chart-wrap{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:16px;margin-top:12px}
+.chart-title{font-size:12px;font-weight:700;color:#94a3b8;margin-bottom:12px}
+
+/* ── 누적 통계 ── */
+.total-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
+.total-card{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:12px;text-align:center}
+.total-val{font-size:18px;font-weight:800;color:#a78bfa}
+.total-lbl{font-size:10px;color:#475569;margin-top:3px}
+
+/* ── 코멘트 ── */
+.comment-box{margin:20px 16px 0;background:linear-gradient(135deg,rgba(6,182,212,.08),rgba(59,130,246,.05));border:1px solid rgba(6,182,212,.2);border-radius:16px;padding:18px 16px;display:flex;gap:12px;align-items:flex-start}
+.comment-icon{font-size:22px;flex-shrink:0;margin-top:2px}
+.comment-text{font-size:13px;color:#cbd5e1;line-height:1.7}
+.comment-text strong{color:#38bdf8}
+
+/* ── 푸터 ── */
+.rp-footer{margin:28px 16px 0;text-align:center;font-size:11px;color:#334155;line-height:1.8}
+.rp-footer a{color:#7c3aed;text-decoration:none}
+</style>
+</head>
+<body>
+
+<!-- ── 잠금 화면 ── -->
+<div id="lockScreen">
+  <div class="lock-logo">✦ 마이뷰티맵</div>
+  <div class="lock-card">
+    <div class="lock-icon">🔐</div>
+    <div class="lock-title">업체 리포트</div>
+    <div class="lock-desc">등록하신 전화번호의<br><strong>마지막 4자리</strong>를 입력해주세요</div>
+    <input class="lock-input" id="phoneInput" type="number" maxlength="4" placeholder="0000"
+      oninput="if(this.value.length>4)this.value=this.value.slice(0,4)"
+      onkeydown="if(event.key==='Enter')doVerify()"/>
+    <button class="lock-btn" onclick="doVerify()">
+      <i class="fas fa-unlock-alt"></i> 확인
+    </button>
+    <div class="lock-error" id="lockError"></div>
+  </div>
+</div>
+
+<!-- ── 리포트 화면 ── -->
+<div id="reportScreen">
+  <div class="rp-header">
+    <div class="rp-logo">✦ 마이뷰티맵 리포트</div>
+    <div class="rp-shop-name" id="rShopName">—</div>
+    <div class="rp-category" id="rCategory">—</div>
+    <div class="rp-period" id="rPeriod"><i class="fas fa-calendar-alt"></i> 이번 달 기준</div>
+    <div class="rp-updated" id="rUpdated"></div>
+  </div>
+
+  <!-- 이번 달 핵심 지표 -->
+  <div class="rp-section">
+    <div class="rp-section-title">이번 달 현황</div>
+    <div class="kpi-grid">
+      <div class="kpi-card kpi-view">
+        <div class="kpi-icon">👁</div>
+        <div class="kpi-val" id="kViews">—</div>
+        <div class="kpi-lbl">영상 조회</div>
+        <div class="kpi-delta" id="kViewsDelta"></div>
+      </div>
+      <div class="kpi-card kpi-feed">
+        <div class="kpi-icon">📅</div>
+        <div class="kpi-val" id="kFeed">—</div>
+        <div class="kpi-lbl">예약 클릭</div>
+        <div class="kpi-delta" id="kFeedDelta"></div>
+      </div>
+      <div class="kpi-card kpi-map">
+        <div class="kpi-icon">📍</div>
+        <div class="kpi-val" id="kMap">—</div>
+        <div class="kpi-lbl">지도 클릭</div>
+        <div class="kpi-delta" id="kMapDelta"></div>
+      </div>
+    </div>
+
+    <!-- 지난달 비교 -->
+    <div class="compare-banner">
+      <div>
+        <div class="cb-label">지난달 대비 영상조회</div>
+        <div class="cb-val" id="compareVal">—</div>
+      </div>
+      <div style="text-align:right">
+        <div class="cb-label">지난달</div>
+        <div style="font-size:14px;color:#64748b" id="lastMonthViews">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 카테고리 순위 -->
+  <div class="rank-banner" id="rankBanner">
+    <div class="rank-badge" id="rankBadge">—</div>
+    <div class="rank-info">
+      <div class="rank-title">이번 달 카테고리 순위</div>
+      <div class="rank-main" id="rankMain">—</div>
+      <div class="rank-sub" id="rankSub">이번 달 영상조회 기준</div>
+    </div>
+  </div>
+
+  <!-- 30일 추이 차트 -->
+  <div class="rp-section" style="margin-top:20px">
+    <div class="rp-section-title">최근 30일 추이</div>
+    <div class="chart-wrap">
+      <div class="chart-title">영상조회 · 예약클릭 · 지도클릭</div>
+      <canvas id="trendChart" height="160"></canvas>
+    </div>
+  </div>
+
+  <!-- 누적 통계 -->
+  <div class="rp-section" style="margin-top:20px">
+    <div class="rp-section-title">누적 통계 (전체)</div>
+    <div class="total-grid">
+      <div class="total-card">
+        <div class="total-val" id="tViews">—</div>
+        <div class="total-lbl">총 영상조회</div>
+      </div>
+      <div class="total-card">
+        <div class="total-val" id="tFeed">—</div>
+        <div class="total-lbl">총 예약클릭</div>
+      </div>
+      <div class="total-card">
+        <div class="total-val" id="tMap">—</div>
+        <div class="total-lbl">총 지도클릭</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI 코멘트 -->
+  <div class="comment-box" id="commentBox">
+    <div class="comment-icon">💡</div>
+    <div class="comment-text" id="commentText">분석 중...</div>
+  </div>
+
+  <div class="rp-footer">
+    마이뷰티맵 · 내 주변 뷰티샵 한눈에<br>
+    <a href="/">mybeautymap.co.kr</a>
+  </div>
+</div>
+
+<script>
+const TOKEN = '${token}';
+
+async function doVerify() {
+  const phone4 = document.getElementById('phoneInput').value.trim();
+  if (phone4.length !== 4) {
+    document.getElementById('lockError').textContent = '4자리를 입력해주세요';
+    return;
+  }
+  document.getElementById('lockError').textContent = '';
+  const btn = document.querySelector('.lock-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 확인 중...';
+
+  try {
+    const res = await fetch('/api/report/' + TOKEN + '/verify', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ phone4 })
+    });
+    if (res.status === 401) {
+      document.getElementById('lockError').textContent = '전화번호가 일치하지 않아요';
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-unlock-alt"></i> 확인';
+      return;
+    }
+    if (!res.ok) {
+      document.getElementById('lockError').textContent = '잘못된 링크예요';
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-unlock-alt"></i> 확인';
+      return;
+    }
+    const data = await res.json();
+    renderReport(data);
+  } catch(e) {
+    document.getElementById('lockError').textContent = '오류가 발생했어요. 다시 시도해주세요';
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-unlock-alt"></i> 확인';
+  }
+}
+
+function fmt(n) { return (n||0).toLocaleString(); }
+
+function delta(curr, prev) {
+  if (!prev) return { text: '지난달 데이터 없음', cls: 'kpi-same' };
+  const pct = Math.round(((curr - prev) / prev) * 100);
+  if (pct > 0)  return { text: '▲ ' + pct + '% 지난달 대비', cls: 'kpi-up' };
+  if (pct < 0)  return { text: '▼ ' + Math.abs(pct) + '% 지난달 대비', cls: 'kpi-down' };
+  return { text: '→ 지난달과 동일', cls: 'kpi-same' };
+}
+
+function renderReport(d) {
+  document.getElementById('lockScreen').style.display = 'none';
+  document.getElementById('reportScreen').style.display = 'block';
+
+  // 헤더
+  document.getElementById('rShopName').textContent   = d.shop.name;
+  document.getElementById('rCategory').textContent   = d.shop.category + ' · ' + (d.shop.address || '').split(' ').slice(0,2).join(' ');
+  const now = new Date();
+  document.getElementById('rPeriod').innerHTML = '<i class="fas fa-calendar-alt"></i> ' + now.getFullYear() + '년 ' + (now.getMonth()+1) + '월 기준';
+  document.getElementById('rUpdated').textContent    = '실시간 업데이트';
+
+  // KPI
+  document.getElementById('kViews').textContent = fmt(d.thisMonth.views);
+  document.getElementById('kFeed').textContent  = fmt(d.thisMonth.feedSP);
+  document.getElementById('kMap').textContent   = fmt(d.thisMonth.mapSP);
+
+  const dv = delta(d.thisMonth.views,  d.lastMonth.views);
+  const df = delta(d.thisMonth.feedSP, d.lastMonth.feedSP);
+  const dm = delta(d.thisMonth.mapSP,  d.lastMonth.mapSP);
+  const setDelta = (id, obj) => { const el=document.getElementById(id); el.textContent=obj.text; el.className='kpi-delta '+obj.cls; };
+  setDelta('kViewsDelta', dv);
+  setDelta('kFeedDelta',  df);
+  setDelta('kMapDelta',   dm);
+
+  // 지난달 비교
+  const cPct = d.lastMonth.views > 0 ? Math.round(((d.thisMonth.views - d.lastMonth.views) / d.lastMonth.views) * 100) : null;
+  const cEl  = document.getElementById('compareVal');
+  if (cPct === null) { cEl.textContent = '첫 달 데이터'; cEl.className = 'cb-val cb-same'; }
+  else if (cPct > 0) { cEl.innerHTML = '<span class="cb-up">▲ ' + cPct + '%</span> 상승 🚀'; cEl.className = 'cb-val'; }
+  else if (cPct < 0) { cEl.innerHTML = '<span class="cb-down">▼ ' + Math.abs(cPct) + '%</span> 하락'; cEl.className = 'cb-val'; }
+  else { cEl.textContent = '→ 동일'; cEl.className = 'cb-val cb-same'; }
+  document.getElementById('lastMonthViews').textContent = fmt(d.lastMonth.views) + '명';
+
+  // 순위
+  const rank = d.rank || 1, total = d.rankTotal || 1;
+  document.getElementById('rankBadge').textContent = rank + '위';
+  document.getElementById('rankMain').textContent  = d.shop.category + ' 카테고리 ' + rank + '위 / ' + total + '개';
+  if (rank === 1) document.getElementById('rankSub').textContent = '🏆 이번 달 1등! 최고예요';
+  else if (rank <= Math.ceil(total * 0.3)) document.getElementById('rankSub').textContent = '✨ 상위 ' + Math.round((rank/total)*100) + '% 우수 업체';
+
+  // 차트
+  const labels = [], views = [], feeds = [], maps = [];
+  (d.daily30 || []).forEach(r => {
+    const dt = new Date(r.d);
+    labels.push((dt.getMonth()+1) + '/' + dt.getDate());
+    views.push(parseInt(r.views) || 0);
+    feeds.push(parseInt(r.feed_sp) || 0);
+    maps.push(parseInt(r.map_sp) || 0);
+  });
+  new Chart(document.getElementById('trendChart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: '영상조회', data: views, borderColor: '#a78bfa', backgroundColor: 'rgba(167,139,250,.1)', tension: .4, fill: true, pointRadius: 2 },
+        { label: '예약클릭', data: feeds, borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,.08)',  tension: .4, fill: true, pointRadius: 2 },
+        { label: '지도클릭', data: maps,  borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,.08)',  tension: .4, fill: true, pointRadius: 2 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: true,
+      plugins: { legend: { labels: { color: '#94a3b8', font: { size: 11 }, boxWidth: 12 } } },
+      scales: {
+        x: { ticks: { color: '#475569', font: { size: 9 }, maxTicksLimit: 8 }, grid: { color: 'rgba(255,255,255,.04)' } },
+        y: { ticks: { color: '#475569', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,.06)' }, min: 0 }
+      }
+    }
+  });
+
+  // 누적
+  document.getElementById('tViews').textContent = fmt(d.total.views);
+  document.getElementById('tFeed').textContent  = fmt(d.total.feedSP);
+  document.getElementById('tMap').textContent   = fmt(d.total.mapSP);
+
+  // AI 코멘트
+  const totalAct = d.thisMonth.views + d.thisMonth.feedSP + d.thisMonth.mapSP;
+  let comment = '';
+  if (totalAct === 0) {
+    comment = '아직 이번 달 데이터가 쌓이는 중이에요. 조금만 기다려주세요! 😊';
+  } else if (rank === 1) {
+    comment = '<strong>' + d.shop.name + '</strong>은 이번 달 ' + d.shop.category + ' 카테고리에서 <strong>1위</strong>예요! 🏆 고객들의 관심이 가장 높은 업체입니다.';
+  } else if (cPct !== null && cPct >= 20) {
+    comment = '이번 달 영상 조회가 지난달 대비 <strong>+' + cPct + '%</strong> 올랐어요 🚀 좋은 흐름이에요!';
+  } else if (d.thisMonth.views > 50) {
+    comment = '이번 달 <strong>' + fmt(d.thisMonth.views) + '명</strong>이 영상을 봤어요. 예약 전환율을 높이면 더 많은 고객을 만날 수 있어요!';
+  } else {
+    comment = '꾸준히 데이터가 쌓이고 있어요. 영상을 업데이트하면 더 많은 고객에게 노출돼요! 📈';
+  }
+  document.getElementById('commentText').innerHTML = comment;
+}
+</script>
+</body>
+</html>`}
+
 function adminPage() { return `<!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -3834,6 +4297,9 @@ body{font-family:'Pretendard',sans-serif;background:var(--bg);color:var(--t1);mi
   cursor:pointer;font-family:inherit;flex:1;display:flex;align-items:center;justify-content:center;gap:5px}
 .btn-pay-edit{background:rgba(3,199,90,.1);border:1px solid rgba(3,199,90,.22);
   color:var(--green);border-radius:8px;padding:8px 0;font-size:12px;font-weight:600;
+  cursor:pointer;font-family:inherit;flex:1;display:flex;align-items:center;justify-content:center;gap:5px}
+.btn-report{background:rgba(167,139,250,.1);border:1px solid rgba(167,139,250,.25);
+  color:#a78bfa;border-radius:8px;padding:8px 0;font-size:12px;font-weight:600;
   cursor:pointer;font-family:inherit;flex:1;display:flex;align-items:center;justify-content:center;gap:5px}
 .btn-del{background:rgba(255,77,125,.08);border:1px solid rgba(255,77,125,.18);
   color:var(--pink);border-radius:8px;padding:8px 12px;font-size:12px;font-weight:600;
@@ -4605,6 +5071,7 @@ function renderShops(list) {
       '<div class="sc-btns">' +
         '<button class="btn-edit" data-id="'+s.id+'" onclick="openModal(+this.dataset.id)"><i class="fas fa-edit"></i> 수정</button>' +
         '<button class="btn-pay-edit" data-id="'+s.id+'" onclick="openPayModal(+this.dataset.id)"><i class="fas fa-credit-card"></i> 결제</button>' +
+        '<button class="btn-report" data-id="'+s.id+'" onclick="copyReportLink(+this.dataset.id,this)"><i class="fas fa-chart-line"></i> 리포트</button>' +
         '<button class="btn-del" data-id="'+s.id+'" data-name="'+s.name.replace(/"/g,'&quot;')+'" onclick="delShop(+this.dataset.id,this.dataset.name)"><i class="fas fa-trash"></i></button>' +
       '</div>' +
     '</div>';
@@ -4719,6 +5186,33 @@ function openPayModal(id) {
   document.getElementById('payModalBg').classList.remove('hidden');
 }
 function closePayModal(){document.getElementById('payModalBg').classList.add('hidden');}
+
+// 리포트 링크 복사
+async function copyReportLink(id, btn) {
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+  try {
+    const r = await fetch('/api/admin/shops/'+id+'/report-token', {method:'POST'});
+    const d = await r.json();
+    if (!d.token) throw new Error('no token');
+    const link = location.origin + '/report/' + d.token;
+    await navigator.clipboard.writeText(link);
+    btn.innerHTML = '<i class="fas fa-check"></i> 복사됨!';
+    btn.style.background = 'rgba(52,211,153,.2)';
+    btn.style.borderColor = 'rgba(52,211,153,.4)';
+    setTimeout(() => {
+      btn.innerHTML = orig;
+      btn.style.background = '';
+      btn.style.borderColor = '';
+      btn.disabled = false;
+    }, 2000);
+  } catch(e) {
+    btn.innerHTML = orig;
+    btn.disabled = false;
+    toast('링크 복사 실패: ' + e.message);
+  }
+}
 function setPmPlan(plan){
   pmPlan=plan;
   ['shoot','basic'].forEach(k=>{document.getElementById('pm-plan-'+k).className='pm-plan-opt'+(k===plan?' sel-'+k:'');});
@@ -5172,6 +5666,34 @@ async function saveShop(){
   const r=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   if(r.ok){closeModal();await loadAll();toast(editId?'업체가 수정됐어요':'업체가 추가됐어요');}
   else alert('저장 실패: '+r.status);
+}
+
+async function copyReportLink(id, btn) {
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+  try {
+    const r = await fetch('/api/admin/shops/'+id+'/report-token', {method:'POST'});
+    const data = await r.json();
+    if (!data.token) throw new Error('no token');
+    const link = location.origin + '/report/' + data.token;
+    await navigator.clipboard.writeText(link);
+    btn.innerHTML = '<i class="fas fa-check"></i> 복사됨!';
+    btn.style.background = 'rgba(52,211,153,.15)';
+    btn.style.borderColor = 'rgba(52,211,153,.3)';
+    btn.style.color = '#34d399';
+    setTimeout(() => {
+      btn.innerHTML = orig;
+      btn.style.background = '';
+      btn.style.borderColor = '';
+      btn.style.color = '';
+      btn.disabled = false;
+    }, 2000);
+  } catch(e) {
+    btn.innerHTML = orig;
+    btn.disabled = false;
+    alert('링크 생성 실패: ' + e.message);
+  }
 }
 
 async function delShop(id,name){
