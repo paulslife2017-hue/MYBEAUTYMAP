@@ -5697,15 +5697,24 @@ function closeHoneyModal() {
   document.getElementById('honeyModalBg').style.display = 'none';
 }
 
-// 유튜브 URL → 영상 ID 추출 (URL/ID 모두 허용)
+// 유튜브 URL → 영상 ID 추출 (정규식 없이 문자열 파싱)
 function extractYtId(raw) {
   if (!raw) return '';
   raw = raw.trim();
-  // shorts/ID, youtu.be/ID, watch?v=ID, embed/ID 모두 처리
-  const m = raw.match(/(?:shorts\/|youtu\.be\/|[?&]v=|embed\/)([\w-]{11})/);
-  if (m) return m[1];
+  // shorts/XXXXXXXXXXX 형태
+  var si = raw.indexOf('shorts/');
+  if (si !== -1) return raw.slice(si + 7, si + 18);
+  // youtu.be/XXXXXXXXXXX 형태
+  var bi = raw.indexOf('youtu.be/');
+  if (bi !== -1) return raw.slice(bi + 9, bi + 20).split('?')[0];
+  // watch?v=XXXXXXXXXXX 형태
+  var vi = raw.indexOf('v=');
+  if (vi !== -1) return raw.slice(vi + 2, vi + 13).split('&')[0];
+  // embed/XXXXXXXXXXX 형태
+  var ei = raw.indexOf('embed/');
+  if (ei !== -1) return raw.slice(ei + 6, ei + 17).split('?')[0];
   // 11자리 ID만 입력한 경우
-  if (/^[\w-]{11}$/.test(raw)) return raw;
+  if (raw.length === 11) return raw;
   return '';
 }
 
@@ -6983,12 +6992,12 @@ function previewYt(v){
   if(id){el.style.display='block';document.getElementById('ytFrame').src='https://www.youtube.com/embed/'+id+'?mute=1';}
   else el.style.display='none';
 }
-function extractYtId(s){
-  s=s.trim();
-  if(/^[A-Za-z0-9_-]{11}$/.test(s))return s;
-  const m=s.match(new RegExp('(?:v=|youtu\\.be/|embed/)([A-Za-z0-9_-]{11})'));
-  return m?m[1]:'';
-}
+
+
+
+
+
+
 
 async function geocodeAddr(){
   const addr=document.getElementById('f-addr').value.trim();
