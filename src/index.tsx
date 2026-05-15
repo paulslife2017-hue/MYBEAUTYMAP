@@ -5528,7 +5528,7 @@ function renderHoneyAdmin() {
         '</div>' +
         '<div style="display:flex;gap:6px;flex-shrink:0">' +
           '<button onclick="openHoneyModal('+item.id+')" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);color:#f1f5f9;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">수정</button>' +
-          '<button onclick="delHoney('+item.id+',\''+item.title.replace(/'/g,'')+'\''+')" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);color:#f87171;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">삭제</button>' +
+          '<button onclick="delHoney('+item.id+')" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);color:#f87171;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">삭제</button>' +
         '</div>' +
       '</div>' +
     '</div>';
@@ -5641,7 +5641,9 @@ async function saveHoney() {
   }
 }
 
-async function delHoney(id, name) {
+async function delHoney(id) {
+  const found = _honeyItems.find(x => x.id === id);
+  const name = found ? found.title : '이 꿀템을';
   if (!confirm(name+' 삭제할까요?')) return;
   const r = await fetch('/api/admin/honey/'+id, {method:'DELETE'});
   if (r.ok) { toast('삭제 완료'); await loadHoneyAdmin(); }
