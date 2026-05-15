@@ -1786,8 +1786,8 @@ html,body{height:100%;background:var(--bg);color:#fff;
 .tab i{font-size:22px;transition:transform .2s}
 .tab.active{color:#fff}
 .tab.active i{color:var(--pink);transform:scale(1.1)}
-.tab-honey{font-size:13px !important;letter-spacing:-.3px}
 .tab-honey.active{color:#fbbf24 !important}
+.tab-honey.active i{color:#fbbf24 !important}
 
 /* 꿀템 피드 */
 .honey-wrap{max-width:480px;margin:0 auto;padding:12px 14px 20px}
@@ -2383,7 +2383,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
     <i class="fas fa-map-marker-alt"></i>지도
   </button>
   <button class="tab tab-honey" id="tab-honey" onclick="switchTab('honey')">
-    🍯꿀템
+    <i class="fas fa-shopping-bag"></i>꿀템
   </button>
   <button class="tab" id="tab-inquiry" onclick="switchTab('inquiry')">
     <i class="fas fa-store"></i>입점문의
@@ -2529,8 +2529,8 @@ async function loadHoney() {
 function honeyCard(item) {
   const tags = (item.tags||[]).map(t=>'<span class="honey-tag">#'+t+'</span>').join('');
   const ytSection = item.youtube_id
-    ? '<div class="honey-yt" id="hyt-'+item.id+'">' +
-        '<img class="honey-yt-thumb" src="https://img.youtube.com/vi/'+item.youtube_id+'/hqdefault.jpg" alt="'+item.title+'" onclick="playHoneyYt(\''+item.id+'\',\''+item.youtube_id+'\')" loading="lazy"/>' +
+    ? '<div class="honey-yt" id="hyt-'+item.id+'" onclick="playHoneyYt('+item.id+',this.dataset.ytid)" data-ytid="'+item.youtube_id+'">' +
+        '<img class="honey-yt-thumb" src="https://img.youtube.com/vi/'+item.youtube_id+'/hqdefault.jpg" alt="'+item.title+'" loading="lazy"/>' +
         '<div class="honey-play-btn"><i class="fas fa-play"></i></div>' +
       '</div>'
     : '';
