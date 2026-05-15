@@ -5160,6 +5160,20 @@ body{font-family:'Pretendard',sans-serif;background:var(--bg);color:var(--t1);mi
       <select id="f-active"><option value="true">공개</option><option value="false">비공개</option></select>
     </div>
   </div>
+  <!-- ⭐ 추천탭 토글 -->
+  <div class="field" style="margin-bottom:18px">
+    <label>⭐ 추천탭 노출</label>
+    <div id="rec-toggle-wrap" onclick="toggleRecInModal()" style="cursor:pointer;display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;border:2px solid rgba(255,255,255,.09);background:rgba(255,255,255,.04);transition:all .25s" id="recToggleWrap">
+      <div id="rec-toggle-track" style="width:44px;height:24px;border-radius:12px;background:#374151;position:relative;transition:background .25s;flex-shrink:0">
+        <div id="rec-toggle-thumb" style="position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:left .25s"></div>
+      </div>
+      <div>
+        <div id="rec-toggle-label" style="font-size:13px;font-weight:700;color:#94a3b8">추천탭 미노출</div>
+        <div style="font-size:11px;color:#475569;margin-top:1px">⭐추천 탭에 이 업체를 노출합니다</div>
+      </div>
+    </div>
+    <input type="hidden" id="f-rec" value="false"/>
+  </div>
   <div class="modal-actions">
     <button class="btn-cancel" onclick="closeModal()">취소</button>
     <button class="btn-save" onclick="saveShop()"><i class="fas fa-save"></i> 저장하기</button>
@@ -5796,19 +5810,47 @@ function renderShops(list) {
       '</div>' +
       (totToday>0?'<div style="margin-top:6px;padding:6px 10px;background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.2);border-radius:8px;font-size:10px;color:#f59e0b;font-weight:700">' +
         '오늘 📅'+(s.todayFeedSP||0)+' 📍'+(s.todayMapSP||0)+' <span style="color:#64748b;font-weight:500">👁'+(s.todayViews||0)+'</span></div>':'') +
-      // ── 추천 탭 조회수 (오늘 + 7일 누적)
-      ((s.todayRecView > 0 || s.weekRecView > 0)
-        ? '<div style="margin-top:6px;padding:7px 10px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);border-radius:8px;display:flex;align-items:center;gap:10px">' +
-            '<span style="font-size:13px">⭐</span>' +
-            (s.todayRecView > 0
-              ? '<span style="font-size:11px;color:#fbbf24;font-weight:700">오늘 '+s.todayRecView+'회</span>'
-              : '') +
-            (s.weekRecView > 0
-              ? '<span style="font-size:10px;color:#92400e;background:rgba(251,191,36,.15);padding:2px 6px;border-radius:4px;font-weight:600">7일 '+s.weekRecView+'회</span>'
-              : '') +
-            '<span style="font-size:10px;color:#64748b">추천탭 조회</span>' +
-          '</div>'
-        : '') +
+      // ── 추천탭 어필 배너
+      (function(){
+        const totalViews = s.views || 0;
+        const totalClicks = (s.feedSP||0) + (s.mapSP||0);
+        const weekRec = s.weekRecView || 0;
+        const todayRec = s.todayRecView || 0;
+
+        if (s.isRecommended) {
+          // ─ 추천중: 실제 성과 표시
+          const hasData = weekRec > 0 || todayRec > 0;
+          return '<div style="margin-top:8px;border-radius:12px;overflow:hidden;border:1.5px solid rgba(251,191,36,.3)">' +
+            // 헤더
+            '<div style="background:linear-gradient(90deg,rgba(251,191,36,.15),rgba(251,191,36,.05));padding:7px 12px;display:flex;align-items:center;justify-content:space-between">' +
+              '<span style="font-size:11px;font-weight:700;color:#fbbf24">⭐ 추천탭 노출 중</span>' +
+              '<span style="font-size:10px;color:#92400e;background:rgba(251,191,36,.2);padding:1px 7px;border-radius:20px">ON</span>' +
+            '</div>' +
+            // 성과 수치
+            '<div style="padding:8px 12px;background:rgba(251,191,36,.04);display:grid;grid-template-columns:repeat(3,1fr);gap:4px;text-align:center">' +
+              '<div><div style="font-size:15px;font-weight:800;color:#fbbf24">'+(hasData?weekRec.toLocaleString():'—')+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">7일 조회</div></div>' +
+              '<div><div style="font-size:15px;font-weight:800;color:#f59e0b">'+(todayRec>0?'+'+todayRec:'—')+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">오늘 조회</div></div>' +
+              '<div><div style="font-size:15px;font-weight:800;color:#fbbf24">'+totalViews.toLocaleString()+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">누적 영상조회</div></div>' +
+            '</div>' +
+          '</div>';
+        } else {
+          // ─ 미추천: 잠재 성과로 어필
+          const potentialMsg = totalViews >= 500
+            ? '영상 조회 '+totalViews.toLocaleString()+'회 — 추천탭 추가 시 상단 노출 가능'
+            : totalClicks > 0
+            ? '예약클릭 '+totalClicks+'회 실적 — 추천탭으로 더 많은 고객 유입 가능'
+            : '추천탭 노출 시 잠재 고객에게 바로 보입니다';
+          return '<div style="margin-top:8px;border-radius:12px;overflow:hidden;border:1.5px dashed rgba(251,191,36,.2)">' +
+            '<div style="background:rgba(251,191,36,.03);padding:8px 12px;display:flex;align-items:flex-start;gap:8px">' +
+              '<span style="font-size:14px;flex-shrink:0;margin-top:1px">☆</span>' +
+              '<div style="flex:1">' +
+                '<div style="font-size:11px;font-weight:700;color:#92400e;margin-bottom:2px">추천탭 미노출</div>' +
+                '<div style="font-size:10px;color:#64748b;line-height:1.4">'+potentialMsg+'</div>' +
+              '</div>' +
+            '</div>' +
+          '</div>';
+        }
+      }()) +
       '<div class="sc-btns">' +
         '<button class="btn-edit" data-id="'+s.id+'" onclick="openModal(+this.dataset.id)"><i class="fas fa-edit"></i> 수정</button>' +
         '<button class="btn-pay-edit" data-id="'+s.id+'" onclick="openPayModal(+this.dataset.id)"><i class="fas fa-credit-card"></i> 결제</button>' +
@@ -6333,6 +6375,7 @@ function openModal(id) {
     document.getElementById('f-desc').value=s.description||'';
     document.getElementById('f-feat').value=String(s.featured||false);
     document.getElementById('f-active').value=String(s.active!==false);
+    setRecToggle(s.isRecommended||false);
     setMode(s.displayMode||'both');
     thumbDataUrl='';
     previewYt(s.youtubeId||'');
@@ -6341,6 +6384,7 @@ function openModal(id) {
     document.getElementById('f-lat').value=''; document.getElementById('f-lng').value='';
     document.getElementById('f-cat').value='마사지';
     document.getElementById('f-feat').value='false'; document.getElementById('f-active').value='true';
+    setRecToggle(false);
     document.getElementById('thumbPreview').src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 60 60%22%3E%3Crect width=%2260%22 height=%2260%22 fill=%22%23222%22/%3E%3Ctext x=%2230%22 y=%2238%22 font-size=%2224%22 text-anchor=%22middle%22%3E%F0%9F%93%B7%3C/text%3E%3C/svg%3E';
     setMode('both'); thumbDataUrl='';
     document.getElementById('ytPreview').style.display='none';
@@ -6349,6 +6393,33 @@ function openModal(id) {
 }
 function closeModal(){document.getElementById('modalBg').classList.add('hidden');}
 function bgClick(e){if(e.target===document.getElementById('modalBg'))closeModal();}
+
+function setRecToggle(on) {
+  document.getElementById('f-rec').value = String(on);
+  const track = document.getElementById('rec-toggle-track');
+  const thumb = document.getElementById('rec-toggle-thumb');
+  const label = document.getElementById('rec-toggle-label');
+  const wrap  = document.getElementById('rec-toggle-wrap');
+  if (on) {
+    track.style.background = '#f59e0b';
+    thumb.style.left = '23px';
+    label.textContent = '⭐ 추천탭 노출 중';
+    label.style.color = '#fbbf24';
+    wrap.style.borderColor = 'rgba(251,191,36,.4)';
+    wrap.style.background  = 'rgba(251,191,36,.07)';
+  } else {
+    track.style.background = '#374151';
+    thumb.style.left = '3px';
+    label.textContent = '추천탭 미노출';
+    label.style.color = '#94a3b8';
+    wrap.style.borderColor = 'rgba(255,255,255,.09)';
+    wrap.style.background  = 'rgba(255,255,255,.04)';
+  }
+}
+function toggleRecInModal() {
+  const cur = document.getElementById('f-rec').value === 'true';
+  setRecToggle(!cur);
+}
 
 function setMode(m){
   document.getElementById('f-mode').value=m;
@@ -6424,12 +6495,21 @@ async function saveShop(){
     featured:document.getElementById('f-feat').value==='true',
     active:document.getElementById('f-active').value==='true',
     displayMode:mode,
+    isRecommended:document.getElementById('f-rec').value==='true',
   };
   const url=editId?'/api/admin/shops/'+editId:'/api/admin/shops';
   const method=editId?'PUT':'POST';
   const r=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  if(r.ok){closeModal();await loadAll();toast(editId?'업체가 수정됐어요':'업체가 추가됐어요');}
-  else alert('저장 실패: '+r.status);
+  if(r.ok){
+    const saved=await r.json();
+    const savedId=saved.id||editId;
+    // 추천탭 상태 별도 저장
+    await fetch('/api/admin/shops/'+savedId+'/recommended',{
+      method:'PUT',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({isRecommended:body.isRecommended})
+    });
+    closeModal();await loadAll();toast(editId?'업체가 수정됐어요':'업체가 추가됐어요');
+  } else alert('저장 실패: '+r.status);
 }
 
 async function copyReportLink(id, btn) {
