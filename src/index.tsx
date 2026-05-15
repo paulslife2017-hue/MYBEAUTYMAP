@@ -1687,8 +1687,10 @@ html,body{height:100%;background:var(--bg);color:#fff;
 #mapScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:calc(var(--ad) + var(--nav));
   display:none;}
 #mapScreen.active{display:block;}
+/* 쇼츠 릴스 스타일 */
 #honeyScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:calc(var(--ad) + var(--nav));
-  display:none;overflow-y:auto;background:var(--bg);}
+  display:none;overflow-y:scroll;scroll-snap-type:y mandatory;
+  background:#000;-webkit-overflow-scrolling:touch;}
 #honeyScreen::-webkit-scrollbar{display:none;}
 #honeyScreen.active{display:block;}
 #inquiryScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:calc(var(--ad) + var(--nav));
@@ -1795,28 +1797,68 @@ html,body{height:100%;background:var(--bg);color:#fff;
 .tab-honey.active i{color:#fbbf24 !important}
 
 /* 꿀템 피드 */
-.honey-wrap{max-width:480px;margin:0 auto;padding:10px 14px 24px}
-.honey-header{padding:14px 0 10px;text-align:center}
-.honey-header h2{font-size:20px;font-weight:800;color:#fbbf24;letter-spacing:-.5px}
-.honey-header p{font-size:12px;color:rgba(255,255,255,.4);margin-top:4px}
-.honey-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);
-  border-radius:18px;overflow:hidden;margin-bottom:16px;transition:transform .15s}
-.honey-card:active{transform:scale(.98)}
-.honey-yt{position:relative;width:100%;aspect-ratio:16/9;background:#000}
-.honey-yt iframe{width:100%;height:100%;border:none}
-.honey-yt-thumb{width:100%;height:100%;object-fit:cover;cursor:pointer;display:block}
-.honey-play-btn{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-  width:56px;height:56px;background:rgba(0,0,0,.65);border-radius:50%;
-  display:flex;align-items:center;justify-content:center;pointer-events:none}
-.honey-play-btn i{font-size:24px;color:#fff;margin-left:3px}
-.honey-body{padding:12px 14px 14px}
-.honey-title{font-size:15px;font-weight:800;color:#fff;margin-bottom:10px;line-height:1.4}
-.honey-cta{display:flex;align-items:center;justify-content:center;gap:8px;
-  padding:13px;border-radius:12px;background:linear-gradient(135deg,#f59e0b,#fbbf24);
-  color:#000;font-size:14px;font-weight:800;text-decoration:none;cursor:pointer;
-  border:none;width:100%;box-sizing:border-box}
-.honey-cta i{font-size:15px}
-.honey-empty{padding:60px 20px;text-align:center;color:rgba(255,255,255,.3);font-size:14px}
+/* 쇼츠 릴스 카드 */
+.honey-slide{
+  position:relative;
+  width:100%;
+  height:100%;
+  scroll-snap-align:start;
+  scroll-snap-stop:always;
+  flex-shrink:0;
+  background:#000;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  overflow:hidden;
+}
+.honey-slide iframe{
+  position:absolute;inset:0;
+  width:100%;height:100%;
+  border:none;
+  pointer-events:auto;
+}
+/* 파트너스 고지 배너 - 상단 */
+.honey-notice{
+  position:absolute;top:0;left:0;right:0;
+  background:rgba(0,0,0,.55);
+  backdrop-filter:blur(4px);
+  -webkit-backdrop-filter:blur(4px);
+  color:rgba(255,255,255,.7);
+  font-size:10px;font-weight:500;
+  text-align:center;
+  padding:6px 12px;
+  z-index:10;
+  pointer-events:none;
+  letter-spacing:-.1px;
+}
+/* 하단 오버레이: 제목 + 구매하기 */
+.honey-overlay{
+  position:absolute;bottom:0;left:0;right:0;
+  background:linear-gradient(transparent,rgba(0,0,0,.75) 40%);
+  padding:48px 16px 18px;
+  z-index:10;
+  pointer-events:none;
+}
+.honey-overlay-title{
+  font-size:14px;font-weight:800;color:#fff;
+  line-height:1.4;margin-bottom:12px;
+  text-shadow:0 1px 4px rgba(0,0,0,.6);
+  pointer-events:none;
+}
+.honey-buy-btn{
+  display:flex;align-items:center;justify-content:center;gap:7px;
+  width:100%;
+  padding:13px 0;
+  border-radius:12px;
+  background:linear-gradient(135deg,#f59e0b,#fbbf24);
+  color:#000;font-size:15px;font-weight:900;
+  text-decoration:none;
+  pointer-events:auto;
+  box-shadow:0 4px 16px rgba(0,0,0,.35);
+}
+.honey-buy-btn i{font-size:15px}
+.honey-empty{height:100%;display:flex;align-items:center;justify-content:center;
+  color:rgba(255,255,255,.4);font-size:15px;}
 
 /* 피드 카드 */
 .fi{
@@ -2372,7 +2414,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
 
 <!-- 꿀템 스크린 -->
 <section id="honeyScreen">
-  <div id="honeyFeed"></div>
+  <div id="honeyFeed" style="height:100%"></div>
 </section>
 
 <!-- 하단 탭바 -->
@@ -2490,7 +2532,24 @@ function switchTab(tab) {
     }, 300);
   }
   if (tab==='feed') closeMapPopup();
-  if (tab==='honey') loadHoney();
+  if (tab==='honey') {
+    loadHoney();
+    // 탭 재진입 시 첫 슬라이드 자동재생 복구
+    const screen = document.getElementById('honeyScreen');
+    if (screen) {
+      const first = screen.querySelector('.honey-slide');
+      if (first) {
+        const frame = first.querySelector('iframe');
+        if (frame && (!frame.src || frame.src === window.location.href)) {
+          frame.src = frame.dataset.src;
+        }
+      }
+    }
+  }
+  // 꿀템 탭 이탈 시 모든 영상 정지
+  if (tab !== 'honey') {
+    document.querySelectorAll('.honey-slide iframe').forEach(f => { f.src = ''; });
+  }
 }
 
 // ── 로고 5번 탭 → 관리자 선택 팝업 ─────────────────────────────────────
@@ -2505,12 +2564,15 @@ document.getElementById('logoBtn').addEventListener('click', ()=>{
   }
 });
 
-// ── 🍯 꿀템 피드 ───────────────────────────────────────────────────
+// ── 🍯 꿀템 쇼츠 피드 ─────────────────────────────────────────────
 let _honeyLoaded = false;
+let _honeyObserver = null;
+
 async function loadHoney() {
   if (_honeyLoaded) return;
   _honeyLoaded = true;
-  const el = document.getElementById('honeyFeed');
+  const screen = document.getElementById('honeyScreen');
+  const el     = document.getElementById('honeyFeed');
   el.innerHTML = '<div class="honey-empty">불러오는 중...</div>';
   try {
     const items = await fetch('/api/honey').then(r=>r.json());
@@ -2518,40 +2580,58 @@ async function loadHoney() {
       el.innerHTML = '<div class="honey-empty">🍯 꿀템을 준비 중입니다!</div>';
       return;
     }
-    el.innerHTML = '<div class="honey-wrap">' +
-      '<div class="honey-header"><h2>🍯 뷰티 꿀템</h2><p>요즘 뜨는 뷰티 아이템만 모았어요</p></div>' +
-      items.map(item => honeyCard(item)).join('') +
-      '</div>';
+    // 컨테이너: 전체 높이 100%, 슬라이드 쌓기
+    el.style.cssText = 'height:100%;display:flex;flex-direction:column;';
+    el.innerHTML = items.map(item => honeySlide(item)).join('');
+    initHoneyObserver(screen);
   } catch(e) {
     el.innerHTML = '<div class="honey-empty">불러오기 실패</div>';
   }
 }
 
-function honeyCard(item) {
-  const ytSection = item.youtube_id
-    ? '<div class="honey-yt" id="hyt-'+item.id+'" onclick="playHoneyYt('+item.id+',this.dataset.ytid)" data-ytid="'+item.youtube_id+'">' +
-        '<img class="honey-yt-thumb" src="https://img.youtube.com/vi/'+item.youtube_id+'/hqdefault.jpg" alt="" loading="lazy"/>' +
-        '<div class="honey-play-btn"><i class="fas fa-play"></i></div>' +
-      '</div>'
+function honeySlide(item) {
+  const ytId  = item.youtube_id || '';
+  // 쇼츠 embed URL: 자동재생/음소거/loop/shorts UI 숨김
+  const iframeSrc = ytId
+    ? 'https://www.youtube.com/embed/'+ytId+'?autoplay=1&mute=1&loop=1&playlist='+ytId+'&rel=0&playsinline=1&controls=1'
     : '';
-  const ctaBtn = item.coupang_url
-    ? '<a href="'+item.coupang_url+'" target="_blank" rel="noopener sponsored" class="honey-cta" onclick="trackHoneyCta('+item.id+')">' +
-        '<i class="fas fa-shopping-cart"></i> 쿠팡에서 구매하기' +
+  const buyBtn = item.coupang_url
+    ? '<a href="'+item.coupang_url+'" target="_blank" rel="noopener sponsored" class="honey-buy-btn" onclick="trackHoneyCta('+item.id+')">' +
+        '<i class="fas fa-shopping-bag"></i>구매하기' +
       '</a>'
     : '';
-  return '<div class="honey-card">' +
-    ytSection +
-    '<div class="honey-body">' +
-      '<div class="honey-title">'+item.title+'</div>' +
-      ctaBtn +
+  return '<div class="honey-slide" id="hslide-'+item.id+'" data-ytid="'+ytId+'">' +
+    '<div class="honey-notice">이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</div>' +
+    (ytId ? '<iframe id="hframe-'+item.id+'" src="" data-src="'+iframeSrc+'" allow="autoplay;encrypted-media;fullscreen" allowfullscreen playsinline></iframe>' : '') +
+    '<div class="honey-overlay">' +
+      '<div class="honey-overlay-title">'+item.title+'</div>' +
+      buyBtn +
     '</div>' +
   '</div>';
 }
 
-function playHoneyYt(id, ytId) {
-  const wrap = document.getElementById('hyt-'+id);
-  if (!wrap) return;
-  wrap.innerHTML = '<iframe src="https://www.youtube.com/embed/'+ytId+'?autoplay=1&rel=0" allow="autoplay;encrypted-media" allowfullscreen></iframe>';
+function initHoneyObserver(screen) {
+  if (_honeyObserver) _honeyObserver.disconnect();
+  _honeyObserver = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      const slide  = entry.target;
+      const frame  = slide.querySelector('iframe');
+      if (!frame) return;
+      if (entry.isIntersecting) {
+        // 진입: src 세팅 → 자동재생
+        if (!frame.src || frame.src === window.location.href) {
+          frame.src = frame.dataset.src;
+        }
+      } else {
+        // 이탈: src 비워서 정지
+        frame.src = '';
+      }
+    });
+  }, { root: screen, threshold: 0.6 });
+
+  document.querySelectorAll('.honey-slide').forEach(slide => {
+    _honeyObserver.observe(slide);
+  });
 }
 
 function trackHoneyCta(id) {
