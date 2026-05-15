@@ -1831,23 +1831,29 @@ html,body{height:100%;background:var(--bg);color:#fff;
   pointer-events:none;
   letter-spacing:-.1px;
 }
-/* 음소거 버튼 */
-.honey-mute-btn{
-  position:absolute;top:40px;right:14px;
-  width:40px;height:40px;
-  background:rgba(0,0,0,.55);
-  backdrop-filter:blur(6px);
-  -webkit-backdrop-filter:blur(6px);
+/* 첫 탭 유도 오버레이 */
+#honeyStartOverlay{
+  position:absolute;inset:0;
+  background:rgba(0,0,0,.45);
+  z-index:30;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  gap:14px;
+  cursor:pointer;
+}
+#honeyStartOverlay .hs-icon{
+  width:72px;height:72px;
+  background:rgba(255,255,255,.15);
   border-radius:50%;
   display:flex;align-items:center;justify-content:center;
-  z-index:20;
-  cursor:pointer;
-  border:1.5px solid rgba(255,255,255,.2);
-  transition:opacity .2s;
+  border:2px solid rgba(255,255,255,.4);
 }
-.honey-mute-btn i{font-size:16px;color:#fff;}
-.honey-mute-btn.on{background:rgba(251,191,36,.25);border-color:rgba(251,191,36,.5);}
-.honey-mute-btn.on i{color:#fbbf24;}
+#honeyStartOverlay .hs-icon i{font-size:30px;color:#fff;margin-left:4px;}
+#honeyStartOverlay .hs-text{
+  font-size:15px;font-weight:800;color:#fff;
+  text-shadow:0 2px 8px rgba(0,0,0,.5);
+  letter-spacing:-.3px;
+}
 /* 하단 오버레이: 제목 + 구매하기 */
 .honey-overlay{
   position:absolute;bottom:0;left:0;right:0;
@@ -2558,7 +2564,7 @@ function switchTab(tab) {
       if (first) {
         const frame = first.querySelector('iframe');
         if (frame && (!frame.src || frame.src === window.location.href)) {
-          frame.src = frame.dataset.srcMuted;
+          frame.src = _honeyUnlocked ? frame.dataset.srcUnmuted : frame.dataset.srcMuted;
         }
       }
     }
@@ -2582,8 +2588,9 @@ document.getElementById('logoBtn').addEventListener('click', ()=>{
 });
 
 // ── 🍯 꿀템 쇼츠 피드 ─────────────────────────────────────────────
-let _honeyLoaded = false;
+let _honeyLoaded   = false;
 let _honeyObserver = null;
+let _honeyUnlocked = false; // 사용자 인터랙션 허용 여부
 
 async function loadHoney() {
   if (_honeyLoaded) return;
@@ -2597,9 +2604,27 @@ async function loadHoney() {
       el.innerHTML = '<div class="honey-empty">🍯 꿀템을 준비 중입니다!</div>';
       return;
     }
-    // 컨테이너: 전체 높이 100%, 슬라이드 쌓기
     el.style.cssText = 'height:100%;display:flex;flex-direction:column;';
     el.innerHTML = items.map(item => honeySlide(item)).join('');
+    // 첫 탭 유도 오버레이 (인터랙션 잠금 해제용)
+    if (!_honeyUnlocked) {
+      const overlay = document.createElement('div');
+      overlay.id = 'honeyStartOverlay';
+      overlay.innerHTML =
+        '<div class="hs-icon"><i class="fas fa-play"></i></div>' +
+        '<div class="hs-text">탭하면 소리와 함께 시작돼요</div>';
+      overlay.addEventListener('click', function() {
+        _honeyUnlocked = true;
+        overlay.remove();
+        // 현재 보이는 첫 슬라이드 소리 켜서 재생
+        const first = screen.querySelector('.honey-slide');
+        if (first) {
+          const frame = first.querySelector('iframe');
+          if (frame) frame.src = frame.dataset.srcUnmuted;
+        }
+      }, { once: true });
+      screen.appendChild(overlay);
+    }
     initHoneyObserver(screen);
   } catch(e) {
     el.innerHTML = '<div class="honey-empty">불러오기 실패</div>';
@@ -2607,7 +2632,7 @@ async function loadHoney() {
 }
 
 function honeySlide(item) {
-  const ytId   = item.youtube_id || '';
+  const ytId       = item.youtube_id || '';
   const srcMuted   = ytId ? 'https://www.youtube.com/embed/'+ytId+'?autoplay=1&mute=1&loop=1&playlist='+ytId+'&rel=0&playsinline=1&controls=1' : '';
   const srcUnmuted = ytId ? 'https://www.youtube.com/embed/'+ytId+'?autoplay=1&mute=0&loop=1&playlist='+ytId+'&rel=0&playsinline=1&controls=1' : '';
   const buyBtn = item.coupang_url
@@ -2615,17 +2640,13 @@ function honeySlide(item) {
         '<i class="fas fa-shopping-bag"></i>구매하기' +
       '</a>'
     : '';
-  return '<div class="honey-slide" id="hslide-'+item.id+'" data-ytid="'+ytId+'" data-muted="1">' +
+  return '<div class="honey-slide" id="hslide-'+item.id+'" data-ytid="'+ytId+'">' +
     '<div class="honey-notice">이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</div>' +
     (ytId
-      ? '<iframe id="hframe-'+item.id+'"' +
-          ' src=""' +
+      ? '<iframe id="hframe-'+item.id+'" src=""' +
           ' data-src-muted="'+srcMuted+'"' +
           ' data-src-unmuted="'+srcUnmuted+'"' +
-          ' allow="autoplay;encrypted-media;fullscreen" allowfullscreen playsinline></iframe>' +
-        '<div class="honey-mute-btn" id="hmute-'+item.id+'" onclick="toggleHoneyMute('+item.id+')">' +
-          '<i class="fas fa-volume-mute"></i>' +
-        '</div>'
+          ' allow="autoplay;encrypted-media;fullscreen" allowfullscreen playsinline></iframe>'
       : '') +
     '<div class="honey-overlay">' +
       '<div class="honey-overlay-title">'+item.title+'</div>' +
@@ -2634,55 +2655,27 @@ function honeySlide(item) {
   '</div>';
 }
 
-function toggleHoneyMute(id) {
-  const slide  = document.getElementById('hslide-'+id);
-  const frame  = document.getElementById('hframe-'+id);
-  const btn    = document.getElementById('hmute-'+id);
-  if (!slide || !frame || !btn) return;
-  const muted = slide.dataset.muted === '1';
-  if (muted) {
-    // 소리 켜기
-    frame.src = frame.dataset.srcUnmuted;
-    slide.dataset.muted = '0';
-    btn.innerHTML = '<i class="fas fa-volume-up"></i>';
-    btn.classList.add('on');
-  } else {
-    // 다시 음소거
-    frame.src = frame.dataset.srcMuted;
-    slide.dataset.muted = '1';
-    btn.innerHTML = '<i class="fas fa-volume-mute"></i>';
-    btn.classList.remove('on');
-  }
-}
-
 function initHoneyObserver(screen) {
   if (_honeyObserver) _honeyObserver.disconnect();
   _honeyObserver = new IntersectionObserver(entries => {
     entries.forEach(entry => {
-      const slide  = entry.target;
-      const frame  = slide.querySelector('iframe');
+      const slide = entry.target;
+      const frame = slide.querySelector('iframe');
       if (!frame) return;
       if (entry.isIntersecting) {
-        // 진입: 음소거 자동재생
+        // 진입: 인터랙션 허용됐으면 소리 ON, 아니면 음소거
+        const src = _honeyUnlocked ? frame.dataset.srcUnmuted : frame.dataset.srcMuted;
         if (!frame.src || frame.src === window.location.href) {
-          frame.src = frame.dataset.srcMuted;
-          slide.dataset.muted = '1';
-          const btn = slide.querySelector('.honey-mute-btn');
-          if (btn) { btn.innerHTML = '<i class="fas fa-volume-mute"></i>'; btn.classList.remove('on'); }
+          frame.src = src;
         }
       } else {
-        // 이탈: 정지 + 음소거 상태로 리셋
+        // 이탈: 정지
         frame.src = '';
-        slide.dataset.muted = '1';
-        const btn = slide.querySelector('.honey-mute-btn');
-        if (btn) { btn.innerHTML = '<i class="fas fa-volume-mute"></i>'; btn.classList.remove('on'); }
       }
     });
   }, { root: screen, threshold: 0.6 });
 
-  document.querySelectorAll('.honey-slide').forEach(slide => {
-    _honeyObserver.observe(slide);
-  });
+  document.querySelectorAll('.honey-slide').forEach(s => _honeyObserver.observe(s));
 }
 
 function trackHoneyCta(id) {
