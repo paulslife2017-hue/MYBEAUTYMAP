@@ -2536,6 +2536,18 @@ function switchTab(tab) {
   // 쿠팡 광고 배너: 꿀템 탭에서는 숨김 (꿀템 자체 구매버튼 사용), 다른 탭에서는 표시
   const coupangAd = document.getElementById('coupang-ad');
   if (coupangAd) coupangAd.style.display = (tab === 'honey') ? 'none' : '';
+  // 검색바 placeholder·힌트 탭에 따라 변경
+  const si = document.getElementById('searchInput');
+  const sh = document.querySelector('.search-hint');
+  if (si && sh) {
+    if (tab === 'honey') {
+      si.placeholder = '꿀템 이름, 태그 검색...';
+      sh.textContent = '예) 마사지건  ·  두피케어  ·  에센스';
+    } else {
+      si.placeholder = '샵 이름, 지역, 태그 검색...';
+      sh.textContent = '예) 강남 마사지  ·  눈썹문신  ·  리프팅';
+    }
+  }
 
   if (tab==='honey') {
     // 탭 버튼 클릭 = 인터랙션 → 소리 바로 허용
@@ -2543,17 +2555,11 @@ function switchTab(tab) {
     // 오버레이 제거
     const overlay = document.getElementById('honeyStartOverlay');
     if (overlay) overlay.remove();
-    loadHoney();
-    // 재진입 시 첫 슬라이드 소리 있게 복구
-    const screen = document.getElementById('honeyScreen');
-    if (screen) {
-      const first = screen.querySelector('.honey-slide');
-      if (first) {
-        const frame = first.querySelector('iframe');
-        if (frame && (!frame.src || frame.src === window.location.href)) {
-          frame.src = frame.dataset.srcUnmuted;
-        }
-      }
+    // 이미 로드됐으면 재진입 → 첫 슬라이드만 즉시 재생
+    if (_honeyLoaded && _honeyAllItems.length) {
+      requestAnimationFrame(() => requestAnimationFrame(() => honeyPlayFirst()));
+    } else {
+      loadHoney(_honeySearchQ);
     }
   }
   // 꿀템 탭 이탈 시 모든 영상 정지
@@ -2578,31 +2584,66 @@ document.getElementById('logoBtn').addEventListener('click', ()=>{
 let _honeyLoaded   = false;
 let _honeyObserver = null;
 let _honeyUnlocked = false; // 사용자 인터랙션 허용 여부
+let _honeyAllItems = [];    // 전체 꿀템 캐시 (검색용)
+let _honeySearchQ  = '';    // 꿀템 검색어
 
-async function loadHoney() {
-  if (_honeyLoaded) return;
-  _honeyLoaded = true;
+// 꿀템 첫 슬라이드 즉시 재생 (타이밍 보장)
+function honeyPlayFirst() {
+  const screen = document.getElementById('honeyScreen');
+  if (!screen) return;
+  const first = screen.querySelector('.honey-slide');
+  if (!first) return;
+  const frame = first.querySelector('iframe');
+  if (!frame) return;
+  // src가 비어있거나 현재 페이지 주소이면 즉시 재생
+  if (!frame.src || frame.src === '' || frame.src === window.location.href) {
+    frame.src = frame.dataset.srcUnmuted || '';
+  }
+}
+
+async function loadHoney(q) {
+  q = (q || '').trim().toLowerCase();
+  _honeySearchQ = q;
   const screen = document.getElementById('honeyScreen');
   const el     = document.getElementById('honeyFeed');
-  el.innerHTML = '<div class="honey-empty">불러오는 중...</div>';
-  try {
-    const items = await fetch('/api/honey').then(r=>r.json());
-    if (!items.length) {
-      el.innerHTML = '<div class="honey-empty">🍯 꿀템을 준비 중입니다!</div>';
+
+  // 전체 데이터 캐시가 없으면 fetch
+  if (!_honeyLoaded) {
+    _honeyLoaded = true;
+    el.innerHTML = '<div class="honey-empty">불러오는 중...</div>';
+    try {
+      _honeyAllItems = await fetch('/api/honey').then(r=>r.json());
+    } catch(e) {
+      el.innerHTML = '<div class="honey-empty">불러오기 실패</div>';
+      _honeyLoaded = false;
       return;
     }
-    el.style.cssText = 'height:100%;display:flex;flex-direction:column;';
-    el.innerHTML = items.map(item => honeySlide(item)).join('');
-    initHoneyObserver(screen);
-    // 첫 슬라이드 소리 있게 즉시 재생
-    const first = screen.querySelector('.honey-slide');
-    if (first) {
-      const frame = first.querySelector('iframe');
-      if (frame) frame.src = frame.dataset.srcUnmuted;
-    }
-  } catch(e) {
-    el.innerHTML = '<div class="honey-empty">불러오기 실패</div>';
   }
+
+  // 검색 필터 (제목 · 태그)
+  const items = q
+    ? _honeyAllItems.filter(it =>
+        (it.title||'').toLowerCase().includes(q) ||
+        (it.description||'').toLowerCase().includes(q) ||
+        (it.tags||[]).some(t => t.toLowerCase().includes(q))
+      )
+    : _honeyAllItems;
+
+  if (!items.length) {
+    el.innerHTML = q
+      ? '<div class="honey-empty">🔍 &quot;' + q + '&quot; 검색 결과가 없어요</div>'
+      : '<div class="honey-empty">🍯 꿀템을 준비 중입니다!</div>';
+    if (_honeyObserver) _honeyObserver.disconnect();
+    return;
+  }
+
+  el.style.cssText = 'height:100%;display:flex;flex-direction:column;';
+  el.innerHTML = items.map(item => honeySlide(item)).join('');
+  // 스크롤 맨 위로
+  screen.scrollTop = 0;
+  initHoneyObserver(screen);
+  // 첫 슬라이드 즉시 재생 (requestAnimationFrame으로 DOM 반영 후 실행)
+  requestAnimationFrame(() => requestAnimationFrame(() => honeyPlayFirst()));
 }
 
 function honeySlide(item) {
@@ -2832,13 +2873,22 @@ function toggleSearch() {
   }
 }
 
+function getActiveTab() {
+  if (document.getElementById('honeyScreen').classList.contains('active')) return 'honey';
+  if (document.getElementById('mapScreen').classList.contains('active'))   return 'map';
+  if (document.getElementById('inquiryScreen').classList.contains('active')) return 'inquiry';
+  return 'feed';
+}
+
 function onSearchInput(val) {
   searchQ = val.trim();
   document.getElementById('searchClear').classList.toggle('show', !!searchQ);
   clearTimeout(searchTimer);
   searchTimer = setTimeout(() => {
-    const activeTab = document.getElementById('mapScreen').classList.contains('active') ? 'map' : 'feed';
-    if (activeTab === 'map') {
+    const activeTab = getActiveTab();
+    if (activeTab === 'honey') {
+      loadHoney(searchQ);
+    } else if (activeTab === 'map') {
       loadMapShops(mapCat, nearbyOn, searchQ);
     } else {
       loadFeed(feedCat, searchQ);
@@ -2851,8 +2901,10 @@ function clearSearch() {
   const input = document.getElementById('searchInput');
   if (input) input.value = '';
   document.getElementById('searchClear').classList.remove('show');
-  const activeTab = document.getElementById('mapScreen').classList.contains('active') ? 'map' : 'feed';
-  if (activeTab === 'map') {
+  const activeTab = getActiveTab();
+  if (activeTab === 'honey') {
+    loadHoney('');
+  } else if (activeTab === 'map') {
     loadMapShops(mapCat, nearbyOn, '');
   } else {
     loadFeed(feedCat, '');
