@@ -1113,15 +1113,11 @@ app.get('/sitemap.xml', async (c) => {
   const extraCatUrls = fixedCatUrls.filter(u => !catUrlSet.has(u.loc))
 
   const allUrls = [...staticUrls, ...shopUrls, ...catUrls, ...extraCatUrls]
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${allUrls.map(u => `  <url>
-    <loc>${u.loc}</loc>
-    ${u.lastmod ? `<lastmod>${u.lastmod}</lastmod>` : ''}
-    <changefreq>${u.freq}</changefreq>
-    <priority>${u.priority}</priority>
-  </url>`).join('\n')}
-</urlset>`
+  const urlEntries = allUrls.map(u => {
+    const lastmodTag = u.lastmod ? `\n    <lastmod>${u.lastmod}</lastmod>` : ''
+    return `  <url>\n    <loc>${u.loc}</loc>${lastmodTag}\n    <changefreq>${u.freq}</changefreq>\n    <priority>${u.priority}</priority>\n  </url>`
+  }).join('\n')
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urlEntries}\n</urlset>`
 
   return c.text(xml, 200, { 'Content-Type': 'application/xml; charset=utf-8' })
 })
