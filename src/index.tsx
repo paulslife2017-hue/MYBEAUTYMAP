@@ -1831,29 +1831,6 @@ html,body{height:100%;background:var(--bg);color:#fff;
   pointer-events:none;
   letter-spacing:-.1px;
 }
-/* 첫 탭 유도 오버레이 */
-#honeyStartOverlay{
-  position:absolute;inset:0;
-  background:rgba(0,0,0,.45);
-  z-index:30;
-  display:flex;flex-direction:column;
-  align-items:center;justify-content:center;
-  gap:14px;
-  cursor:pointer;
-}
-#honeyStartOverlay .hs-icon{
-  width:72px;height:72px;
-  background:rgba(255,255,255,.15);
-  border-radius:50%;
-  display:flex;align-items:center;justify-content:center;
-  border:2px solid rgba(255,255,255,.4);
-}
-#honeyStartOverlay .hs-icon i{font-size:30px;color:#fff;margin-left:4px;}
-#honeyStartOverlay .hs-text{
-  font-size:15px;font-weight:800;color:#fff;
-  text-shadow:0 2px 8px rgba(0,0,0,.5);
-  letter-spacing:-.3px;
-}
 /* 하단 오버레이: 제목 + 구매하기 */
 .honey-overlay{
   position:absolute;bottom:0;left:0;right:0;
@@ -2445,11 +2422,11 @@ html,body{height:100%;background:var(--bg);color:#fff;
   <button class="tab active" id="tab-feed" onclick="switchTab('feed')">
     <i class="fas fa-play-circle"></i>영상
   </button>
-  <button class="tab" id="tab-map" onclick="switchTab('map')">
-    <i class="fas fa-map-marker-alt"></i>지도
-  </button>
   <button class="tab tab-honey" id="tab-honey" onclick="switchTab('honey')">
     <i class="fas fa-shopping-bag"></i>꿀템
+  </button>
+  <button class="tab" id="tab-map" onclick="switchTab('map')">
+    <i class="fas fa-map-marker-alt"></i>지도
   </button>
   <button class="tab" id="tab-inquiry" onclick="switchTab('inquiry')">
     <i class="fas fa-store"></i>입점문의
@@ -2556,15 +2533,20 @@ function switchTab(tab) {
   }
   if (tab==='feed') closeMapPopup();
   if (tab==='honey') {
+    // 탭 버튼 클릭 = 인터랙션 → 소리 바로 허용
+    _honeyUnlocked = true;
+    // 오버레이 제거
+    const overlay = document.getElementById('honeyStartOverlay');
+    if (overlay) overlay.remove();
     loadHoney();
-    // 탭 재진입 시 첫 슬라이드 자동재생 복구
+    // 재진입 시 첫 슬라이드 소리 있게 복구
     const screen = document.getElementById('honeyScreen');
     if (screen) {
       const first = screen.querySelector('.honey-slide');
       if (first) {
         const frame = first.querySelector('iframe');
         if (frame && (!frame.src || frame.src === window.location.href)) {
-          frame.src = _honeyUnlocked ? frame.dataset.srcUnmuted : frame.dataset.srcMuted;
+          frame.src = frame.dataset.srcUnmuted;
         }
       }
     }
@@ -2606,26 +2588,13 @@ async function loadHoney() {
     }
     el.style.cssText = 'height:100%;display:flex;flex-direction:column;';
     el.innerHTML = items.map(item => honeySlide(item)).join('');
-    // 첫 탭 유도 오버레이 (인터랙션 잠금 해제용)
-    if (!_honeyUnlocked) {
-      const overlay = document.createElement('div');
-      overlay.id = 'honeyStartOverlay';
-      overlay.innerHTML =
-        '<div class="hs-icon"><i class="fas fa-play"></i></div>' +
-        '<div class="hs-text">탭하면 소리와 함께 시작돼요</div>';
-      overlay.addEventListener('click', function() {
-        _honeyUnlocked = true;
-        overlay.remove();
-        // 현재 보이는 첫 슬라이드 소리 켜서 재생
-        const first = screen.querySelector('.honey-slide');
-        if (first) {
-          const frame = first.querySelector('iframe');
-          if (frame) frame.src = frame.dataset.srcUnmuted;
-        }
-      }, { once: true });
-      screen.appendChild(overlay);
-    }
     initHoneyObserver(screen);
+    // 첫 슬라이드 소리 있게 즉시 재생
+    const first = screen.querySelector('.honey-slide');
+    if (first) {
+      const frame = first.querySelector('iframe');
+      if (frame) frame.src = frame.dataset.srcUnmuted;
+    }
   } catch(e) {
     el.innerHTML = '<div class="honey-empty">불러오기 실패</div>';
   }
@@ -2663,10 +2632,9 @@ function initHoneyObserver(screen) {
       const frame = slide.querySelector('iframe');
       if (!frame) return;
       if (entry.isIntersecting) {
-        // 진입: 인터랙션 허용됐으면 소리 ON, 아니면 음소거
-        const src = _honeyUnlocked ? frame.dataset.srcUnmuted : frame.dataset.srcMuted;
+        // 진입: 항상 소리 있게 재생 (탭 버튼 클릭이 인터랙션)
         if (!frame.src || frame.src === window.location.href) {
-          frame.src = src;
+          frame.src = frame.dataset.srcUnmuted;
         }
       } else {
         // 이탈: 정지
