@@ -5700,11 +5700,12 @@ function closeHoneyModal() {
 // 유튜브 URL → 영상 ID 추출 (URL/ID 모두 허용)
 function extractYtId(raw) {
   if (!raw) return '';
-  // youtu.be/ID 또는 youtube.com/watch?v=ID 또는 youtube.com/shorts/ID
-  const m = raw.match(new RegExp('(?:youtu\\.be\\/|[?&]v=|\\/shorts\\/)([\\w-]{11})'));
+  raw = raw.trim();
+  // shorts/ID, youtu.be/ID, watch?v=ID, embed/ID 모두 처리
+  const m = raw.match(/(?:shorts\/|youtu\.be\/|[?&]v=|embed\/)([\w-]{11})/);
   if (m) return m[1];
   // 11자리 ID만 입력한 경우
-  if (new RegExp('^[\\w-]{11}$').test(raw)) return raw;
+  if (/^[\w-]{11}$/.test(raw)) return raw;
   return '';
 }
 
