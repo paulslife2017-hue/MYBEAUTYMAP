@@ -5417,33 +5417,102 @@ function renderDashboard() {
   p.innerHTML = kpi + accum + invest + chart + shopInsight + rank + recRank;
 }
 
-// ── 추천탭 조회 랭킹 (7일)
+// ── 추천탭 전체 현황 섹션
 function buildRecRank() {
-  const list = (shopData || []).filter(s => (s.weekRecView || 0) > 0 || (s.todayRecView || 0) > 0);
-  if (!list.length) return '';
-  const sorted = [...list].sort((a, b) => ((b.weekRecView||0) + (b.todayRecView||0)) - ((a.weekRecView||0) + (a.todayRecView||0)));
-  const rows = sorted.slice(0, 10).map((s, i) => {
-    const w = s.weekRecView || 0;
-    const t = s.todayRecView || 0;
-    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i+1)+'위';
-    const bar = Math.min(Math.round((w / (sorted[0].weekRecView || 1)) * 100), 100);
-    return '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.05)">' +
-      '<span style="font-size:12px;min-width:26px;text-align:center">' + medal + '</span>' +
-      '<div style="flex:1;min-width:0">' +
-        '<div style="font-size:12px;font-weight:600;color:#f1f5f9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + s.name + '</div>' +
-        '<div style="height:3px;border-radius:2px;background:rgba(255,255,255,.06);margin-top:4px">' +
-          '<div style="height:3px;border-radius:2px;background:linear-gradient(90deg,#f59e0b,#fbbf24);width:' + bar + '%"></div>' +
-        '</div>' +
+  const all  = shopData || [];
+  const recOn = all.filter(s => s.isRecommended);
+  // 전체 7일/오늘 합계
+  const totalWeek  = recOn.reduce((a,s) => a + (s.weekRecView||0), 0);
+  const totalToday = recOn.reduce((a,s) => a + (s.todayRecView||0), 0);
+  // 14일 차트 (weekChart에서 recView 추출)
+  const chart = (_stats && _stats.weekChart) ? _stats.weekChart : [];
+
+  // 헤더 KPI
+  const header =
+    '<div class="section-title" style="margin-top:20px">⭐ 추천탭 현황</div>' +
+    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">' +
+      '<div style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.2);border-radius:12px;padding:12px;text-align:center">' +
+        '<div style="font-size:20px;font-weight:800;color:#fbbf24">' + recOn.length + '</div>' +
+        '<div style="font-size:10px;color:#92400e;margin-top:2px">노출 업체 수</div>' +
       '</div>' +
-      '<div style="text-align:right;min-width:70px">' +
-        '<div style="font-size:13px;font-weight:700;color:#fbbf24">' + w.toLocaleString() + '회</div>' +
-        (t > 0 ? '<div style="font-size:10px;color:#f59e0b">오늘 +' + t + '</div>' : '<div style="font-size:10px;color:#475569">오늘 0</div>') +
+      '<div style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.2);border-radius:12px;padding:12px;text-align:center">' +
+        '<div style="font-size:20px;font-weight:800;color:#fbbf24">' + (totalWeek > 0 ? totalWeek.toLocaleString() : '—') + '</div>' +
+        '<div style="font-size:10px;color:#92400e;margin-top:2px">7일 전체 조회</div>' +
+      '</div>' +
+      '<div style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.2);border-radius:12px;padding:12px;text-align:center">' +
+        '<div style="font-size:20px;font-weight:800;color:#f59e0b">' + (totalToday > 0 ? '+'+totalToday : '—') + '</div>' +
+        '<div style="font-size:10px;color:#92400e;margin-top:2px">오늘 조회</div>' +
       '</div>' +
     '</div>';
-  }).join('');
-  return '<div class="section-title" style="margin-top:20px">⭐ 추천탭 조회 TOP 10 <span style="font-size:10px;font-weight:400;color:#64748b">(최근 7일)</span></div>' +
-    '<div style="background:rgba(251,191,36,.04);border:1px solid rgba(251,191,36,.15);border-radius:12px;padding:12px 16px">' +
-    rows + '</div>';
+
+  // 14일 추이 미니 바 차트
+  let chartHtml = '';
+  if (chart.length > 0) {
+    const maxRec = Math.max(...chart.map(r => r.recView||0), 1);
+    const bars = chart.map(r => {
+      const v   = r.recView || 0;
+      const h   = Math.max(Math.round((v / maxRec) * 40), v > 0 ? 3 : 1);
+      const dt  = r.date ? r.date.slice(5) : '';
+      return '<div style="display:flex;flex-direction:column;align-items:center;flex:1;gap:3px">' +
+        '<div style="font-size:9px;color:#fbbf24;font-weight:700">' + (v > 0 ? v : '') + '</div>' +
+        '<div style="width:100%;display:flex;align-items:flex-end;justify-content:center;height:40px">' +
+          '<div style="width:70%;border-radius:3px 3px 0 0;background:' + (v > 0 ? 'linear-gradient(180deg,#fbbf24,#f59e0b)' : 'rgba(255,255,255,.06)') + ';height:' + h + 'px"></div>' +
+        '</div>' +
+        '<div style="font-size:8px;color:#475569">' + dt + '</div>' +
+      '</div>';
+    }).join('');
+    chartHtml =
+      '<div style="margin-bottom:12px;padding:10px 12px;background:rgba(251,191,36,.03);border:1px solid rgba(251,191,36,.1);border-radius:12px">' +
+        '<div style="font-size:10px;color:#92400e;font-weight:700;margin-bottom:8px">📈 추천탭 일별 조회 추이 (14일)</div>' +
+        '<div style="display:flex;gap:2px;align-items:flex-end">' + bars + '</div>' +
+      '</div>';
+  }
+
+  // 업체별 랭킹
+  const list = recOn.filter(s => (s.weekRecView||0) > 0 || (s.todayRecView||0) > 0);
+  const noData = recOn.filter(s => (s.weekRecView||0) === 0 && (s.todayRecView||0) === 0);
+  let rankHtml = '';
+  if (list.length > 0) {
+    const sorted = [...list].sort((a,b) => ((b.weekRecView||0)+(b.todayRecView||0)) - ((a.weekRecView||0)+(a.todayRecView||0)));
+    const maxW = sorted[0].weekRecView || 1;
+    rankHtml = sorted.map((s,i) => {
+      const w    = s.weekRecView  || 0;
+      const t    = s.todayRecView || 0;
+      const bar  = Math.min(Math.round((w / maxW) * 100), 100);
+      const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':(i+1)+'위';
+      return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.05)">' +
+        '<span style="font-size:12px;min-width:26px;text-align:center">' + medal + '</span>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-size:12px;font-weight:600;color:#f1f5f9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + s.name + '</div>' +
+          '<div style="height:3px;border-radius:2px;background:rgba(255,255,255,.06);margin-top:5px">' +
+            '<div style="height:3px;border-radius:2px;background:linear-gradient(90deg,#f59e0b,#fbbf24);width:' + bar + '%"></div>' +
+          '</div>' +
+        '</div>' +
+        '<div style="text-align:right;min-width:80px">' +
+          '<div style="font-size:13px;font-weight:700;color:#fbbf24">' + w.toLocaleString() + ' <span style="font-size:9px;color:#92400e">7일</span></div>' +
+          (t > 0
+            ? '<div style="font-size:10px;color:#f59e0b;font-weight:600">오늘 +' + t + '</div>'
+            : '<div style="font-size:10px;color:#374151">오늘 —</div>') +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  // 데이터 없는 추천 업체 (조회 0)
+  let noDataHtml = '';
+  if (noData.length > 0) {
+    noDataHtml =
+      '<div style="margin-top:8px;padding:8px 12px;background:rgba(255,255,255,.02);border-radius:8px">' +
+        '<div style="font-size:10px;color:#475569;margin-bottom:4px">조회 0 (노출 중)</div>' +
+        '<div style="font-size:11px;color:#64748b">' + noData.map(s=>s.name).join(' · ') + '</div>' +
+      '</div>';
+  }
+
+  const body = list.length > 0
+    ? '<div style="background:rgba(251,191,36,.04);border:1px solid rgba(251,191,36,.15);border-radius:12px;padding:12px 16px">' + rankHtml + noDataHtml + '</div>'
+    : '<div style="padding:16px;text-align:center;font-size:12px;color:#475569;background:rgba(251,191,36,.03);border:1px dashed rgba(251,191,36,.15);border-radius:12px">아직 추천탭 조회 데이터가 없습니다</div>';
+
+  return header + chartHtml + body;
 }
 
 // ── 투자자 지표 섹션
@@ -5879,19 +5948,15 @@ function renderShops(list) {
         const todayRec = s.todayRecView || 0;
 
         if (s.isRecommended) {
-          // ─ 추천중: 실제 성과 표시
-          const hasData = weekRec > 0 || todayRec > 0;
+          // ─ 추천중: 7일/오늘 rec_view만 표시
           return '<div style="margin-top:8px;border-radius:12px;overflow:hidden;border:1.5px solid rgba(251,191,36,.3)">' +
-            // 헤더
             '<div style="background:linear-gradient(90deg,rgba(251,191,36,.15),rgba(251,191,36,.05));padding:7px 12px;display:flex;align-items:center;justify-content:space-between">' +
               '<span style="font-size:11px;font-weight:700;color:#fbbf24">⭐ 추천탭 노출 중</span>' +
               '<span style="font-size:10px;color:#92400e;background:rgba(251,191,36,.2);padding:1px 7px;border-radius:20px">ON</span>' +
             '</div>' +
-            // 성과 수치
-            '<div style="padding:8px 12px;background:rgba(251,191,36,.04);display:grid;grid-template-columns:repeat(3,1fr);gap:4px;text-align:center">' +
-              '<div><div style="font-size:15px;font-weight:800;color:#fbbf24">'+(hasData?weekRec.toLocaleString():'—')+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">7일 조회</div></div>' +
-              '<div><div style="font-size:15px;font-weight:800;color:#f59e0b">'+(todayRec>0?'+'+todayRec:'—')+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">오늘 조회</div></div>' +
-              '<div><div style="font-size:15px;font-weight:800;color:#fbbf24">'+totalViews.toLocaleString()+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">누적 영상조회</div></div>' +
+            '<div style="padding:8px 12px;background:rgba(251,191,36,.04);display:grid;grid-template-columns:repeat(2,1fr);gap:4px;text-align:center">' +
+              '<div><div style="font-size:17px;font-weight:800;color:#fbbf24">'+(weekRec>0?weekRec.toLocaleString():'—')+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">7일 조회</div></div>' +
+              '<div><div style="font-size:17px;font-weight:800;color:#f59e0b">'+(todayRec>0?'+'+todayRec:'—')+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">오늘 조회</div></div>' +
             '</div>' +
           '</div>';
         } else {
