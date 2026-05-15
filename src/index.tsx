@@ -2424,7 +2424,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
     <i class="fas fa-play-circle"></i>영상
   </button>
   <button class="tab tab-honey" id="tab-honey" onclick="switchTab('honey')">
-    <i class="fas fa-shopping-bag"></i>꿀템
+    <i class="fas fa-shopping-bag"></i>뷰티템
   </button>
   <button class="tab" id="tab-map" onclick="switchTab('map')">
     <i class="fas fa-map-marker-alt"></i>지도
@@ -2541,7 +2541,7 @@ function switchTab(tab) {
   const sh = document.querySelector('.search-hint');
   if (si && sh) {
     if (tab === 'honey') {
-      si.placeholder = '꿀템 이름, 태그 검색...';
+      si.placeholder = '뷰티템 이름, 태그 검색...';
       sh.textContent = '예) 마사지건  ·  두피케어  ·  에센스';
     } else {
       si.placeholder = '샵 이름, 지역, 태그 검색...';
@@ -2632,7 +2632,7 @@ async function loadHoney(q) {
   if (!items.length) {
     el.innerHTML = q
       ? '<div class="honey-empty">🔍 &quot;' + q + '&quot; 검색 결과가 없어요</div>'
-      : '<div class="honey-empty">🍯 꿀템을 준비 중입니다!</div>';
+      : '<div class="honey-empty">✨ 뷰티템을 준비 중입니다!</div>';
     if (_honeyObserver) _honeyObserver.disconnect();
     return;
   }
@@ -5451,7 +5451,7 @@ body{font-family:'Pretendard',sans-serif;background:var(--bg);color:var(--t1);mi
     <i class="fas fa-calendar-alt"></i>달력
   </button>
   <button class="tabbtn" id="tab-honey-admin" onclick="switchTab('honey-admin')">
-    🍯꿀템
+    ✨뷰티템
   </button>
 </div>
 
@@ -5684,15 +5684,15 @@ function renderHoneyAdmin() {
   p.innerHTML =
     '<div style="padding:16px">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">' +
-        '<div style="font-size:16px;font-weight:800;color:#fbbf24">🍯 꿀템 관리 <span style="font-size:12px;color:#64748b;font-weight:500">('+_honeyItems.length+'개)</span></div>' +
-        '<button onclick="openHoneyModal(null)" style="background:linear-gradient(135deg,#f59e0b,#fbbf24);color:#000;border:none;border-radius:10px;padding:8px 14px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit">+ 꿀템 추가</button>' +
+        '<div style="font-size:16px;font-weight:800;color:#fbbf24">✨ 뷰티템 관리 <span style="font-size:12px;color:#64748b;font-weight:500">('+_honeyItems.length+'개)</span></div>' +
+        '<button onclick="openHoneyModal(null)" style="background:linear-gradient(135deg,#f59e0b,#fbbf24);color:#000;border:none;border-radius:10px;padding:8px 14px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit">+ 뷰티템 추가</button>' +
       '</div>' +
-      (cards || '<div style="padding:40px;text-align:center;color:#475569;font-size:13px">등록된 꿀템이 없습니다</div>') +
+      (cards || '<div style="padding:40px;text-align:center;color:#475569;font-size:13px">등록된 뷰티템이 없습니다</div>') +
     '</div>' +
     // 모달
     '<div id="honeyModalBg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:flex-end" onclick="if(event.target===this)closeHoneyModal()">' +
       '<div id="honeyModal" style="background:#161616;border-radius:20px 20px 0 0;padding:20px;width:100%;max-height:85vh;overflow-y:auto">' +
-        '<div style="font-size:15px;font-weight:800;margin-bottom:16px" id="honeyModalTitle">꿀템 추가</div>' +
+        '<div style="font-size:15px;font-weight:800;margin-bottom:16px" id="honeyModalTitle">뷰티템 추가</div>' +
         '<div style="display:flex;flex-direction:column;gap:16px">' +
           '<div>' +
             '<label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">제목 *</label>' +
@@ -5736,7 +5736,7 @@ function adminInputStyle() {
 function openHoneyModal(id) {
   _honeyEditId = id;
   const item = id ? _honeyItems.find(x=>x.id===id) : null;
-  document.getElementById('honeyModalTitle').textContent = id ? '꿀템 수정' : '꿀템 추가';
+  document.getElementById('honeyModalTitle').textContent = id ? '뷰티템 수정' : '뷰티템 추가';
   document.getElementById('h-title').value   = item?.title       || '';
   document.getElementById('h-ytid').value    = item?.youtube_id  || '';
   document.getElementById('h-url').value     = item?.coupang_url || '';
@@ -5791,7 +5791,7 @@ async function saveHoney() {
   const r = await fetch(url, {method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
   if (r.ok) {
     closeHoneyModal();
-    toast(_honeyEditId ? '꿀템 수정 완료!' : '꿀템 등록 완료!');
+    toast(_honeyEditId ? '뷰티템 수정 완료!' : '뷰티템 등록 완료!');
     await loadHoneyAdmin();
   } else {
     toast('저장 실패');
@@ -5800,7 +5800,7 @@ async function saveHoney() {
 
 async function delHoney(id) {
   const found = _honeyItems.find(x => x.id === id);
-  const name = found ? found.title : '이 꿀템을';
+  const name = found ? found.title : '이 뷰티템을';
   if (!confirm(name+' 삭제할까요?')) return;
   const r = await fetch('/api/admin/honey/'+id, {method:'DELETE'});
   if (r.ok) { toast('삭제 완료'); await loadHoneyAdmin(); }
