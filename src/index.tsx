@@ -243,17 +243,22 @@ async function runMigrations() {
     // 꿀템 테이블
     try {
       await sql`CREATE TABLE IF NOT EXISTS honey_items (
-        id          SERIAL PRIMARY KEY,
-        title       TEXT    NOT NULL,
-        description TEXT    NOT NULL DEFAULT '',
-        youtube_id  TEXT    NOT NULL DEFAULT '',
-        coupang_url TEXT    NOT NULL DEFAULT '',
-        price       TEXT    NOT NULL DEFAULT '',
-        tags        TEXT[]  NOT NULL DEFAULT '{}',
-        sort_order  INTEGER NOT NULL DEFAULT 0,
-        active      BOOLEAN NOT NULL DEFAULT true,
-        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        id           SERIAL PRIMARY KEY,
+        title        TEXT    NOT NULL,
+        description  TEXT    NOT NULL DEFAULT '',
+        youtube_id   TEXT    NOT NULL DEFAULT '',
+        coupang_url  TEXT    NOT NULL DEFAULT '',
+        coupang_url2 TEXT    NOT NULL DEFAULT '',
+        price        TEXT    NOT NULL DEFAULT '',
+        tags         TEXT[]  NOT NULL DEFAULT '{}',
+        sort_order   INTEGER NOT NULL DEFAULT 0,
+        active       BOOLEAN NOT NULL DEFAULT true,
+        created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`
+    } catch (_) {}
+    // 기존 honey_items 테이블에 coupang_url2 컬럼 추가 (없는 경우)
+    try {
+      await sql`ALTER TABLE honey_items ADD COLUMN IF NOT EXISTS coupang_url2 TEXT NOT NULL DEFAULT ''`
     } catch (_) {}
     _migrationDone = true
   })()
@@ -1790,31 +1795,27 @@ html,body{height:100%;background:var(--bg);color:#fff;
 .tab-honey.active i{color:#fbbf24 !important}
 
 /* 꿀템 피드 */
-.honey-wrap{max-width:480px;margin:0 auto;padding:12px 14px 20px}
-.honey-header{padding:16px 0 10px;text-align:center}
+.honey-wrap{max-width:480px;margin:0 auto;padding:10px 14px 24px}
+.honey-header{padding:14px 0 10px;text-align:center}
 .honey-header h2{font-size:20px;font-weight:800;color:#fbbf24;letter-spacing:-.5px}
 .honey-header p{font-size:12px;color:rgba(255,255,255,.4);margin-top:4px}
 .honey-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);
   border-radius:18px;overflow:hidden;margin-bottom:16px;transition:transform .15s}
 .honey-card:active{transform:scale(.98)}
-.honey-yt{position:relative;width:100%;aspect-ratio:16/9;background:#000;border-radius:0}
+.honey-yt{position:relative;width:100%;aspect-ratio:16/9;background:#000}
 .honey-yt iframe{width:100%;height:100%;border:none}
-.honey-yt-thumb{width:100%;height:100%;object-fit:cover;cursor:pointer}
+.honey-yt-thumb{width:100%;height:100%;object-fit:cover;cursor:pointer;display:block}
 .honey-play-btn{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-  width:56px;height:56px;background:rgba(0,0,0,.7);border-radius:50%;
+  width:56px;height:56px;background:rgba(0,0,0,.65);border-radius:50%;
   display:flex;align-items:center;justify-content:center;pointer-events:none}
 .honey-play-btn i{font-size:24px;color:#fff;margin-left:3px}
-.honey-body{padding:14px 16px}
-.honey-tags{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
-.honey-tag{font-size:10px;font-weight:700;color:#fbbf24;background:rgba(251,191,36,.12);
-  padding:2px 8px;border-radius:10px}
-.honey-title{font-size:16px;font-weight:800;color:#fff;margin-bottom:6px;line-height:1.35}
-.honey-desc{font-size:13px;color:rgba(255,255,255,.55);line-height:1.65;margin-bottom:12px;white-space:pre-wrap}
-.honey-price{font-size:14px;font-weight:700;color:#fbbf24;margin-bottom:12px}
+.honey-body{padding:12px 14px 14px}
+.honey-title{font-size:15px;font-weight:800;color:#fff;margin-bottom:10px;line-height:1.4}
 .honey-cta{display:flex;align-items:center;justify-content:center;gap:8px;
-  padding:14px;border-radius:12px;background:linear-gradient(135deg,#f59e0b,#fbbf24);
-  color:#000;font-size:14px;font-weight:800;text-decoration:none;cursor:pointer;border:none;width:100%}
-.honey-cta i{font-size:16px}
+  padding:13px;border-radius:12px;background:linear-gradient(135deg,#f59e0b,#fbbf24);
+  color:#000;font-size:14px;font-weight:800;text-decoration:none;cursor:pointer;
+  border:none;width:100%;box-sizing:border-box}
+.honey-cta i{font-size:15px}
 .honey-empty{padding:60px 20px;text-align:center;color:rgba(255,255,255,.3);font-size:14px}
 
 /* 피드 카드 */
@@ -2527,25 +2528,21 @@ async function loadHoney() {
 }
 
 function honeyCard(item) {
-  const tags = (item.tags||[]).map(t=>'<span class="honey-tag">#'+t+'</span>').join('');
   const ytSection = item.youtube_id
     ? '<div class="honey-yt" id="hyt-'+item.id+'" onclick="playHoneyYt('+item.id+',this.dataset.ytid)" data-ytid="'+item.youtube_id+'">' +
-        '<img class="honey-yt-thumb" src="https://img.youtube.com/vi/'+item.youtube_id+'/hqdefault.jpg" alt="'+item.title+'" loading="lazy"/>' +
+        '<img class="honey-yt-thumb" src="https://img.youtube.com/vi/'+item.youtube_id+'/hqdefault.jpg" alt="" loading="lazy"/>' +
         '<div class="honey-play-btn"><i class="fas fa-play"></i></div>' +
       '</div>'
     : '';
   const ctaBtn = item.coupang_url
     ? '<a href="'+item.coupang_url+'" target="_blank" rel="noopener sponsored" class="honey-cta" onclick="trackHoneyCta('+item.id+')">' +
-        '<i class="fas fa-shopping-cart"></i> 쿠팡에서 보기' +
+        '<i class="fas fa-shopping-cart"></i> 쿠팡에서 구매하기' +
       '</a>'
     : '';
   return '<div class="honey-card">' +
     ytSection +
     '<div class="honey-body">' +
-      (tags ? '<div class="honey-tags">'+tags+'</div>' : '') +
       '<div class="honey-title">'+item.title+'</div>' +
-      (item.description ? '<div class="honey-desc">'+item.description+'</div>' : '') +
-      (item.price ? '<div class="honey-price">💰 '+item.price+'</div>' : '') +
       ctaBtn +
     '</div>' +
   '</div>';
@@ -5546,25 +5543,23 @@ function renderHoneyAdmin() {
     '<div id="honeyModalBg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:flex-end" onclick="if(event.target===this)closeHoneyModal()">' +
       '<div id="honeyModal" style="background:#161616;border-radius:20px 20px 0 0;padding:20px;width:100%;max-height:85vh;overflow-y:auto">' +
         '<div style="font-size:15px;font-weight:800;margin-bottom:16px" id="honeyModalTitle">꿀템 추가</div>' +
-        '<div style="display:flex;flex-direction:column;gap:12px">' +
-          '<div><label style="font-size:11px;color:#64748b;font-weight:700;display:block;margin-bottom:4px">제목 *</label>' +
-            '<input id="h-title" placeholder="예: 비타민C 세럼 추천" style="'+adminInputStyle()+'"/></div>' +
-          '<div><label style="font-size:11px;color:#64748b;font-weight:700;display:block;margin-bottom:4px">설명</label>' +
-            '<textarea id="h-desc" rows="3" placeholder="간단한 설명이나 사용후기를 입력하세요" style="'+adminInputStyle()+'resize:vertical;"></textarea></div>' +
-          '<div><label style="font-size:11px;color:#64748b;font-weight:700;display:block;margin-bottom:4px">유튜브 영상 ID</label>' +
-            '<input id="h-ytid" placeholder="예: dQw4w9WgXcQ (URL에서 v= 뒤 값)" style="'+adminInputStyle()+'"/>' +
-            '<div id="h-yt-preview" style="margin-top:6px;border-radius:10px;overflow:hidden;display:none;aspect-ratio:16/9;background:#000"><iframe id="h-yt-frame" width="100%" height="100%" style="border:none"></iframe></div></div>' +
-          '<div><label style="font-size:11px;color:#64748b;font-weight:700;display:block;margin-bottom:4px">쿠팡 파트너스 링크</label>' +
-            '<input id="h-url" placeholder="https://link.coupang.com/..." style="'+adminInputStyle()+'"/></div>' +
-          '<div><label style="font-size:11px;color:#64748b;font-weight:700;display:block;margin-bottom:4px">가격 표시</label>' +
-            '<input id="h-price" placeholder="예: 23,900원 / 2개입" style="'+adminInputStyle()+'"/></div>' +
-          '<div><label style="font-size:11px;color:#64748b;font-weight:700;display:block;margin-bottom:4px">태그 (쉼표로 구분)</label>' +
-            '<input id="h-tags" placeholder="예: 비타민C, 세럼, 미백" style="'+adminInputStyle()+'"/></div>' +
-          '<div><label style="font-size:11px;color:#64748b;font-weight:700;display:block;margin-bottom:4px">순서 (낮을수록 위)</label>' +
-            '<input id="h-order" type="number" value="0" style="'+adminInputStyle()+'"/></div>' +
-          '<div style="display:flex;align-items:center;gap:10px">' +
-            '<label style="font-size:13px;font-weight:700">노출</label>' +
-            '<input id="h-active" type="checkbox" checked style="width:18px;height:18px;cursor:pointer"/>' +
+        '<div style="display:flex;flex-direction:column;gap:16px">' +
+          '<div>' +
+            '<label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">제목 *</label>' +
+            '<input id="h-title" placeholder="예: 이 마스크팩 요즘 핫해요" style="'+adminInputStyle()+'"/>' +
+          '</div>' +
+          '<div>' +
+            '<label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">유튜브 영상 링크 또는 ID</label>' +
+            '<input id="h-ytid" placeholder="https://youtu.be/xxxxx 또는 영상 ID" style="'+adminInputStyle()+'"/>' +
+            '<div id="h-yt-preview" style="margin-top:8px;border-radius:10px;overflow:hidden;display:none;aspect-ratio:16/9;background:#000"><iframe id="h-yt-frame" width="100%" height="100%" style="border:none"></iframe></div>' +
+          '</div>' +
+          '<div>' +
+            '<label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">쿠팡 파트너스 링크</label>' +
+            '<input id="h-url" placeholder="https://link.coupang.com/..." style="'+adminInputStyle()+'"/>' +
+          '</div>' +
+          '<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0">' +
+            '<label style="font-size:14px;font-weight:700;color:#f1f5f9">노출</label>' +
+            '<input id="h-active" type="checkbox" checked style="width:20px;height:20px;cursor:pointer;accent-color:#fbbf24"/>' +
           '</div>' +
         '</div>' +
         '<div style="display:flex;gap:10px;margin-top:18px">' +
@@ -5574,12 +5569,12 @@ function renderHoneyAdmin() {
       '</div>' +
     '</div>';
 
-  // 유튜브 ID 입력 시 미리보기
+  // 유튜브 URL/ID 입력 시 미리보기
   document.getElementById('h-ytid').addEventListener('input', function() {
-    const v = this.value.trim();
+    const vid = extractYtId(this.value.trim());
     const preview = document.getElementById('h-yt-preview');
     const frame = document.getElementById('h-yt-frame');
-    if (v) { preview.style.display='block'; frame.src='https://www.youtube.com/embed/'+v+'?rel=0'; }
+    if (vid) { preview.style.display='block'; frame.src='https://www.youtube.com/embed/'+vid+'?rel=0'; }
     else { preview.style.display='none'; frame.src=''; }
   });
 }
@@ -5592,13 +5587,9 @@ function openHoneyModal(id) {
   _honeyEditId = id;
   const item = id ? _honeyItems.find(x=>x.id===id) : null;
   document.getElementById('honeyModalTitle').textContent = id ? '꿀템 수정' : '꿀템 추가';
-  document.getElementById('h-title').value  = item?.title       || '';
-  document.getElementById('h-desc').value   = item?.description || '';
-  document.getElementById('h-ytid').value   = item?.youtube_id  || '';
-  document.getElementById('h-url').value    = item?.coupang_url || '';
-  document.getElementById('h-price').value  = item?.price       || '';
-  document.getElementById('h-tags').value   = (item?.tags||[]).join(', ');
-  document.getElementById('h-order').value  = item?.sort_order  || 0;
+  document.getElementById('h-title').value   = item?.title       || '';
+  document.getElementById('h-ytid').value    = item?.youtube_id  || '';
+  document.getElementById('h-url').value     = item?.coupang_url || '';
   document.getElementById('h-active').checked = item ? item.active : true;
   // 유튜브 미리보기
   const ytId = item?.youtube_id || '';
@@ -5614,20 +5605,26 @@ function closeHoneyModal() {
   document.getElementById('honeyModalBg').style.display = 'none';
 }
 
+// 유튜브 URL → 영상 ID 추출 (URL/ID 모두 허용)
+function extractYtId(raw) {
+  if (!raw) return '';
+  // youtu.be/ID 또는 youtube.com/watch?v=ID 또는 youtube.com/shorts/ID
+  const m = raw.match(new RegExp('(?:youtu\\.be\\/|[?&]v=|\\/shorts\\/)([\\w-]{11})'));
+  if (m) return m[1];
+  // 11자리 ID만 입력한 경우
+  if (new RegExp('^[\\w-]{11}$').test(raw)) return raw;
+  return '';
+}
+
 async function saveHoney() {
   const title = document.getElementById('h-title').value.trim();
   if (!title) { toast('제목을 입력하세요'); return; }
-  const tagsRaw = document.getElementById('h-tags').value;
-  const tags = tagsRaw ? tagsRaw.split(',').map(t=>t.trim()).filter(Boolean) : [];
+  const rawYt = document.getElementById('h-ytid').value.trim();
   const body = {
     title,
-    description: document.getElementById('h-desc').value.trim(),
-    youtubeId:   document.getElementById('h-ytid').value.trim(),
-    coupangUrl:  document.getElementById('h-url').value.trim(),
-    price:       document.getElementById('h-price').value.trim(),
-    tags,
-    sortOrder:   parseInt(document.getElementById('h-order').value)||0,
-    active:      document.getElementById('h-active').checked,
+    youtubeId:  extractYtId(rawYt) || rawYt,
+    coupangUrl: document.getElementById('h-url').value.trim(),
+    active:     document.getElementById('h-active').checked,
   };
   const url = _honeyEditId ? '/api/admin/honey/'+_honeyEditId : '/api/admin/honey';
   const method = _honeyEditId ? 'PUT' : 'POST';
