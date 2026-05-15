@@ -204,23 +204,52 @@ function calcDist(la1: number, lo1: number, la2: number, lo2: number) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// 앱 시작 시 자동 마이그레이션 (컬럼 없으면 추가)
+// 자동 마이그레이션 — 첫 요청 전에 반드시 완료 보장 (once-flag 패턴)
 // ══════════════════════════════════════════════════════════════════════════
-;(async () => {
-  try {
-    await sql`ALTER TABLE shops ADD COLUMN IF NOT EXISTS report_token    TEXT`
-    await sql`ALTER TABLE shops ADD COLUMN IF NOT EXISTS is_recommended  BOOLEAN NOT NULL DEFAULT false`
-  } catch (_) {}
-  try {
-    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS feed_view    INTEGER NOT NULL DEFAULT 0`
-    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS catalog_view INTEGER NOT NULL DEFAULT 0`
-    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS map_view     INTEGER NOT NULL DEFAULT 0`
-    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS vts_feed     INTEGER NOT NULL DEFAULT 0`
-    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS vts_catalog  INTEGER NOT NULL DEFAULT 0`
-    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS vts_map      INTEGER NOT NULL DEFAULT 0`
-    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS rec_view     INTEGER NOT NULL DEFAULT 0`
-  } catch (_) {}
-})()
+let _migrationDone = false
+let _migrationPromise: Promise<void> | null = null
+
+async function runMigrations() {
+  if (_migrationDone) return
+  if (_migrationPromise) return _migrationPromise
+  _migrationPromise = (async () => {
+    try {
+      await sql`ALTER TABLE shops ADD COLUMN IF NOT EXISTS report_token   TEXT`
+    } catch (_) {}
+    try {
+      await sql`ALTER TABLE shops ADD COLUMN IF NOT EXISTS is_recommended BOOLEAN NOT NULL DEFAULT false`
+    } catch (_) {}
+    try {
+      await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS feed_view    INTEGER NOT NULL DEFAULT 0`
+    } catch (_) {}
+    try {
+      await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS catalog_view INTEGER NOT NULL DEFAULT 0`
+    } catch (_) {}
+    try {
+      await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS map_view     INTEGER NOT NULL DEFAULT 0`
+    } catch (_) {}
+    try {
+      await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS vts_feed     INTEGER NOT NULL DEFAULT 0`
+    } catch (_) {}
+    try {
+      await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS vts_catalog  INTEGER NOT NULL DEFAULT 0`
+    } catch (_) {}
+    try {
+      await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS vts_map      INTEGER NOT NULL DEFAULT 0`
+    } catch (_) {}
+    try {
+      await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS rec_view     INTEGER NOT NULL DEFAULT 0`
+    } catch (_) {}
+    _migrationDone = true
+  })()
+  return _migrationPromise
+}
+
+// 모든 요청 처리 전 마이그레이션 완료 보장
+app.use('*', async (_c, next) => {
+  await runMigrations()
+  return next()
+})
 
 // ══════════════════════════════════════════════════════════════════════════
 // API 라우트
@@ -705,14 +734,16 @@ app.get('/api/admin/stats', async (c) => {
   const todayTotals = await sql`
     SELECT COALESCE(SUM(view_cnt),0) as views,
            COALESCE(SUM(feed_sp),0)  as feed_sp,
-           COALESCE(SUM(map_sp),0)   as map_sp
+           COALESCE(SUM(map_sp),0)   as map_sp,
+           COALESCE(SUM(rec_view),0) as rec_view
     FROM daily_stats WHERE stat_date = ${today}
   `
   // 어제 합계
   const yestTotals = await sql`
     SELECT COALESCE(SUM(view_cnt),0) as views,
            COALESCE(SUM(feed_sp),0)  as feed_sp,
-           COALESCE(SUM(map_sp),0)   as map_sp
+           COALESCE(SUM(map_sp),0)   as map_sp,
+           COALESCE(SUM(rec_view),0) as rec_view
     FROM daily_stats WHERE stat_date = ${yesterday}
   `
   // 7일 일별 합계 (차트용)
@@ -720,12 +751,24 @@ app.get('/api/admin/stats', async (c) => {
     SELECT stat_date::text as stat_date,
            COALESCE(SUM(view_cnt),0) as views,
            COALESCE(SUM(feed_sp),0)  as feed_sp,
-           COALESCE(SUM(map_sp),0)   as map_sp
+           COALESCE(SUM(map_sp),0)   as map_sp,
+           COALESCE(SUM(rec_view),0) as rec_view
     FROM daily_stats
     WHERE stat_date >= (CURRENT_DATE - INTERVAL '13 days')
     GROUP BY stat_date
     ORDER BY stat_date ASC
   `
+  // 추천탭 7일 누적 (업체별)
+  const recWeekRows = await sql`
+    SELECT shop_id, COALESCE(SUM(rec_view),0) as total_rec
+    FROM daily_stats
+    WHERE stat_date >= (CURRENT_DATE - INTERVAL '6 days')
+    GROUP BY shop_id
+    HAVING SUM(rec_view) > 0
+    ORDER BY total_rec DESC
+  `
+  const recWeekMap: Record<number, number> = {}
+  recWeekRows.forEach((r: any) => { recWeekMap[r.shop_id] = parseInt(r.total_rec) || 0 })
   // 누적 합계
   const totals = await sql`
     SELECT
@@ -809,7 +852,8 @@ app.get('/api/admin/stats', async (c) => {
       todayVtsFeed:     todayShopMap[r.id]?.todayVtsFeed     || 0,
       todayVtsCatalog:  todayShopMap[r.id]?.todayVtsCatalog  || 0,
       todayVtsMap:      todayShopMap[r.id]?.todayVtsMap      || 0,
-      todayRecView:     todayShopMap[r.id]?.todayRecView      || 0,
+      todayRecView:  todayShopMap[r.id]?.todayRecView || 0,
+      weekRecView:   recWeekMap[r.id] || 0,
     })),
     // 누적
     totalViews:  parseInt(t.total_views)   || 0,
@@ -817,19 +861,22 @@ app.get('/api/admin/stats', async (c) => {
     totalMapSP:  parseInt(t.total_map_sp)  || 0,
     totalShops:  parseInt(activeCount[0].cnt) || 0,
     // 오늘
-    todayViews:  parseInt(td.views)   || 0,
-    todayFeedSP: parseInt(td.feed_sp) || 0,
-    todayMapSP:  parseInt(td.map_sp)  || 0,
+    todayViews:   parseInt(td.views)    || 0,
+    todayFeedSP:  parseInt(td.feed_sp)  || 0,
+    todayMapSP:   parseInt(td.map_sp)   || 0,
+    todayRecView: parseInt(td.rec_view) || 0,
     // 어제
-    yestViews:   parseInt(yd.views)   || 0,
-    yestFeedSP:  parseInt(yd.feed_sp) || 0,
-    yestMapSP:   parseInt(yd.map_sp)  || 0,
+    yestViews:   parseInt(yd.views)    || 0,
+    yestFeedSP:  parseInt(yd.feed_sp)  || 0,
+    yestMapSP:   parseInt(yd.map_sp)   || 0,
+    yestRecView: parseInt(yd.rec_view) || 0,
     // 14일 차트
     weekChart: weekRows.map(r => ({
-      date:   r.stat_date,
-      views:  parseInt(r.views)   || 0,
-      feedSP: parseInt(r.feed_sp) || 0,
-      mapSP:  parseInt(r.map_sp)  || 0,
+      date:    r.stat_date,
+      views:   parseInt(r.views)    || 0,
+      feedSP:  parseInt(r.feed_sp)  || 0,
+      mapSP:   parseInt(r.map_sp)   || 0,
+      recView: parseInt(r.rec_view) || 0,
     })),
   })
 })
@@ -5243,20 +5290,29 @@ function renderDashboard() {
   const todayVisit = todayRow ? (parseInt(todayRow.visit_cnt)||0) : 0;
   const yestVisit  = yestRow  ? (parseInt(yestRow.visit_cnt)||0)  : 0;
 
-  const tV  = d.todayViews  ||0, yV  = d.yestViews  ||0;
-  const tF  = d.todayFeedSP ||0, yF  = d.yestFeedSP ||0;
-  const tM  = d.todayMapSP  ||0, yM  = d.yestMapSP  ||0;
+  const tV  = d.todayViews   ||0, yV  = d.yestViews   ||0;
+  const tF  = d.todayFeedSP  ||0, yF  = d.yestFeedSP  ||0;
+  const tM  = d.todayMapSP   ||0, yM  = d.yestMapSP   ||0;
+  const tR  = d.todayRecView ||0, yR  = d.yestRecView  ||0;
   const todayLabel = new Date().toLocaleDateString('ko-KR',{month:'long',day:'numeric',weekday:'short'});
 
   // 1) 오늘 KPI
   const kpi =
     '<div class="section-title">📅 오늘 현황 <span style="font-size:10px;font-weight:500;color:var(--t3);margin-left:4px">' + todayLabel + '</span></div>' +
-    '<div class="kpi-grid">' +
+    '<div class="kpi-grid" style="grid-template-columns:repeat(2,1fr)">' +
       '<div class="kpi-card kpi-visit"><div class="kpi-icon">🙋</div><div class="kpi-val">' + todayVisit.toLocaleString() + '</div><div class="kpi-lbl">방문자</div>' + deltaHtml(todayVisit,yestVisit) + '</div>' +
       '<div class="kpi-card kpi-view"><div class="kpi-icon">👁</div><div class="kpi-val">' + tV.toLocaleString() + '</div><div class="kpi-lbl">영상 조회</div>' + deltaHtml(tV,yV) + '</div>' +
       '<div class="kpi-card kpi-feed"><div class="kpi-icon">📹</div><div class="kpi-val">' + tF.toLocaleString() + '</div><div class="kpi-lbl">피드 클릭</div>' + deltaHtml(tF,yF) + '</div>' +
       '<div class="kpi-card kpi-map"><div class="kpi-icon">🗺️</div><div class="kpi-val">' + tM.toLocaleString() + '</div><div class="kpi-lbl">지도 클릭</div>' + deltaHtml(tM,yM) + '</div>' +
-    '</div>';
+    '</div>' +
+    // ⭐ 추천탭 조회 별도 강조 배너
+    (tR > 0 || yR > 0
+      ? '<div style="margin-top:10px;padding:12px 16px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);border-radius:12px;display:flex;align-items:center;justify-content:space-between">' +
+          '<div><span style="font-size:18px">⭐</span> <strong style="color:#fbbf24;font-size:15px">' + tR.toLocaleString() + '</strong> <span style="font-size:12px;color:#94a3b8">추천탭 조회 (오늘)</span></div>' +
+          deltaHtml(tR, yR) +
+        '</div>'
+      : '<div style="margin-top:10px;padding:10px 16px;background:rgba(251,191,36,.05);border:1px dashed rgba(251,191,36,.2);border-radius:12px;font-size:12px;color:#64748b;text-align:center">⭐ 추천탭 조회 데이터 없음 (오늘)</div>'
+    );
 
   // 2) 누적 요약
   const totalClicks = (d.totalFeedSP||0)+(d.totalMapSP||0);
@@ -5280,7 +5336,39 @@ function renderDashboard() {
   // 6) 오늘 업체 랭킹
   const rank = buildRank(_rankMode);
 
-  p.innerHTML = kpi + accum + invest + chart + shopInsight + rank;
+  // 7) 추천탭 조회 랭킹 (7일)
+  const recRank = buildRecRank();
+
+  p.innerHTML = kpi + accum + invest + chart + shopInsight + rank + recRank;
+}
+
+// ── 추천탭 조회 랭킹 (7일)
+function buildRecRank() {
+  const list = (shopData || []).filter(s => (s.weekRecView || 0) > 0 || (s.todayRecView || 0) > 0);
+  if (!list.length) return '';
+  const sorted = [...list].sort((a, b) => ((b.weekRecView||0) + (b.todayRecView||0)) - ((a.weekRecView||0) + (a.todayRecView||0)));
+  const rows = sorted.slice(0, 10).map((s, i) => {
+    const w = s.weekRecView || 0;
+    const t = s.todayRecView || 0;
+    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i+1)+'위';
+    const bar = Math.min(Math.round((w / (sorted[0].weekRecView || 1)) * 100), 100);
+    return '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.05)">' +
+      '<span style="font-size:12px;min-width:26px;text-align:center">' + medal + '</span>' +
+      '<div style="flex:1;min-width:0">' +
+        '<div style="font-size:12px;font-weight:600;color:#f1f5f9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + s.name + '</div>' +
+        '<div style="height:3px;border-radius:2px;background:rgba(255,255,255,.06);margin-top:4px">' +
+          '<div style="height:3px;border-radius:2px;background:linear-gradient(90deg,#f59e0b,#fbbf24);width:' + bar + '%"></div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="text-align:right;min-width:70px">' +
+        '<div style="font-size:13px;font-weight:700;color:#fbbf24">' + w.toLocaleString() + '회</div>' +
+        (t > 0 ? '<div style="font-size:10px;color:#f59e0b">오늘 +' + t + '</div>' : '<div style="font-size:10px;color:#475569">오늘 0</div>') +
+      '</div>' +
+    '</div>';
+  }).join('');
+  return '<div class="section-title" style="margin-top:20px">⭐ 추천탭 조회 TOP 10 <span style="font-size:10px;font-weight:400;color:#64748b">(최근 7일)</span></div>' +
+    '<div style="background:rgba(251,191,36,.04);border:1px solid rgba(251,191,36,.15);border-radius:12px;padding:12px 16px">' +
+    rows + '</div>';
 }
 
 // ── 투자자 지표 섹션
@@ -5708,15 +5796,24 @@ function renderShops(list) {
       '</div>' +
       (totToday>0?'<div style="margin-top:6px;padding:6px 10px;background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.2);border-radius:8px;font-size:10px;color:#f59e0b;font-weight:700">' +
         '오늘 📅'+(s.todayFeedSP||0)+' 📍'+(s.todayMapSP||0)+' <span style="color:#64748b;font-weight:500">👁'+(s.todayViews||0)+'</span></div>':'') +
-      // ── 추천 탭 조회수 (오늘)
-      (s.todayRecView > 0
-        ? '<div style="margin-top:6px;padding:6px 10px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);border-radius:8px;font-size:11px;color:#fbbf24;font-weight:700">⭐ 추천탭 오늘 조회 '+s.todayRecView+'회</div>'
+      // ── 추천 탭 조회수 (오늘 + 7일 누적)
+      ((s.todayRecView > 0 || s.weekRecView > 0)
+        ? '<div style="margin-top:6px;padding:7px 10px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);border-radius:8px;display:flex;align-items:center;gap:10px">' +
+            '<span style="font-size:13px">⭐</span>' +
+            (s.todayRecView > 0
+              ? '<span style="font-size:11px;color:#fbbf24;font-weight:700">오늘 '+s.todayRecView+'회</span>'
+              : '') +
+            (s.weekRecView > 0
+              ? '<span style="font-size:10px;color:#92400e;background:rgba(251,191,36,.15);padding:2px 6px;border-radius:4px;font-weight:600">7일 '+s.weekRecView+'회</span>'
+              : '') +
+            '<span style="font-size:10px;color:#64748b">추천탭 조회</span>' +
+          '</div>'
         : '') +
       '<div class="sc-btns">' +
         '<button class="btn-edit" data-id="'+s.id+'" onclick="openModal(+this.dataset.id)"><i class="fas fa-edit"></i> 수정</button>' +
         '<button class="btn-pay-edit" data-id="'+s.id+'" onclick="openPayModal(+this.dataset.id)"><i class="fas fa-credit-card"></i> 결제</button>' +
         '<button class="btn-report" data-id="'+s.id+'" onclick="copyReportLink(+this.dataset.id,this)"><i class="fas fa-chart-line"></i> 리포트</button>' +
-        '<button class="btn-rec '+(s.isRecommended?'btn-rec-on':'')+'" data-id="'+s.id+'" data-rec="'+(s.isRecommended?'1':'0')+'" onclick="toggleRec(+this.dataset.id,this.dataset.rec===\'1\',this)">'+
+        '<button class="btn-rec '+(s.isRecommended?'btn-rec-on':'')+'" data-id="'+s.id+'" data-rec="'+(s.isRecommended?'1':'0')+'" onclick="toggleRec(+this.dataset.id,+this.dataset.rec===1,this)">'+
           (s.isRecommended ? '⭐ 추천중' : '☆ 추천') +
         '</button>' +
         '<button class="btn-del" data-id="'+s.id+'" data-name="'+s.name.replace(/"/g,'&quot;')+'" onclick="delShop(+this.dataset.id,this.dataset.name)"><i class="fas fa-trash"></i></button>' +
