@@ -1074,7 +1074,7 @@ app.get('/sitemap.xml', async (c) => {
   }
 
   const staticUrls = [
-    { loc: base,        priority: '1.0', freq: 'daily' },
+    { loc: base,          priority: '1.0', freq: 'daily' },
     { loc: `${base}/map`, priority: '0.8', freq: 'weekly' },
   ]
 
@@ -1086,7 +1086,7 @@ app.get('/sitemap.xml', async (c) => {
     lastmod:  today,
   }))
 
-  // 카테고리×지역 랜딩 페이지
+  // 카테고리×지역 랜딩 페이지 (DB 기반 동적 추출)
   const catUrls = [...catRegionSet].map(key => {
     const [cat, region] = key.split('|||')
     return {
@@ -1097,7 +1097,22 @@ app.get('/sitemap.xml', async (c) => {
     }
   })
 
-  const allUrls = [...staticUrls, ...shopUrls, ...catUrls]
+  // 고정 주요 카테고리×지역 조합 (네이버/구글 인덱싱 보장)
+  const FIXED_CATS = ['마사지','헤드스파','피부관리','헤어','메이크업','왁싱','반영구']
+  const FIXED_REGIONS = ['강남구','서초구','마포구','용산구','성동구','종로구','중구','송파구','강서구','분당구']
+  const fixedCatUrls = FIXED_CATS.flatMap(cat =>
+    FIXED_REGIONS.map(region => ({
+      loc:  `${base}/c/${encodeURIComponent(cat)}/${encodeURIComponent(region)}`,
+      priority: '0.7',
+      freq: 'weekly',
+      lastmod: today,
+    }))
+  )
+  // catUrls와 fixedCatUrls 중복 제거
+  const catUrlSet = new Set(catUrls.map(u => u.loc))
+  const extraCatUrls = fixedCatUrls.filter(u => !catUrlSet.has(u.loc))
+
+  const allUrls = [...staticUrls, ...shopUrls, ...catUrls, ...extraCatUrls]
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${allUrls.map(u => `  <url>
@@ -1405,7 +1420,7 @@ iframe{
 })
 app.get('/', (c) => {
   const proto   = c.req.header('x-forwarded-proto') || 'https'
-  const host    = c.req.header('x-forwarded-host') || c.req.header('host') || 'localhost:3000'
+  const host    = c.req.header('x-forwarded-host') || c.req.header('host') || 'mybeautymap-one.vercel.app'
   const baseUrl = `${proto}://${host}`
   return c.html(mainPage(baseUrl))
 })
@@ -1445,6 +1460,13 @@ function mainPage(baseUrl = 'https://mybeautymap.pages.dev') { return `<!DOCTYPE
 <meta name="twitter:title"       content="마이뷰티맵 – 내 주변 뷰티샵 한눈에"/>
 <meta name="twitter:description" content="마사지·헤드스파·피부관리·헤어·메이크업·왁싱·반영구 – 내 주변 뷰티샵을 지도와 피드로 한눈에! 위치 기반으로 가까운 샵을 찾고, 리뷰·가격·예약까지 바로 확인하세요."/>
 <meta name="twitter:image"       content="${baseUrl}/og-image.jpg"/>
+
+<!-- Canonical & 네이버/구글 인증 -->
+<link rel="canonical" href="${baseUrl}/"/>
+<meta name="naver-site-verification" content="NAVER_VERIFICATION_CODE"/>
+<meta name="google-site-verification" content="GOOGLE_VERIFICATION_CODE"/>
+<meta name="robots" content="index,follow"/>
+<meta name="author" content="마이뷰티맵"/>
 
 <link rel="icon" href="/favicon.svg" type="image/svg+xml"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
@@ -3172,20 +3194,53 @@ function shopDetailPage(shop: any, baseUrl: string): string {
   const catEmoji: Record<string,string> = {마사지:'💆',헤드스파:'🧖',피부관리:'✨',헤어:'💇',메이크업:'💄',왁싱:'🌸',반영구:'👁',병원:'🏥',그외:'🌟'}
   const emoji   = catEmoji[shop.category] || '🌟'
 
-  // Schema.org LocalBusiness → 구글 리치스니펫 (별점·주소·전화)
-  const schema = JSON.stringify({
+  // Schema.org LocalBusiness → 구글 리치스니펫 (별점·주소·전화·영업시간)
+  const schemaObj: Record<string, any> = {
     '@context': 'https://schema.org',
     '@type': type,
+    '@id': pageUrl,
     name: shop.name,
     description: desc,
     url: pageUrl,
     telephone: shop.phone || undefined,
-    address: { '@type': 'PostalAddress', streetAddress: shop.address, addressLocality: loc, addressCountry: 'KR' },
-    geo: (shop.lat && shop.lng) ? { '@type': 'GeoCoordinates', latitude: shop.lat, longitude: shop.lng } : undefined,
-    image: shop.thumbnail || undefined,
+    address: {
+      '@type': 'PostalAddress',
+      streetAddress: shop.address,
+      addressLocality: loc,
+      addressRegion: city,
+      addressCountry: 'KR'
+    },
+    geo: (shop.lat && shop.lng) ? {
+      '@type': 'GeoCoordinates',
+      latitude: shop.lat,
+      longitude: shop.lng
+    } : undefined,
+    image: shop.thumbnail ? {
+      '@type': 'ImageObject',
+      url: shop.thumbnail,
+      width: 800,
+      height: 600
+    } : undefined,
     priceRange: shop.price || undefined,
     hasMap: shop.smartPlaceUrl || undefined,
     sameAs: shop.smartPlaceUrl ? [shop.smartPlaceUrl] : undefined,
+    // 네이버 지도 연동 강화
+    ...(shop.category === '마사지' && { serviceType: '마사지·스파' }),
+    ...(shop.category === '헤드스파' && { serviceType: '헤드스파·두피케어' }),
+    ...(shop.category === '피부관리' && { serviceType: '피부관리·에스테틱' }),
+    ...(shop.category === '헤어' && { serviceType: '헤어살롱·미용실' }),
+  }
+  const schema = JSON.stringify(schemaObj)
+
+  // BreadcrumbList → 구글 빵부스러기
+  const breadcrumb = JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: '마이뷰티맵', item: baseUrl },
+      { '@type': 'ListItem', position: 2, name: `${loc} ${shop.category}`, item: `${baseUrl}/c/${encodeURIComponent(shop.category)}/${encodeURIComponent(loc)}` },
+      { '@type': 'ListItem', position: 3, name: shop.name, item: pageUrl },
+    ],
   })
 
   // 키워드: 업체명 + 지역 + 카테고리 + 롱테일 조합
@@ -3217,7 +3272,11 @@ function shopDetailPage(shop: any, baseUrl: string): string {
 <meta name="twitter:title"       content="${title}"/>
 <meta name="twitter:description" content="${desc}"/>
 <meta name="twitter:image"       content="${ogImg}"/>
+<meta name="robots" content="index,follow"/>
+<meta name="author" content="마이뷰티맵"/>
+<meta name="naver-site-verification" content="NAVER_VERIFICATION_CODE"/>
 <script type="application/ld+json">${schema}</script>
+<script type="application/ld+json">${breadcrumb}</script>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
@@ -3406,6 +3465,9 @@ function categoryLandingPage(category: string, region: string, shops: any[], bas
 <meta name="twitter:title"       content="${title}"/>
 <meta name="twitter:description" content="${desc}"/>
 <meta name="twitter:image"       content="${baseUrl}/og-image.jpg"/>
+<meta name="robots" content="index,follow"/>
+<meta name="author" content="마이뷰티맵"/>
+<meta name="naver-site-verification" content="NAVER_VERIFICATION_CODE"/>
 <script type="application/ld+json">${schema}</script>
 <script type="application/ld+json">${breadcrumb}</script>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml"/>
