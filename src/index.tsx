@@ -1688,9 +1688,10 @@ html,body{height:100%;background:var(--bg);color:#fff;
   display:none;}
 #mapScreen.active{display:block;}
 /* 쇼츠 릴스 스타일 */
-#honeyScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:calc(var(--ad) + var(--nav));
+#honeyScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:var(--nav);
   display:none;overflow-y:scroll;scroll-snap-type:y mandatory;
   background:#000;-webkit-overflow-scrolling:touch;}
+/* 꿀템 활성 시 광고 영역 없으므로 bottom = nav만 */
 #honeyScreen::-webkit-scrollbar{display:none;}
 #honeyScreen.active{display:block;}
 #inquiryScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:calc(var(--ad) + var(--nav));
@@ -2532,6 +2533,10 @@ function switchTab(tab) {
     }, 300);
   }
   if (tab==='feed') closeMapPopup();
+  // 쿠팡 광고 배너: 꿀템 탭에서는 숨김 (꿀템 자체 구매버튼 사용), 다른 탭에서는 표시
+  const coupangAd = document.getElementById('coupang-ad');
+  if (coupangAd) coupangAd.style.display = (tab === 'honey') ? 'none' : '';
+
   if (tab==='honey') {
     // 탭 버튼 클릭 = 인터랙션 → 소리 바로 허용
     _honeyUnlocked = true;
@@ -2604,9 +2609,10 @@ function honeySlide(item) {
   const ytId       = item.youtube_id || '';
   const srcMuted   = ytId ? 'https://www.youtube.com/embed/'+ytId+'?autoplay=1&mute=1&loop=1&playlist='+ytId+'&rel=0&playsinline=1&controls=1' : '';
   const srcUnmuted = ytId ? 'https://www.youtube.com/embed/'+ytId+'?autoplay=1&mute=0&loop=1&playlist='+ytId+'&rel=0&playsinline=1&controls=1' : '';
+  // coupang_url이 있으면 해당 링크로, 없으면 버튼 자체를 숨김
   const buyBtn = item.coupang_url
     ? '<a href="'+item.coupang_url+'" target="_blank" rel="noopener sponsored" class="honey-buy-btn" onclick="trackHoneyCta('+item.id+')">' +
-        '<i class="fas fa-shopping-bag"></i>구매하기' +
+        '<i class="fas fa-shopping-bag"></i>쿠팡 구매하기' +
       '</a>'
     : '';
   return '<div class="honey-slide" id="hslide-'+item.id+'" data-ytid="'+ytId+'">' +
