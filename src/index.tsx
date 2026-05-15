@@ -240,6 +240,21 @@ async function runMigrations() {
     try {
       await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS rec_view     INTEGER NOT NULL DEFAULT 0`
     } catch (_) {}
+    // 꿀템 테이블
+    try {
+      await sql`CREATE TABLE IF NOT EXISTS honey_items (
+        id          SERIAL PRIMARY KEY,
+        title       TEXT    NOT NULL,
+        description TEXT    NOT NULL DEFAULT '',
+        youtube_id  TEXT    NOT NULL DEFAULT '',
+        coupang_url TEXT    NOT NULL DEFAULT '',
+        price       TEXT    NOT NULL DEFAULT '',
+        tags        TEXT[]  NOT NULL DEFAULT '{}',
+        sort_order  INTEGER NOT NULL DEFAULT 0,
+        active      BOOLEAN NOT NULL DEFAULT true,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`
+    } catch (_) {}
     _migrationDone = true
   })()
   return _migrationPromise
@@ -1034,6 +1049,61 @@ app.post('/api/admin/upload-thumbnail', async (c) => {
 })
 
 // ══════════════════════════════════════════════════════════════════════════
+// 🍯 꿀템 API
+// ══════════════════════════════════════════════════════════════════════════
+
+// 목록 조회 (사용자)
+app.get('/api/honey', async (c) => {
+  const rows = await sql`
+    SELECT * FROM honey_items WHERE active = true ORDER BY sort_order ASC, id DESC
+  `
+  return c.json(rows)
+})
+
+// 전체 목록 (관리자)
+app.get('/api/admin/honey', async (c) => {
+  const rows = await sql`SELECT * FROM honey_items ORDER BY sort_order ASC, id DESC`
+  return c.json(rows)
+})
+
+// 등록
+app.post('/api/admin/honey', async (c) => {
+  const b = await c.req.json()
+  const rows = await sql`
+    INSERT INTO honey_items (title, description, youtube_id, coupang_url, price, tags, sort_order, active)
+    VALUES (${b.title}, ${b.description||''}, ${b.youtubeId||''}, ${b.coupangUrl||''}, ${b.price||''}, ${b.tags||[]}, ${b.sortOrder||0}, ${b.active!==false})
+    RETURNING *
+  `
+  return c.json(rows[0])
+})
+
+// 수정
+app.put('/api/admin/honey/:id', async (c) => {
+  const id = +c.req.param('id')
+  const b  = await c.req.json()
+  const rows = await sql`
+    UPDATE honey_items SET
+      title       = ${b.title},
+      description = ${b.description||''},
+      youtube_id  = ${b.youtubeId||''},
+      coupang_url = ${b.coupangUrl||''},
+      price       = ${b.price||''},
+      tags        = ${b.tags||[]},
+      sort_order  = ${b.sortOrder||0},
+      active      = ${b.active!==false}
+    WHERE id = ${id} RETURNING *
+  `
+  return c.json(rows[0])
+})
+
+// 삭제
+app.delete('/api/admin/honey/:id', async (c) => {
+  const id = +c.req.param('id')
+  await sql`DELETE FROM honey_items WHERE id = ${id}`
+  return c.json({ ok: true })
+})
+
+// ══════════════════════════════════════════════════════════════════════════
 // SEO 라우트 (업체 추가 시 자동으로 검색엔진에 노출)
 // ══════════════════════════════════════════════════════════════════════════
 
@@ -1612,6 +1682,10 @@ html,body{height:100%;background:var(--bg);color:#fff;
 #mapScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:calc(var(--ad) + var(--nav));
   display:none;}
 #mapScreen.active{display:block;}
+#honeyScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:calc(var(--ad) + var(--nav));
+  display:none;overflow-y:auto;background:var(--bg);}
+#honeyScreen::-webkit-scrollbar{display:none;}
+#honeyScreen.active{display:block;}
 #inquiryScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:calc(var(--ad) + var(--nav));
   overflow-y:auto;display:none;background:var(--bg);}
 #inquiryScreen.active{display:block;}
@@ -1712,6 +1786,36 @@ html,body{height:100%;background:var(--bg);color:#fff;
 .tab i{font-size:22px;transition:transform .2s}
 .tab.active{color:#fff}
 .tab.active i{color:var(--pink);transform:scale(1.1)}
+.tab-honey{font-size:13px !important;letter-spacing:-.3px}
+.tab-honey.active{color:#fbbf24 !important}
+
+/* 꿀템 피드 */
+.honey-wrap{max-width:480px;margin:0 auto;padding:12px 14px 20px}
+.honey-header{padding:16px 0 10px;text-align:center}
+.honey-header h2{font-size:20px;font-weight:800;color:#fbbf24;letter-spacing:-.5px}
+.honey-header p{font-size:12px;color:rgba(255,255,255,.4);margin-top:4px}
+.honey-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);
+  border-radius:18px;overflow:hidden;margin-bottom:16px;transition:transform .15s}
+.honey-card:active{transform:scale(.98)}
+.honey-yt{position:relative;width:100%;aspect-ratio:16/9;background:#000;border-radius:0}
+.honey-yt iframe{width:100%;height:100%;border:none}
+.honey-yt-thumb{width:100%;height:100%;object-fit:cover;cursor:pointer}
+.honey-play-btn{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:56px;height:56px;background:rgba(0,0,0,.7);border-radius:50%;
+  display:flex;align-items:center;justify-content:center;pointer-events:none}
+.honey-play-btn i{font-size:24px;color:#fff;margin-left:3px}
+.honey-body{padding:14px 16px}
+.honey-tags{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
+.honey-tag{font-size:10px;font-weight:700;color:#fbbf24;background:rgba(251,191,36,.12);
+  padding:2px 8px;border-radius:10px}
+.honey-title{font-size:16px;font-weight:800;color:#fff;margin-bottom:6px;line-height:1.35}
+.honey-desc{font-size:13px;color:rgba(255,255,255,.55);line-height:1.65;margin-bottom:12px;white-space:pre-wrap}
+.honey-price{font-size:14px;font-weight:700;color:#fbbf24;margin-bottom:12px}
+.honey-cta{display:flex;align-items:center;justify-content:center;gap:8px;
+  padding:14px;border-radius:12px;background:linear-gradient(135deg,#f59e0b,#fbbf24);
+  color:#000;font-size:14px;font-weight:800;text-decoration:none;cursor:pointer;border:none;width:100%}
+.honey-cta i{font-size:16px}
+.honey-empty{padding:60px 20px;text-align:center;color:rgba(255,255,255,.3);font-size:14px}
 
 /* 피드 카드 */
 .fi{
@@ -2265,6 +2369,11 @@ html,body{height:100%;background:var(--bg);color:#fff;
   </script>
 </div>
 
+<!-- 꿀템 스크린 -->
+<section id="honeyScreen">
+  <div id="honeyFeed"></div>
+</section>
+
 <!-- 하단 탭바 -->
 <nav class="tabbar">
   <button class="tab active" id="tab-feed" onclick="switchTab('feed')">
@@ -2272,6 +2381,9 @@ html,body{height:100%;background:var(--bg);color:#fff;
   </button>
   <button class="tab" id="tab-map" onclick="switchTab('map')">
     <i class="fas fa-map-marker-alt"></i>지도
+  </button>
+  <button class="tab tab-honey" id="tab-honey" onclick="switchTab('honey')">
+    🍯꿀템
   </button>
   <button class="tab" id="tab-inquiry" onclick="switchTab('inquiry')">
     <i class="fas fa-store"></i>입점문의
@@ -2357,7 +2469,7 @@ const CAT_CLASS = {
 
 // ── 탭 전환 ───────────────────────────────────────────────────────────────
 function switchTab(tab) {
-  ['feed','map','inquiry'].forEach(t => {
+  ['feed','map','honey','inquiry'].forEach(t => {
     const tabEl = document.getElementById('tab-'+t);
     const scrEl = document.getElementById(t+'Screen');
     if(tabEl) tabEl.classList.toggle('active', t===tab);
@@ -2365,25 +2477,19 @@ function switchTab(tab) {
   });
   document.getElementById('catBar').classList.toggle('show', tab==='feed');
 
-  // PC wrapper 표시/숨김: 피드 탭이 아닐 때 숨기고, 피드 탭으로 돌아오면 다시 보이기
   const pcWrapper = document.getElementById('feed-pc-wrapper');
-  if (pcWrapper) {
-    pcWrapper.style.display = (tab === 'feed') ? '' : 'none';
-  }
+  if (pcWrapper) pcWrapper.style.display = (tab === 'feed') ? '' : 'none';
 
   if (tab==='map') {
     closeMapPopup();
     initMap();
-    // 지도가 display:none 상태에서 로드됐을 수 있어서
-    // 탭 전환 후 iframe에 fitBounds 재실행 요청
     setTimeout(() => {
       const frame = document.getElementById('mapFrame');
       if (frame) frame.contentWindow.postMessage({ type: 'fitBounds' }, '*');
     }, 300);
   }
-  if (tab==='feed') {
-    closeMapPopup();
-  }
+  if (tab==='feed') closeMapPopup();
+  if (tab==='honey') loadHoney();
 }
 
 // ── 로고 5번 탭 → 관리자 선택 팝업 ─────────────────────────────────────
@@ -2397,6 +2503,63 @@ document.getElementById('logoBtn').addEventListener('click', ()=>{
     showAdminPicker();
   }
 });
+
+// ── 🍯 꿀템 피드 ───────────────────────────────────────────────────
+let _honeyLoaded = false;
+async function loadHoney() {
+  if (_honeyLoaded) return;
+  _honeyLoaded = true;
+  const el = document.getElementById('honeyFeed');
+  el.innerHTML = '<div class="honey-empty">불러오는 중...</div>';
+  try {
+    const items = await fetch('/api/honey').then(r=>r.json());
+    if (!items.length) {
+      el.innerHTML = '<div class="honey-empty">🍯 꿀템을 준비 중입니다!</div>';
+      return;
+    }
+    el.innerHTML = '<div class="honey-wrap">' +
+      '<div class="honey-header"><h2>🍯 뷰티 꿀템</h2><p>요즘 뜨는 뷰티 아이템만 모았어요</p></div>' +
+      items.map(item => honeyCard(item)).join('') +
+      '</div>';
+  } catch(e) {
+    el.innerHTML = '<div class="honey-empty">불러오기 실패</div>';
+  }
+}
+
+function honeyCard(item) {
+  const tags = (item.tags||[]).map(t=>'<span class="honey-tag">#'+t+'</span>').join('');
+  const ytSection = item.youtube_id
+    ? '<div class="honey-yt" id="hyt-'+item.id+'">' +
+        '<img class="honey-yt-thumb" src="https://img.youtube.com/vi/'+item.youtube_id+'/hqdefault.jpg" alt="'+item.title+'" onclick="playHoneyYt(\''+item.id+'\',\''+item.youtube_id+'\')" loading="lazy"/>' +
+        '<div class="honey-play-btn"><i class="fas fa-play"></i></div>' +
+      '</div>'
+    : '';
+  const ctaBtn = item.coupang_url
+    ? '<a href="'+item.coupang_url+'" target="_blank" rel="noopener sponsored" class="honey-cta" onclick="trackHoneyCta('+item.id+')">' +
+        '<i class="fas fa-shopping-cart"></i> 쿠팡에서 보기' +
+      '</a>'
+    : '';
+  return '<div class="honey-card">' +
+    ytSection +
+    '<div class="honey-body">' +
+      (tags ? '<div class="honey-tags">'+tags+'</div>' : '') +
+      '<div class="honey-title">'+item.title+'</div>' +
+      (item.description ? '<div class="honey-desc">'+item.description+'</div>' : '') +
+      (item.price ? '<div class="honey-price">💰 '+item.price+'</div>' : '') +
+      ctaBtn +
+    '</div>' +
+  '</div>';
+}
+
+function playHoneyYt(id, ytId) {
+  const wrap = document.getElementById('hyt-'+id);
+  if (!wrap) return;
+  wrap.innerHTML = '<iframe src="https://www.youtube.com/embed/'+ytId+'?autoplay=1&rel=0" allow="autoplay;encrypted-media" allowfullscreen></iframe>';
+}
+
+function trackHoneyCta(id) {
+  fetch('/api/track/honey-cta/'+id, {method:'POST'}).catch(()=>{});
+}
 
 function showAdminPicker() {
   const pw = prompt('관리자 비밀번호');
@@ -5140,15 +5303,19 @@ body{font-family:'Pretendard',sans-serif;background:var(--bg);color:var(--t1);mi
   <button class="tabbtn" id="tab-cal" onclick="switchTab('cal')">
     <i class="fas fa-calendar-alt"></i>달력
   </button>
+  <button class="tabbtn" id="tab-honey-admin" onclick="switchTab('honey-admin')">
+    🍯꿀템
+  </button>
 </div>
 
 <!-- 콘텐츠 -->
 <div class="wrap">
   <div id="panel-stats"></div>
-  <div id="panel-shops" style="display:none"></div>
-  <div id="panel-pay"   style="display:none"></div>
-  <div id="panel-inq"   style="display:none"></div>
-  <div id="panel-cal"   style="display:none"></div>
+  <div id="panel-shops"       style="display:none"></div>
+  <div id="panel-pay"         style="display:none"></div>
+  <div id="panel-inq"         style="display:none"></div>
+  <div id="panel-cal"         style="display:none"></div>
+  <div id="panel-honey-admin" style="display:none"></div>
 </div>
 
 <!-- 업체 추가/수정 모달 -->
@@ -5300,15 +5467,18 @@ let _stats = null, _dvRows = [], _chartMode = 'view', _rankMode = 'today', _insi
 // ── 탭 전환
 function switchTab(t) {
   curTab = t;
-  ['stats','shops','pay','inq','cal'].forEach(x => {
-    document.getElementById('tab-'+x).classList.toggle('on', x===t);
-    document.getElementById('panel-'+x).style.display = x===t ? 'block' : 'none';
+  ['stats','shops','pay','inq','cal','honey-admin'].forEach(x => {
+    const tabEl = document.getElementById('tab-'+x);
+    const panEl = document.getElementById('panel-'+x);
+    if (tabEl) tabEl.classList.toggle('on', x===t);
+    if (panEl) panEl.style.display = x===t ? 'block' : 'none';
   });
   document.querySelector('.add-btn').style.display = t==='shops' ? 'flex' : 'none';
   if (t==='shops') renderShops(shopData);
   if (t==='inq') loadInquiries();
   if (t==='pay') renderPayTab();
   if (t==='cal') renderCalendar();
+  if (t==='honey-admin') loadHoneyAdmin();
 }
 
 // ── 토스트
@@ -5323,6 +5493,159 @@ function toast(msg) {
   el.textContent = msg; el.style.opacity = '1';
   clearTimeout(_toastTmr);
   _toastTmr = setTimeout(() => { el.style.opacity = '0'; }, 2500);
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// 🍯 관리자 꿀템 관리
+// ══════════════════════════════════════════════════════════════════════════
+let _honeyItems = [];
+let _honeyEditId = null;
+
+async function loadHoneyAdmin() {
+  const p = document.getElementById('panel-honey-admin');
+  p.innerHTML = '<div style="padding:20px;text-align:center;color:#64748b">불러오는 중...</div>';
+  _honeyItems = await fetch('/api/admin/honey').then(r=>r.json());
+  renderHoneyAdmin();
+}
+
+function renderHoneyAdmin() {
+  const p = document.getElementById('panel-honey-admin');
+  const cards = _honeyItems.map(item => {
+    const thumb = item.youtube_id
+      ? '<img src="https://img.youtube.com/vi/'+item.youtube_id+'/mqdefault.jpg" style="width:72px;height:48px;object-fit:cover;border-radius:8px;flex-shrink:0"/>'
+      : '<div style="width:72px;height:48px;background:rgba(255,255,255,.06);border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:20px">🍯</div>';
+    return '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:12px;margin-bottom:10px">' +
+      '<div style="display:flex;gap:10px;align-items:center">' +
+        thumb +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-size:13px;font-weight:700;color:#f1f5f9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+item.title+'</div>' +
+          '<div style="font-size:11px;color:#64748b;margin-top:2px">'+(item.price||'가격 미설정')+'</div>' +
+          '<div style="margin-top:4px;display:flex;gap:4px">' +
+            (item.coupang_url ? '<span style="font-size:10px;background:rgba(255,165,0,.15);color:#f59e0b;padding:1px 6px;border-radius:6px">쿠팡링크</span>' : '') +
+            (item.youtube_id  ? '<span style="font-size:10px;background:rgba(255,0,0,.12);color:#f87171;padding:1px 6px;border-radius:6px">유튜브</span>' : '') +
+            '<span style="font-size:10px;background:'+(item.active?'rgba(3,199,90,.12)':'rgba(255,255,255,.06)')+';color:'+(item.active?'#34d399':'#64748b')+';padding:1px 6px;border-radius:6px">'+(item.active?'노출중':'숨김')+'</span>' +
+          '</div>' +
+        '</div>' +
+        '<div style="display:flex;gap:6px;flex-shrink:0">' +
+          '<button onclick="openHoneyModal('+item.id+')" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);color:#f1f5f9;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">수정</button>' +
+          '<button onclick="delHoney('+item.id+',\''+item.title.replace(/'/g,'')+'\''+')" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);color:#f87171;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">삭제</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  p.innerHTML =
+    '<div style="padding:16px">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">' +
+        '<div style="font-size:16px;font-weight:800;color:#fbbf24">🍯 꿀템 관리 <span style="font-size:12px;color:#64748b;font-weight:500">('+_honeyItems.length+'개)</span></div>' +
+        '<button onclick="openHoneyModal(null)" style="background:linear-gradient(135deg,#f59e0b,#fbbf24);color:#000;border:none;border-radius:10px;padding:8px 14px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit">+ 꿀템 추가</button>' +
+      '</div>' +
+      (cards || '<div style="padding:40px;text-align:center;color:#475569;font-size:13px">등록된 꿀템이 없습니다</div>') +
+    '</div>' +
+    // 모달
+    '<div id="honeyModalBg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:flex-end" onclick="if(event.target===this)closeHoneyModal()">' +
+      '<div id="honeyModal" style="background:#161616;border-radius:20px 20px 0 0;padding:20px;width:100%;max-height:85vh;overflow-y:auto">' +
+        '<div style="font-size:15px;font-weight:800;margin-bottom:16px" id="honeyModalTitle">꿀템 추가</div>' +
+        '<div style="display:flex;flex-direction:column;gap:12px">' +
+          '<div><label style="font-size:11px;color:#64748b;font-weight:700;display:block;margin-bottom:4px">제목 *</label>' +
+            '<input id="h-title" placeholder="예: 비타민C 세럼 추천" style="'+adminInputStyle()+'"/></div>' +
+          '<div><label style="font-size:11px;color:#64748b;font-weight:700;display:block;margin-bottom:4px">설명</label>' +
+            '<textarea id="h-desc" rows="3" placeholder="간단한 설명이나 사용후기를 입력하세요" style="'+adminInputStyle()+'resize:vertical;"></textarea></div>' +
+          '<div><label style="font-size:11px;color:#64748b;font-weight:700;display:block;margin-bottom:4px">유튜브 영상 ID</label>' +
+            '<input id="h-ytid" placeholder="예: dQw4w9WgXcQ (URL에서 v= 뒤 값)" style="'+adminInputStyle()+'"/>' +
+            '<div id="h-yt-preview" style="margin-top:6px;border-radius:10px;overflow:hidden;display:none;aspect-ratio:16/9;background:#000"><iframe id="h-yt-frame" width="100%" height="100%" style="border:none"></iframe></div></div>' +
+          '<div><label style="font-size:11px;color:#64748b;font-weight:700;display:block;margin-bottom:4px">쿠팡 파트너스 링크</label>' +
+            '<input id="h-url" placeholder="https://link.coupang.com/..." style="'+adminInputStyle()+'"/></div>' +
+          '<div><label style="font-size:11px;color:#64748b;font-weight:700;display:block;margin-bottom:4px">가격 표시</label>' +
+            '<input id="h-price" placeholder="예: 23,900원 / 2개입" style="'+adminInputStyle()+'"/></div>' +
+          '<div><label style="font-size:11px;color:#64748b;font-weight:700;display:block;margin-bottom:4px">태그 (쉼표로 구분)</label>' +
+            '<input id="h-tags" placeholder="예: 비타민C, 세럼, 미백" style="'+adminInputStyle()+'"/></div>' +
+          '<div><label style="font-size:11px;color:#64748b;font-weight:700;display:block;margin-bottom:4px">순서 (낮을수록 위)</label>' +
+            '<input id="h-order" type="number" value="0" style="'+adminInputStyle()+'"/></div>' +
+          '<div style="display:flex;align-items:center;gap:10px">' +
+            '<label style="font-size:13px;font-weight:700">노출</label>' +
+            '<input id="h-active" type="checkbox" checked style="width:18px;height:18px;cursor:pointer"/>' +
+          '</div>' +
+        '</div>' +
+        '<div style="display:flex;gap:10px;margin-top:18px">' +
+          '<button onclick="saveHoney()" style="flex:1;background:linear-gradient(135deg,#f59e0b,#fbbf24);color:#000;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit">저장</button>' +
+          '<button onclick="closeHoneyModal()" style="background:rgba(255,255,255,.06);color:#94a3b8;border:1.5px solid rgba(255,255,255,.09);border-radius:12px;padding:14px 18px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">취소</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+  // 유튜브 ID 입력 시 미리보기
+  document.getElementById('h-ytid').addEventListener('input', function() {
+    const v = this.value.trim();
+    const preview = document.getElementById('h-yt-preview');
+    const frame = document.getElementById('h-yt-frame');
+    if (v) { preview.style.display='block'; frame.src='https://www.youtube.com/embed/'+v+'?rel=0'; }
+    else { preview.style.display='none'; frame.src=''; }
+  });
+}
+
+function adminInputStyle() {
+  return 'width:100%;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.09);border-radius:10px;padding:10px 12px;color:#fff;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;';
+}
+
+function openHoneyModal(id) {
+  _honeyEditId = id;
+  const item = id ? _honeyItems.find(x=>x.id===id) : null;
+  document.getElementById('honeyModalTitle').textContent = id ? '꿀템 수정' : '꿀템 추가';
+  document.getElementById('h-title').value  = item?.title       || '';
+  document.getElementById('h-desc').value   = item?.description || '';
+  document.getElementById('h-ytid').value   = item?.youtube_id  || '';
+  document.getElementById('h-url').value    = item?.coupang_url || '';
+  document.getElementById('h-price').value  = item?.price       || '';
+  document.getElementById('h-tags').value   = (item?.tags||[]).join(', ');
+  document.getElementById('h-order').value  = item?.sort_order  || 0;
+  document.getElementById('h-active').checked = item ? item.active : true;
+  // 유튜브 미리보기
+  const ytId = item?.youtube_id || '';
+  const preview = document.getElementById('h-yt-preview');
+  const frame   = document.getElementById('h-yt-frame');
+  if (ytId) { preview.style.display='block'; frame.src='https://www.youtube.com/embed/'+ytId+'?rel=0'; }
+  else { preview.style.display='none'; frame.src=''; }
+  const bg = document.getElementById('honeyModalBg');
+  bg.style.display = 'flex';
+}
+
+function closeHoneyModal() {
+  document.getElementById('honeyModalBg').style.display = 'none';
+}
+
+async function saveHoney() {
+  const title = document.getElementById('h-title').value.trim();
+  if (!title) { toast('제목을 입력하세요'); return; }
+  const tagsRaw = document.getElementById('h-tags').value;
+  const tags = tagsRaw ? tagsRaw.split(',').map(t=>t.trim()).filter(Boolean) : [];
+  const body = {
+    title,
+    description: document.getElementById('h-desc').value.trim(),
+    youtubeId:   document.getElementById('h-ytid').value.trim(),
+    coupangUrl:  document.getElementById('h-url').value.trim(),
+    price:       document.getElementById('h-price').value.trim(),
+    tags,
+    sortOrder:   parseInt(document.getElementById('h-order').value)||0,
+    active:      document.getElementById('h-active').checked,
+  };
+  const url = _honeyEditId ? '/api/admin/honey/'+_honeyEditId : '/api/admin/honey';
+  const method = _honeyEditId ? 'PUT' : 'POST';
+  const r = await fetch(url, {method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  if (r.ok) {
+    closeHoneyModal();
+    toast(_honeyEditId ? '꿀템 수정 완료!' : '꿀템 등록 완료!');
+    await loadHoneyAdmin();
+  } else {
+    toast('저장 실패');
+  }
+}
+
+async function delHoney(id, name) {
+  if (!confirm(name+' 삭제할까요?')) return;
+  const r = await fetch('/api/admin/honey/'+id, {method:'DELETE'});
+  if (r.ok) { toast('삭제 완료'); await loadHoneyAdmin(); }
+  else toast('삭제 실패');
 }
 
 // ── 증감 헬퍼
