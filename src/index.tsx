@@ -1039,7 +1039,7 @@ app.post('/api/admin/upload-thumbnail', async (c) => {
 // robots.txt – 크롤러 전체 허용 + sitemap 위치 알림
 app.get('/robots.txt', (c) => {
   const proto = c.req.header('x-forwarded-proto') || 'https'
-  const host  = c.req.header('x-forwarded-host') || c.req.header('host') || 'mybeautymap-one.vercel.app'
+  const host  = c.req.header('x-forwarded-host') || c.req.header('host') || 'www.mybeautymap.co.kr'
   return c.text(
     `User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api/\n\nSitemap: ${proto}://${host}/sitemap.xml`,
     200,
@@ -1059,7 +1059,7 @@ app.get('/ads.txt', (c) => {
 // sitemap.xml – 동적 생성 (업체 추가만 하면 자동으로 사이트맵에 포함됨)
 app.get('/sitemap.xml', async (c) => {
   const proto   = c.req.header('x-forwarded-proto') || 'https'
-  const host    = c.req.header('x-forwarded-host') || c.req.header('host') || 'mybeautymap-one.vercel.app'
+  const host    = c.req.header('x-forwarded-host') || c.req.header('host') || 'www.mybeautymap.co.kr'
   const base    = `${proto}://${host}`
   const today   = kstToday()
 
@@ -1126,7 +1126,7 @@ app.get('/sitemap.xml', async (c) => {
 // 새 업체 등록 시 자동으로 /shop/{id} 페이지가 생성됨
 app.get('/shop/:id', async (c) => {
   const proto   = c.req.header('x-forwarded-proto') || 'https'
-  const host    = c.req.header('x-forwarded-host') || c.req.header('host') || 'mybeautymap-one.vercel.app'
+  const host    = c.req.header('x-forwarded-host') || c.req.header('host') || 'www.mybeautymap.co.kr'
   const baseUrl = `${proto}://${host}`
   const id      = +c.req.param('id')
   if (isNaN(id)) return c.redirect('/')
@@ -1146,7 +1146,7 @@ app.get('/shop/:id', async (c) => {
 // 예: /c/마사지/강남구  /c/헤드스파/분당구
 app.get('/c/:category/:region', async (c) => {
   const proto    = c.req.header('x-forwarded-proto') || 'https'
-  const host     = c.req.header('x-forwarded-host') || c.req.header('host') || 'mybeautymap-one.vercel.app'
+  const host     = c.req.header('x-forwarded-host') || c.req.header('host') || 'www.mybeautymap.co.kr'
   const baseUrl  = `${proto}://${host}`
   const category = decodeURIComponent(c.req.param('category'))
   const region   = decodeURIComponent(c.req.param('region'))
@@ -1416,7 +1416,7 @@ iframe{
 })
 app.get('/', (c) => {
   const proto   = c.req.header('x-forwarded-proto') || 'https'
-  const host    = c.req.header('x-forwarded-host') || c.req.header('host') || 'mybeautymap-one.vercel.app'
+  const host    = c.req.header('x-forwarded-host') || c.req.header('host') || 'www.mybeautymap.co.kr'
   const baseUrl = `${proto}://${host}`
   return c.html(mainPage(baseUrl))
 })
@@ -1431,7 +1431,7 @@ const CAT_EMOJI:  Record<string, string> = {
 }
 const REC_BTN = '<button class="cp cp-rec" onclick="filterFeed(this,\'recommended\')">⭐ 추천</button>'
 
-function mainPage(baseUrl = 'https://mybeautymap.pages.dev') { return `<!DOCTYPE html>
+function mainPage(baseUrl = 'https://www.mybeautymap.co.kr') { return `<!DOCTYPE html>
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
