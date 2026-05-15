@@ -725,6 +725,7 @@ app.get('/api/admin/stats', async (c) => {
            s.address, s.district, s.phone,
            s.display_mode, s.price, s.tags, s.description,
            s.plan, s.payment_status, s.paid_until, s.payment_memo,
+           s.is_recommended,
            COALESCE(st.view_cnt,0) as view_cnt,
            COALESCE(st.feed_sp,0)  as feed_sp,
            COALESCE(st.map_sp,0)   as map_sp
