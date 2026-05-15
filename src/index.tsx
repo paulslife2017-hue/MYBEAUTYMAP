@@ -1463,7 +1463,7 @@ function mainPage(baseUrl = 'https://mybeautymap.pages.dev') { return `<!DOCTYPE
 
 <!-- Canonical & 네이버/구글 인증 -->
 <link rel="canonical" href="${baseUrl}/"/>
-<meta name="naver-site-verification" content="NAVER_VERIFICATION_CODE"/>
+<meta name="naver-site-verification" content="03dd559471b30f56932048b9f009cab98039d653"/>
 <meta name="google-site-verification" content="GOOGLE_VERIFICATION_CODE"/>
 <meta name="robots" content="index,follow"/>
 <meta name="author" content="마이뷰티맵"/>
@@ -3274,7 +3274,7 @@ function shopDetailPage(shop: any, baseUrl: string): string {
 <meta name="twitter:image"       content="${ogImg}"/>
 <meta name="robots" content="index,follow"/>
 <meta name="author" content="마이뷰티맵"/>
-<meta name="naver-site-verification" content="NAVER_VERIFICATION_CODE"/>
+<meta name="naver-site-verification" content="03dd559471b30f56932048b9f009cab98039d653"/>
 <script type="application/ld+json">${schema}</script>
 <script type="application/ld+json">${breadcrumb}</script>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml"/>
@@ -3467,7 +3467,7 @@ function categoryLandingPage(category: string, region: string, shops: any[], bas
 <meta name="twitter:image"       content="${baseUrl}/og-image.jpg"/>
 <meta name="robots" content="index,follow"/>
 <meta name="author" content="마이뷰티맵"/>
-<meta name="naver-site-verification" content="NAVER_VERIFICATION_CODE"/>
+<meta name="naver-site-verification" content="03dd559471b30f56932048b9f009cab98039d653"/>
 <script type="application/ld+json">${schema}</script>
 <script type="application/ld+json">${breadcrumb}</script>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml"/>
