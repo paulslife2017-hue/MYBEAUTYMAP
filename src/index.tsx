@@ -2002,8 +2002,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
 <!-- 카탈로그 탭바 (피드 전용) -->
 <div class="cat-bar show" id="catBar">
   <div class="cat-scroll">
-    ${REC_BTN}
-    ${CATEGORIES.map((c, i) => `<button class="cp${i === 0 ? ' active' : ''}" onclick="filterFeed(this,'${c === '전체' ? 'all' : c}')">${CAT_EMOJI[c]} ${c}</button>`).join('')}
+    ${CATEGORIES.map((c, i) => `<button class="cp${i === 0 ? ' active' : ''}" onclick="filterFeed(this,'${c === '전체' ? 'all' : c}')">${CAT_EMOJI[c]} ${c}</button>${i === 0 ? REC_BTN : ''}`).join('')}
   </div>
 </div>
 
