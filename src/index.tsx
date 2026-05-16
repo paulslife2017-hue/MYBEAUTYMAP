@@ -1871,7 +1871,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
   display:flex;flex-direction:column;overflow:hidden;background:#000;
 }
 .yt-area{flex:1;position:relative;overflow:hidden;background:#000}
-.yt-area iframe{
+.yt-area iframe,.feed-iframe{
   position:absolute;inset:0;width:100%;height:100%;border:none;}
 
 /* ── PC 레이아웃 (768px+): 카드 자체를 좌(영상)+우(정보) 2단으로 ── */
@@ -2820,22 +2820,17 @@ function feedThumbFallback(img, shopThumb) {
 }
 
 function feedCardHTML(s) {
-  // 썸네일 이미지 + 재생버튼 오버레이 방식
-  // 클릭 시: trackView(shopId) + autoplay mute=0 iframe 교체 → 광고수익 O, 조회카운팅 O
-  // onclick에 따옴표 직접 삽입 시 HTML 렌더링 후 이스케이프가 깨지므로
-  // data-ytid 속성으로 ytId 전달 → 따옴표 이스케이프 문제 완전 회피
+  // yt-area: 처음부터 iframe 삽입 (autoplay=0)
+  // → 클릭하면 유튜브 플레이어 자체에서 재생 (외부 앱 이동 없음)
+  // → 화면 이탈 시 IntersectionObserver가 src 리셋하여 정지
   const ytArea = s.youtubeId
-    ? '<div class="yt-area" style="cursor:pointer"'
-        + ' data-shopid="' + s.id + '" data-ytid="' + s.youtubeId + '"'
-        + ' onclick="feedPlayVideo(this)">'
-        + '<img src="https://img.youtube.com/vi/' + s.youtubeId + '/maxresdefault.jpg"'
-        + ' onerror="feedThumbFallback(this,' + JSON.stringify(s.thumbnail || '') + ')"'
-        + ' style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border:none">'  
-        + '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none">'
-          + '<div style="width:60px;height:60px;background:rgba(255,0,0,.88);border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(0,0,0,.5)">'
-            + '<svg width="24" height="24" viewBox="0 0 24 24" fill="white" style="margin-left:3px"><polygon points="5,3 19,12 5,21"/></svg>'
-          + '</div>'
-        + '</div>'
+    ? '<div class="yt-area"'
+        + ' data-shopid="' + s.id + '" data-ytid="' + s.youtubeId + '">'
+        + '<iframe class="feed-iframe"'
+        + ' src="https://www.youtube.com/embed/' + s.youtubeId
+        + '?autoplay=0&playsinline=1&rel=0&modestbranding=1&color=white"'
+        + ' allow="autoplay;encrypted-media;picture-in-picture;fullscreen"'
+        + ' allowfullscreen></iframe>'
       + '</div>'
     : '<div class="yt-area" style="background:linear-gradient(135deg,#1a1a1a,#111)"></div>';
   // data-shop JSON 이스케이프 버그 → data-id/url/name 개별 속성으로 분리
@@ -2920,30 +2915,34 @@ async function loadFeed(cat='all', q='') {
   // 카드 렌더
   scr.innerHTML = merged.map(feedCardHTML).join('');
   scr.scrollTop = 0;
+
+  // 화면 이탈 시 영상 자동 정지 Observer 연결
+  initFeedStopObserver();
 }
 
-// ── 피드 영상 재생: 썸네일 클릭 시 호출 ──
-// trackView(shopId) → 광고수익 O + 조회카운팅 O
-// autoplay=1, mute=0 → 유튜브 광고수익 발생
-function feedPlayVideo(el) {
-  const shopId = el.dataset.shopid;
-  const ytId   = el.dataset.ytid;
-  if (!ytId) return;
-  // feedCat 기반 출처 분류
-  const source = feedCat === 'recommended' ? 'catalog'
-               : (feedCat && feedCat !== 'all') ? 'catalog' : 'feed';
-  if (feedCat === 'recommended') {
-    fetch('/api/track/rec/' + shopId, { method: 'POST' }).catch(()=>{});
-  }
-  trackView(shopId, source);
-  el.style.cursor = 'default';
-  el.onclick = null;
-  el.innerHTML = '<iframe'
-    + ' style="position:absolute;inset:0;width:100%;height:100%;border:none"'
-    + ' src="https://www.youtube.com/embed/' + ytId
-    + '?autoplay=1&playsinline=1&rel=0&modestbranding=1&color=white"'
-    + ' allow="autoplay;encrypted-media;picture-in-picture;fullscreen"'
-    + ' allowfullscreen></iframe>';
+// ── 화면 이탈 카드 영상 정지 (IntersectionObserver) ──
+let _feedStopObserver = null;
+
+function initFeedStopObserver() {
+  if (_feedStopObserver) _feedStopObserver.disconnect();
+  const scr = document.getElementById('feedScreen');
+  _feedStopObserver = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      const ytDiv = entry.target;
+      const ytId  = ytDiv.dataset.ytid;
+      const iframe = ytDiv.querySelector('.feed-iframe');
+      if (!iframe || !ytId) return;
+      if (!entry.isIntersecting) {
+        // 화면 밖으로 나가면 → src 리셋으로 재생 중지
+        iframe.src = 'https://www.youtube.com/embed/' + ytId
+          + '?autoplay=0&playsinline=1&rel=0&modestbranding=1&color=white';
+      }
+    });
+  }, { root: scr, threshold: 0.2 });
+
+  scr.querySelectorAll('.yt-area[data-ytid]').forEach(el => {
+    _feedStopObserver.observe(el);
+  });
 }
 
 function filterFeed(btn, cat) {
