@@ -1925,16 +1925,12 @@ html,body{height:100%;background:var(--bg);color:#fff;
     font-size:12px;
     margin-bottom:0;
   }
-  /* 설명 — PC에서 더 많이 표시 */
+  /* 설명 — PC 전용 스타일 */
   .shop-bar-desc{
     font-size:13px;
     color:rgba(255,255,255,.5);
     line-height:1.65;
-    -webkit-line-clamp:6;
     margin-bottom:0;
-    display:-webkit-box;
-    -webkit-box-orient:vertical;
-    overflow:hidden;
   }
   /* 예약 버튼 — 오른쪽 패널 안에서 가득 차게 */
   .btn-book{
@@ -1970,8 +1966,8 @@ html,body{height:100%;background:var(--bg);color:#fff;
 .shop-bar-loc{font-size:11px;color:rgba(255,255,255,.5);
   display:flex;align-items:center;gap:4px}
 .shop-bar-loc i{color:var(--green);font-size:10px;flex-shrink:0}
-.shop-bar-desc{font-size:11px;color:rgba(255,255,255,.4);line-height:1.5;
-  margin-top:6px;display:-webkit-box;-webkit-line-clamp:2;
+.shop-bar-desc{font-size:11px;color:rgba(255,255,255,.4);line-height:1.6;
+  margin-top:6px;display:-webkit-box;-webkit-line-clamp:3;
   -webkit-box-orient:vertical;overflow:hidden}
 .btn-book{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:3px;
   background:var(--green);color:#fff;border:none;border-radius:14px;
