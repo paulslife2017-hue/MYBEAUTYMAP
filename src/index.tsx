@@ -1876,19 +1876,20 @@ html,body{height:100%;background:var(--bg);color:#fff;
 /* 썸네일 상태 */
 .yt-thumb{cursor:pointer;}
 .yt-thumb-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none;}
-/* 재생버튼 오버레이: 시각적 역할만, 클릭은 yt-area div가 담당 */
+/* 재생버튼 오버레이 */
 .yt-play-btn{
   position:absolute;inset:0;
   display:flex;align-items:center;justify-content:center;
   pointer-events:none;}
-/* 재생 아이콘 원형 래퍼 */
+/* 재생 아이콘 원형 */
 .yt-play-icon{
-  width:64px;height:64px;
-  background:rgba(180,0,0,.82);
+  width:60px;height:60px;
+  background:rgba(180,0,0,.85);
   border-radius:50%;
   display:flex;align-items:center;justify-content:center;
-  box-shadow:0 4px 20px rgba(0,0,0,.55);
-  pointer-events:none;}
+  box-shadow:0 4px 20px rgba(0,0,0,.6);
+  pointer-events:none;
+  flex-shrink:0;}
 
 /* ── PC 레이아웃 (768px+): 카드 자체를 좌(영상)+우(정보) 2단으로 ── */
 @media(min-width:768px){
@@ -1935,11 +1936,18 @@ html,body{height:100%;background:var(--bg);color:#fff;
     line-height:1.25;
     margin-bottom:0;
     -webkit-line-clamp:2;
+    white-space:normal;
+    overflow:hidden;
+    display:-webkit-box;
+    -webkit-box-orient:vertical;
+    word-break:keep-all;
   }
   /* 위치 */
   .shop-bar-loc{
     font-size:12px;
     margin-bottom:0;
+    white-space:normal;
+    word-break:break-all;
   }
   /* 설명 — PC 전용 스타일 */
   .shop-bar-desc{
@@ -1947,6 +1955,11 @@ html,body{height:100%;background:var(--bg);color:#fff;
     color:rgba(255,255,255,.5);
     line-height:1.65;
     margin-bottom:0;
+    white-space:normal;
+    overflow:hidden;
+    display:-webkit-box;
+    -webkit-line-clamp:3;
+    -webkit-box-orient:vertical;
   }
   /* 예약 버튼 — 오른쪽 패널 안에서 가득 차게 */
   .btn-book{
@@ -1963,13 +1976,15 @@ html,body{height:100%;background:var(--bg);color:#fff;
     flex-direction:column;
     gap:10px;
     flex:1;
+    min-width:0;
     justify-content:center;
+    overflow:hidden;
   }
 }
 
 /* 업체 정보 바 */
 .shop-bar{flex-shrink:0;padding:18px 14px 14px;
-  display:flex;align-items:flex-end;gap:10px;position:relative;
+  display:flex;align-items:center;gap:10px;position:relative;
   background:linear-gradient(to bottom,transparent,rgba(10,10,10,.98))}
 .shop-bar::before{content:'';position:absolute;top:-44px;left:0;right:0;height:44px;
   background:linear-gradient(to bottom,transparent,rgba(10,10,10,.7));pointer-events:none}
@@ -2845,8 +2860,7 @@ function feedCardHTML(s) {
         + ' style="cursor:pointer"'
         + ' onclick="feedPlayVideo(this)">'
         + '<img class="yt-thumb-img"'
-        + ' src="https://img.youtube.com/vi/' + s.youtubeId + '/maxresdefault.jpg"'
-        + ' onerror="feedThumbFallback(this,' + safeThumb + ')"'
+        + ' src="https://img.youtube.com/vi/' + s.youtubeId + '/hqdefault.jpg"'
         + ' style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none">'
         + '<div class="yt-play-btn" style="pointer-events:none">'
           + '<div class="yt-play-icon" style="pointer-events:none">'
@@ -2944,9 +2958,10 @@ async function loadFeed(cat='all', q='') {
 
 // ── 피드 영상 재생: 유튜브 앱/브라우저로 열기 ──
 function feedThumbHTML(ytId) {
-  return '<img class="yt-thumb-img" src="https://img.youtube.com/vi/' + ytId + '/maxresdefault.jpg"'
+  return '<img class="yt-thumb-img"'
+    + ' src="https://img.youtube.com/vi/' + ytId + '/hqdefault.jpg"'
     + ' style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none">'
-    + '<div class="yt-play-btn"><div class="yt-play-icon">'
+    + '<div class="yt-play-btn" style="pointer-events:none"><div class="yt-play-icon" style="pointer-events:none">'
       + '<svg width="24" height="24" viewBox="0 0 24 24" fill="white" style="margin-left:3px;pointer-events:none">'
         + '<polygon points="5,3 19,12 5,21" style="pointer-events:none"/>'
       + '</svg></div></div>';
