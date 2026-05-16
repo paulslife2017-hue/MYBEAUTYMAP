@@ -2849,24 +2849,17 @@ function feedThumbFallback(img, shopThumb) {
 }
 
 function feedCardHTML(s) {
-  // yt-area: 처음부터 iframe 삽입 (autoplay=0)
-  // 썸네일 먼저 표시 → 클릭하면 iframe 교체 (인앱 재생, 외부 앱 이동 없음)
-  // 화면 이탈 시 Observer가 iframe→썸네일로 복원 → 다음 진입 시 다시 썸네일
-  const safeThumb = JSON.stringify(s.thumbnail || '');
+  // iframe을 처음부터 삽입 (autoplay=0, mute=1)
+  // 화면에 들어오면 자동재생, 이탈하면 src 비워서 정지
   const ytArea = s.youtubeId
-    ? '<div class="yt-area yt-thumb"'
-        + ' data-shopid="' + s.id + '" data-ytid="' + s.youtubeId + '"'
-        + ' data-thumb="' + (s.thumbnail||'') + '"'
-        + ' style="cursor:pointer"'
-        + ' onclick="feedPlayVideo(this)">'
-        + '<img class="yt-thumb-img"'
-        + ' src="https://img.youtube.com/vi/' + s.youtubeId + '/hqdefault.jpg"'
-        + ' style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none">'
-        + '<div class="yt-play-btn" style="pointer-events:none">'
-          + '<div class="yt-play-icon" style="pointer-events:none">'
-            + '<svg width="24" height="24" viewBox="0 0 24 24" fill="white" style="margin-left:3px;pointer-events:none"><polygon points="5,3 19,12 5,21" style="pointer-events:none"/></svg>'
-          + '</div>'
-        + '</div>'
+    ? '<div class="yt-area"'
+        + ' data-shopid="' + s.id + '" data-ytid="' + s.youtubeId + '">'
+        + '<iframe class="feed-iframe"'
+        + ' src=""'
+        + ' data-src="https://www.youtube.com/embed/' + s.youtubeId
+        + '?autoplay=1&mute=1&playsinline=1&rel=0&modestbranding=1&controls=1"'
+        + ' allow="autoplay;encrypted-media;picture-in-picture;fullscreen"'
+        + ' allowfullscreen></iframe>'
       + '</div>'
     : '<div class="yt-area" style="background:linear-gradient(135deg,#1a1a1a,#111)"></div>';
   // data-shop JSON 이스케이프 버그 → data-id/url/name 개별 속성으로 분리
@@ -2952,64 +2945,66 @@ async function loadFeed(cat='all', q='') {
   scr.innerHTML = merged.map(feedCardHTML).join('');
   scr.scrollTop = 0;
 
-  // 화면 이탈 시 영상 자동 정지 Observer 연결
+  // 카드 스크롤 정지 감지 Observer 연결
   initFeedStopObserver();
 }
 
-// ── 피드 영상 재생: 유튜브 앱/브라우저로 열기 ──
-function feedThumbHTML(ytId) {
-  return '<img class="yt-thumb-img"'
-    + ' src="https://img.youtube.com/vi/' + ytId + '/hqdefault.jpg"'
-    + ' style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none">'
-    + '<div class="yt-play-btn" style="pointer-events:none"><div class="yt-play-icon" style="pointer-events:none">'
-      + '<svg width="24" height="24" viewBox="0 0 24 24" fill="white" style="margin-left:3px;pointer-events:none">'
-        + '<polygon points="5,3 19,12 5,21" style="pointer-events:none"/>'
-      + '</svg></div></div>';
+// ── 스크롤 기반으로 현재 카드 감지 → 재생/정지 ──
+let _feedCurrentCard = null;
+let _feedScrollTimer = null;
+
+function feedActivateCard(ytDiv) {
+  if (_feedCurrentCard === ytDiv) return;
+  // 이전 카드 정지: src를 about:blank로
+  if (_feedCurrentCard) {
+    const prev = _feedCurrentCard.querySelector('iframe.feed-iframe');
+    if (prev && !prev.dataset.paused) {
+      prev.dataset.paused = '1';
+      prev.src = 'about:blank';
+    }
+  }
+  _feedCurrentCard = ytDiv;
+  // 현재 카드 재생
+  const iframe = ytDiv.querySelector('iframe.feed-iframe');
+  if (iframe && iframe.dataset.src) {
+    delete iframe.dataset.paused;
+    iframe.src = iframe.dataset.src;
+    const shopId = ytDiv.dataset.shopid;
+    const source = feedCat === 'recommended' ? 'catalog' : 'feed';
+    if (feedCat === 'recommended') fetch('/api/track/rec/'+shopId,{method:'POST'}).catch(()=>{});
+    trackView(shopId, source);
+  }
 }
 
-function feedSetThumb(ytDiv) {
-  const ytId = ytDiv.dataset.ytid;
-  ytDiv.classList.add('yt-thumb');
-  ytDiv.style.cursor = 'pointer';
-  ytDiv.onclick = function(e) { e.preventDefault(); e.stopPropagation(); feedPlayVideo(this); };
-  ytDiv.innerHTML = feedThumbHTML(ytId);
+function feedFindCurrentCard(scr) {
+  // 화면 중앙에 가장 많이 격치는 .yt-area 찾기
+  const cards = scr.querySelectorAll('.yt-area[data-ytid]');
+  const scrMid = scr.scrollTop + scr.clientHeight / 2;
+  let best = null, bestDist = Infinity;
+  cards.forEach(card => {
+    const mid = card.offsetTop + card.offsetHeight / 2;
+    const dist = Math.abs(mid - scrMid);
+    if (dist < bestDist) { bestDist = dist; best = card; }
+  });
+  return best;
 }
 
-function feedPlayVideo(el) {
-  const shopId = el.dataset.shopid;
-  const ytId   = el.dataset.ytid;
-  if (!ytId) return;
-  // 이미 iframe 재생 중이면 무시
-  if (el.querySelector('iframe')) return;
-  // 트래킹
-  const source = feedCat === 'recommended' ? 'catalog' : 'feed';
-  if (feedCat === 'recommended') fetch('/api/track/rec/' + shopId, {method:'POST'}).catch(()=>{});
-  trackView(shopId, source);
-  // 썸네일 → iframe 교체 (인앱 재생)
-  el.classList.remove('yt-thumb');
-  el.style.cursor = 'default';
-  el.onclick = null;
-  el.innerHTML = '<iframe class="feed-iframe"'
-    + ' src="https://www.youtube.com/embed/' + ytId
-    + '?autoplay=1&playsinline=1&rel=0&modestbranding=1"'
-    + ' allow="autoplay;encrypted-media;picture-in-picture;fullscreen"'
-    + ' allowfullscreen></iframe>';
-}
-
-// ── 카드 이탈 시 iframe → 썸네일 복원 (영상 정지) ──
-let _feedStopObserver = null;
 function initFeedStopObserver() {
-  if (_feedStopObserver) _feedStopObserver.disconnect();
+  _feedCurrentCard = null;
   const scr = document.getElementById('feedScreen');
-  _feedStopObserver = new IntersectionObserver(entries => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) return;
-      const ytDiv = entry.target;
-      if (!ytDiv.querySelector('iframe') || !ytDiv.dataset.ytid) return;
-      feedSetThumb(ytDiv); // onclick도 함께 복원
-    });
-  }, { root: scr, threshold: 0.15 });
-  scr.querySelectorAll('.yt-area[data-ytid]').forEach(el => _feedStopObserver.observe(el));
+
+  // 첫 번째 카드 즉시 활성화
+  const first = scr.querySelector('.yt-area[data-ytid]');
+  if (first) feedActivateCard(first);
+
+  // 스크롤 시 debounce로 현재 카드 재생
+  scr.addEventListener('scroll', () => {
+    clearTimeout(_feedScrollTimer);
+    _feedScrollTimer = setTimeout(() => {
+      const cur = feedFindCurrentCard(scr);
+      if (cur) feedActivateCard(cur);
+    }, 150);
+  }, { passive: true });
 }
 
 function filterFeed(btn, cat) {
