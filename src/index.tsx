@@ -1874,168 +1874,84 @@ html,body{height:100%;background:var(--bg);color:#fff;
 .yt-area iframe{
   position:absolute;inset:0;width:100%;height:100%;border:none;}
 
-/* ── PC 2컬럼 레이아웃 (768px+) ── */
+/* ── PC 레이아웃 (768px+): 카드 자체를 좌(영상)+우(정보) 2단으로 ── */
 @media(min-width:768px){
-  /* JS 동적 주입 요소 — PC에서만 DOM에 존재함 */
-  #feedCol{display:flex;flex-direction:column;}
-  #pcSidePanel{display:flex;}
-
-  /* feedScreen: 가로 row — 왼쪽 여백 + 카드 컬럼 + 사이드 패널 */
   #feedScreen{
-    display:flex;
-    flex-direction:row;
-    align-items:flex-start;
-    background:linear-gradient(160deg,#0a0a0a 0%,#0f0f0f 60%,#0d0d10 100%);
-    overflow:hidden; /* 세로 스크롤은 #feedCol 안에서만 */
-    /* scroll-snap 해제 (feedCol이 담당) */
-    scroll-snap-type:none;
-    overflow-y:hidden;
+    background:#0a0a0a;
   }
-  #feedScreen.active{display:flex;}
-  /* 왼쪽 스페이서 — 카드를 시각적 중앙쪽으로 살짝 밀기 */
-  #feedSpacer{
+  /* 카드: 가로로 눕힘 */
+  .fi{
+    flex-direction:row;
+    height:calc(100dvh - var(--hd) - var(--cat) - var(--sb,0px) - var(--ad) - var(--nav) - env(safe-area-inset-bottom,0px));
+  }
+  /* 왼쪽: 영상 영역 — 화면 절반 */
+  .yt-area{
     flex:1;
     min-width:0;
-    display:block;
-  }
-  /* 카드 스크롤 컬럼 */
-  #feedCol{
-    flex-shrink:0;
-    width:420px;
     height:100%;
-    overflow-y:scroll;
-    overflow-x:hidden;
-    scroll-snap-type:y mandatory;
-    scroll-behavior:smooth;
-    -webkit-overflow-scrolling:touch;
   }
-  #feedCol::-webkit-scrollbar{display:none}
-  /* 카드 */
-  .fi{
-    width:420px;
+  /* 오른쪽: 업체 정보 패널 */
+  .shop-bar{
+    width:300px;
     flex-shrink:0;
-    border-radius:0;
-    box-shadow:0 0 60px rgba(0,0,0,.9);
-  }
-  /* 스켈레톤도 동일 너비 */
-  .skel-card{width:420px}
-  .feed-empty{width:420px}
-  /* 스핀도 feedCol 높이에 맞게 */
-  .feed-spin{width:420px}
-
-  /* ── 사이드 패널 (오른쪽) ── */
-  #pcSidePanel{
-    flex:1;
-    min-width:240px;
-    max-width:380px;
-    align-self:flex-start;
-    position:sticky;
-    top:0;
-    padding:28px 24px 24px 20px;
+    height:100%;
+    padding:32px 24px;
+    background:linear-gradient(160deg,#111 0%,#0d0d0d 100%);
+    border-left:1px solid rgba(255,255,255,.06);
     display:flex;
     flex-direction:column;
-    gap:20px;
-    opacity:0;
-    transition:opacity .4s ease;
-    pointer-events:none;
+    justify-content:center;
+    gap:16px;
+    /* PC에서는 하단 그라데이션 오버레이 필요 없으므로 before 제거 */
   }
-  #pcSidePanel.visible{
-    opacity:1;
-    pointer-events:auto;
+  .shop-bar::before{display:none;}
+  /* 카테고리 뱃지 — PC에서 더 크게 */
+  .shop-bar-cat{
+    font-size:11px;
+    padding:4px 12px;
+    border-radius:20px;
+    margin-bottom:0;
   }
-
-  /* 사이드 패널 — 섹션 구분선 */
-  .pc-divider{
-    height:1px;
-    background:rgba(255,255,255,.07);
-    border-radius:1px;
+  /* 업체명 — PC에서 더 크게 */
+  .shop-bar-name{
+    font-size:22px;
+    font-weight:900;
+    white-space:normal;
+    line-height:1.25;
+    margin-bottom:0;
   }
-
-  /* 카테고리 뱃지 */
-  .pc-cat{
-    display:inline-flex;align-items:center;gap:5px;
-    font-size:10px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;
-    color:var(--pink);
-    background:rgba(255,77,125,.12);
-    border:1px solid rgba(255,77,125,.28);
-    padding:3px 10px;border-radius:20px;
-    width:fit-content;
+  /* 위치 */
+  .shop-bar-loc{
+    font-size:12px;
+    margin-bottom:0;
   }
-  .pc-cat.premium{
-    color:#FFD700;
-    background:rgba(255,215,0,.1);
-    border-color:rgba(255,215,0,.3);
-  }
-
-  /* 업체 이름 */
-  .pc-name{
-    font-size:22px;font-weight:900;
-    line-height:1.2;
-    color:#fff;
-    margin-top:4px;
-  }
-
-  /* 위치 + 가격 */
-  .pc-loc{
-    display:flex;align-items:center;gap:6px;
-    font-size:12px;color:rgba(255,255,255,.45);
-    margin-top:6px;
-  }
-  .pc-loc i{color:var(--green);font-size:11px}
-
-  /* 설명 */
-  .pc-desc{
-    font-size:13px;line-height:1.65;
-    color:rgba(255,255,255,.55);
+  /* 설명 — PC에서 더 많이 표시 */
+  .shop-bar-desc{
+    font-size:13px;
+    color:rgba(255,255,255,.5);
+    line-height:1.65;
+    -webkit-line-clamp:6;
+    margin-bottom:0;
     display:-webkit-box;
-    -webkit-line-clamp:4;
     -webkit-box-orient:vertical;
     overflow:hidden;
   }
-
-  /* 태그 */
-  .pc-tags{
-    display:flex;flex-wrap:wrap;gap:6px;
+  /* 예약 버튼 — 오른쪽 패널 안에서 가득 차게 */
+  .btn-book{
+    width:100%;
+    padding:14px 20px;
+    font-size:14px;
+    border-radius:14px;
+    justify-content:center;
+    margin-top:4px;
   }
-  .pc-tag{
-    font-size:11px;color:rgba(255,255,255,.55);
-    background:rgba(255,255,255,.07);
-    border:1px solid rgba(255,255,255,.1);
-    padding:3px 9px;border-radius:20px;
-  }
-
-  /* 예약 버튼 (사이드 전용) */
-  .pc-book{
-    display:flex;align-items:center;justify-content:center;gap:8px;
-    background:var(--green);color:#fff;
-    border:none;border-radius:14px;
-    padding:13px 20px;font-size:14px;font-weight:800;
-    width:100%;cursor:pointer;
-    font-family:inherit;
-    box-shadow:0 4px 20px rgba(3,199,90,.35);
-    transition:background .15s,transform .1s;
-    text-decoration:none;
-  }
-  .pc-book:active{background:var(--green2);transform:scale(.97)}
-  .pc-book i{font-size:16px}
-
-  /* 업체 번호 인디케이터 */
-  .pc-index{
-    font-size:11px;color:rgba(255,255,255,.25);
-    text-align:center;letter-spacing:.5px;
-  }
-
-  /* 배경 좌측 미묘한 그라데이션 글로우 */
-  #feedScreen::before{
-    content:'';
-    position:fixed;
-    top:calc(var(--hd) + var(--cat) + var(--sb,0px));
-    left:0;right:0;bottom:calc(var(--ad) + var(--nav));
-    background:
-      radial-gradient(ellipse 30% 80% at 10% 50%, rgba(255,77,125,.04) 0%, transparent 70%),
-      radial-gradient(ellipse 40% 80% at 75% 40%, rgba(3,199,90,.025) 0%, transparent 70%);
-    pointer-events:none;
-    z-index:0;
+  /* shop-bar-info flex로 세로 쌓기 */
+  .shop-bar-info{
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+    flex:1;
+    justify-content:center;
   }
 }
 
@@ -2941,21 +2857,7 @@ function feedCardHTML(s) {
     : '';
   // 프리미엄 테두리 글로우
   const premiumClass = s.isPremium ? ' fi-premium' : '';
-  // PC 사이드 패널용 data 속성 (JSON → HTML 안전 인코딩)
-  const safeDesc = (s.desc||'').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-  const safeTags = (Array.isArray(s.tags) ? s.tags.join(',') : (s.tags||'')).replace(/"/g,'&quot;');
-  const safeCat  = (s.category||'').replace(/"/g,'&quot;');
-  const safeLoc  = (s.address||s.district||'').replace(/"/g,'&quot;') + (s.price ? ' · ' + s.price : '');
-  return '<div class="fi' + premiumClass + '"'
-    + ' data-id="' + s.id + '"'
-    + ' data-shop-name="' + safeName + '"'
-    + ' data-shop-cat="' + safeCat + '"'
-    + ' data-shop-loc="' + safeLoc + '"'
-    + ' data-shop-desc="' + safeDesc + '"'
-    + ' data-shop-tags="' + safeTags + '"'
-    + ' data-shop-url="' + safeUrl + '"'
-    + ' data-shop-prem="' + (s.isPremium ? '1' : '0') + '"'
-    + '>'
+  return '<div class="fi' + premiumClass + '" data-id="' + s.id + '">'
     + ytArea
     + premiumBadge
     + '<div class="shop-bar' + (s.isPremium ? ' shop-bar-premium' : '') + '">'
@@ -2972,136 +2874,9 @@ function feedCardHTML(s) {
   + '</div>';
 }
 
-// ── PC 사이드 패널 ──────────────────────────────────────────────────────
-let _feedObserver = null;
-let _pcCurShop    = null;
-
-// PC 여부
-function isPcLayout() { return window.innerWidth >= 768; }
-
-// PC 레이아웃 초기화 — feedScreen 안에 wrapper+사이드패널 동적 주입
-function ensurePcLayout() {
-  const scr = document.getElementById('feedScreen');
-  if (document.getElementById('feedCol')) return; // 이미 주입됨
-
-  // feedScreen 기존 자식 초기화
-  scr.innerHTML = '';
-
-  // 왼쪽 스페이서
-  const spacer = document.createElement('div');
-  spacer.id = 'feedSpacer';
-  scr.appendChild(spacer);
-
-  // 카드 컬럼
-  const col = document.createElement('div');
-  col.id = 'feedCol';
-  scr.appendChild(col);
-
-  // 사이드 패널
-  const panel = document.createElement('aside');
-  panel.id = 'pcSidePanel';
-  panel.innerHTML =
-    '<div class="pc-cat" id="pcCat"></div>'
-  + '<div class="pc-name" id="pcName"></div>'
-  + '<div class="pc-loc"><i class="fas fa-map-marker-alt"></i><span id="pcLoc"></span></div>'
-  + '<div class="pc-divider"></div>'
-  + '<div class="pc-desc" id="pcDesc"></div>'
-  + '<div class="pc-tags" id="pcTags"></div>'
-  + '<div class="pc-divider"></div>'
-  + '<button class="pc-book" id="pcBook" onclick="pcBookClick()">'
-  +   '<i class="fas fa-calendar-check"></i>예약하기'
-  + '</button>'
-  + '<div class="pc-index" id="pcIndex"></div>';
-  scr.appendChild(panel);
-}
-
-// 모바일 레이아웃으로 되돌리기 — PC wrapper 제거
-function teardownPcLayout() {
-  const col   = document.getElementById('feedCol');
-  const panel = document.getElementById('pcSidePanel');
-  const spacer= document.getElementById('feedSpacer');
-  const scr   = document.getElementById('feedScreen');
-  if (col)    scr.removeChild(col);
-  if (panel)  scr.removeChild(panel);
-  if (spacer) scr.removeChild(spacer);
-  // 초기 스피너 복원
-  scr.innerHTML = '<div class="feed-spin"><div class="spinner"></div></div>';
-}
-
-function pcBookClick() {
-  if (!_pcCurShop) return;
-  curShop = { id: +_pcCurShop.id, name: _pcCurShop.name, smartPlaceUrl: _pcCurShop.url };
-  openInapp();
-}
-
-function updatePcPanel(fi) {
-  const panel = document.getElementById('pcSidePanel');
-  if (!panel) return;
-  const name = fi.dataset.shopName || '';
-  const cat  = fi.dataset.shopCat  || '';
-  const loc  = fi.dataset.shopLoc  || '';
-  const desc = fi.dataset.shopDesc || '';
-  const tags = fi.dataset.shopTags || '';
-  const url  = fi.dataset.shopUrl  || '';
-  const prem = fi.dataset.shopPrem === '1';
-
-  _pcCurShop = { id: fi.dataset.id, name, url };
-
-  document.getElementById('pcName').textContent = name;
-  document.getElementById('pcLoc').textContent  = loc;
-  document.getElementById('pcDesc').textContent = desc;
-
-  const catEl = document.getElementById('pcCat');
-  catEl.textContent = (prem ? '✦ ' : '') + cat;
-  catEl.className = 'pc-cat' + (prem ? ' premium' : '');
-
-  const tagsEl = document.getElementById('pcTags');
-  tagsEl.innerHTML = tags ? tags.split(',').filter(Boolean)
-    .map(t => '<span class="pc-tag"># ' + t.trim() + '</span>').join('') : '';
-
-  const bookEl = document.getElementById('pcBook');
-  if (bookEl) bookEl.style.display = url ? '' : 'none';
-
-  const cards = document.querySelectorAll('#feedCol .fi');
-  const idx   = Array.from(cards).indexOf(fi);
-  const idxEl = document.getElementById('pcIndex');
-  if (idxEl) idxEl.textContent = idx >= 0 ? (idx + 1) + ' / ' + cards.length : '';
-
-  panel.classList.add('visible');
-}
-
-function initFeedObserver() {
-  if (_feedObserver) _feedObserver.disconnect();
-  const col = document.getElementById('feedCol');
-  if (!col) return;
-
-  _feedObserver = new IntersectionObserver(entries => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
-        updatePcPanel(entry.target);
-      }
-    });
-  }, { root: col, threshold: 0.5 });
-
-  col.querySelectorAll('.fi').forEach(fi => _feedObserver.observe(fi));
-  const first = col.querySelector('.fi');
-  if (first) updatePcPanel(first);
-}
-
 async function loadFeed(cat='all', q='') {
   feedCat = cat;
-
-  // PC/모바일 분기: 렌더 타겟 결정
-  let scr;
-  if (isPcLayout()) {
-    ensurePcLayout(); // wrapper 없으면 주입
-    scr = document.getElementById('feedCol');
-    // 사이드 패널 숨기기
-    const panel = document.getElementById('pcSidePanel');
-    if (panel) panel.classList.remove('visible');
-  } else {
-    scr = document.getElementById('feedScreen');
-  }
+  const scr = document.getElementById('feedScreen');
 
   // 스켈레톤 카드 3장
   const sc = 'skel-card', sv = 'skel-video', sb = 'skel-bar', sl = 'skel-line';
@@ -3145,9 +2920,6 @@ async function loadFeed(cat='all', q='') {
   // 카드 렌더
   scr.innerHTML = merged.map(feedCardHTML).join('');
   scr.scrollTop = 0;
-
-  // PC: Observer 연결
-  if (isPcLayout()) initFeedObserver();
 }
 
 // ── 피드 영상 재생: 썸네일 클릭 시 호출 ──
