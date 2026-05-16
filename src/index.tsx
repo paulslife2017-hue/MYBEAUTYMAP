@@ -1912,13 +1912,13 @@ html,body{height:100%;background:var(--bg);color:#fff;
     border-radius:20px;
     margin-bottom:0;
   }
-  /* 업체명 — PC에서 더 크게 */
+  /* 업체명 — PC에서 더 크게, 2줄까지 허용 */
   .shop-bar-name{
     font-size:22px;
     font-weight:900;
-    white-space:normal;
     line-height:1.25;
     margin-bottom:0;
+    -webkit-line-clamp:2;
   }
   /* 위치 */
   .shop-bar-loc{
@@ -1962,7 +1962,9 @@ html,body{height:100%;background:var(--bg);color:#fff;
   background:rgba(255,77,125,.12);border:1px solid rgba(255,77,125,.25);
   padding:2px 7px;border-radius:6px;margin-bottom:5px}
 .shop-bar-name{font-size:17px;font-weight:800;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
+  white-space:normal;overflow:hidden;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+  margin-bottom:3px}
 .shop-bar-loc{font-size:11px;color:rgba(255,255,255,.5);
   display:flex;align-items:center;gap:4px}
 .shop-bar-loc i{color:var(--green);font-size:10px;flex-shrink:0}
