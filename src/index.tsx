@@ -1684,10 +1684,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
   display:none;background:#000;}
 #feedScreen::-webkit-scrollbar{display:none;}
 #feedScreen.active{display:block;}
-/* 모바일: feedCol/feedSpacer → 투명 pass-through (스크롤은 feedScreen이 담당) */
-#feedCol{display:contents;}
-#feedSpacer{display:none;}
-#pcSidePanel{display:none;}
+/* PC 전용 요소 — JS로 동적 삽입됨, CSS 기본값 불필요 */
 #mapScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:calc(var(--ad) + var(--nav));
   display:none;}
 #mapScreen.active{display:block;}
@@ -1879,9 +1876,8 @@ html,body{height:100%;background:var(--bg);color:#fff;
 
 /* ── PC 2컬럼 레이아웃 (768px+) ── */
 @media(min-width:768px){
-  /* 모바일 기본값 재정의 */
+  /* JS 동적 주입 요소 — PC에서만 DOM에 존재함 */
   #feedCol{display:flex;flex-direction:column;}
-  #feedSpacer{display:block;}
   #pcSidePanel{display:flex;}
 
   /* feedScreen: 가로 row — 왼쪽 여백 + 카드 컬럼 + 사이드 패널 */
@@ -2401,26 +2397,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
 
 <!-- 피드 화면 -->
 <main id="feedScreen" class="active">
-  <!-- 모바일: feedCol/feedSpacer 없이 바로 .fi 삽입됨 (JS가 감지해서 분기) -->
-  <!-- PC(768px+): #feedSpacer + #feedCol + #pcSidePanel 구조 -->
-  <div id="feedSpacer"></div>
-  <div id="feedCol">
-    <div class="feed-spin"><div class="spinner"></div></div>
-  </div>
-  <!-- PC 사이드 패널 -->
-  <aside id="pcSidePanel">
-    <div class="pc-cat" id="pcCat"></div>
-    <div class="pc-name" id="pcName"></div>
-    <div class="pc-loc"><i class="fas fa-map-marker-alt"></i><span id="pcLoc"></span></div>
-    <div class="pc-divider"></div>
-    <div class="pc-desc" id="pcDesc"></div>
-    <div class="pc-tags" id="pcTags"></div>
-    <div class="pc-divider"></div>
-    <button class="pc-book" id="pcBook" onclick="pcBookClick()">
-      <i class="fas fa-calendar-check"></i>예약하기
-    </button>
-    <div class="pc-index" id="pcIndex"></div>
-  </aside>
+  <div class="feed-spin"><div class="spinner"></div></div>
 </main>
 
 <!-- 지도 화면: iframe -->
@@ -2995,9 +2972,61 @@ function feedCardHTML(s) {
   + '</div>';
 }
 
-// ── PC 사이드 패널용 IntersectionObserver ──
+// ── PC 사이드 패널 ──────────────────────────────────────────────────────
 let _feedObserver = null;
-let _pcCurShop = null; // 현재 사이드 패널에 표시 중인 shop URL (예약 버튼용)
+let _pcCurShop    = null;
+
+// PC 여부
+function isPcLayout() { return window.innerWidth >= 768; }
+
+// PC 레이아웃 초기화 — feedScreen 안에 wrapper+사이드패널 동적 주입
+function ensurePcLayout() {
+  const scr = document.getElementById('feedScreen');
+  if (document.getElementById('feedCol')) return; // 이미 주입됨
+
+  // feedScreen 기존 자식 초기화
+  scr.innerHTML = '';
+
+  // 왼쪽 스페이서
+  const spacer = document.createElement('div');
+  spacer.id = 'feedSpacer';
+  scr.appendChild(spacer);
+
+  // 카드 컬럼
+  const col = document.createElement('div');
+  col.id = 'feedCol';
+  scr.appendChild(col);
+
+  // 사이드 패널
+  const panel = document.createElement('aside');
+  panel.id = 'pcSidePanel';
+  panel.innerHTML =
+    '<div class="pc-cat" id="pcCat"></div>'
+  + '<div class="pc-name" id="pcName"></div>'
+  + '<div class="pc-loc"><i class="fas fa-map-marker-alt"></i><span id="pcLoc"></span></div>'
+  + '<div class="pc-divider"></div>'
+  + '<div class="pc-desc" id="pcDesc"></div>'
+  + '<div class="pc-tags" id="pcTags"></div>'
+  + '<div class="pc-divider"></div>'
+  + '<button class="pc-book" id="pcBook" onclick="pcBookClick()">'
+  +   '<i class="fas fa-calendar-check"></i>예약하기'
+  + '</button>'
+  + '<div class="pc-index" id="pcIndex"></div>';
+  scr.appendChild(panel);
+}
+
+// 모바일 레이아웃으로 되돌리기 — PC wrapper 제거
+function teardownPcLayout() {
+  const col   = document.getElementById('feedCol');
+  const panel = document.getElementById('pcSidePanel');
+  const spacer= document.getElementById('feedSpacer');
+  const scr   = document.getElementById('feedScreen');
+  if (col)    scr.removeChild(col);
+  if (panel)  scr.removeChild(panel);
+  if (spacer) scr.removeChild(spacer);
+  // 초기 스피너 복원
+  scr.innerHTML = '<div class="feed-spin"><div class="spinner"></div></div>';
+}
 
 function pcBookClick() {
   if (!_pcCurShop) return;
@@ -3008,13 +3037,13 @@ function pcBookClick() {
 function updatePcPanel(fi) {
   const panel = document.getElementById('pcSidePanel');
   if (!panel) return;
-  const name  = fi.dataset.shopName || '';
-  const cat   = fi.dataset.shopCat  || '';
-  const loc   = fi.dataset.shopLoc  || '';
-  const desc  = fi.dataset.shopDesc || '';
-  const tags  = fi.dataset.shopTags || '';
-  const url   = fi.dataset.shopUrl  || '';
-  const prem  = fi.dataset.shopPrem === '1';
+  const name = fi.dataset.shopName || '';
+  const cat  = fi.dataset.shopCat  || '';
+  const loc  = fi.dataset.shopLoc  || '';
+  const desc = fi.dataset.shopDesc || '';
+  const tags = fi.dataset.shopTags || '';
+  const url  = fi.dataset.shopUrl  || '';
+  const prem = fi.dataset.shopPrem === '1';
 
   _pcCurShop = { id: fi.dataset.id, name, url };
 
@@ -3030,15 +3059,13 @@ function updatePcPanel(fi) {
   tagsEl.innerHTML = tags ? tags.split(',').filter(Boolean)
     .map(t => '<span class="pc-tag"># ' + t.trim() + '</span>').join('') : '';
 
-  // 예약 버튼: URL 없으면 숨김
   const bookEl = document.getElementById('pcBook');
-  bookEl.style.display = url ? '' : 'none';
+  if (bookEl) bookEl.style.display = url ? '' : 'none';
 
-  // 인덱스 표시
   const cards = document.querySelectorAll('#feedCol .fi');
   const idx   = Array.from(cards).indexOf(fi);
-  document.getElementById('pcIndex').textContent = idx >= 0
-    ? (idx + 1) + ' / ' + cards.length : '';
+  const idxEl = document.getElementById('pcIndex');
+  if (idxEl) idxEl.textContent = idx >= 0 ? (idx + 1) + ' / ' + cards.length : '';
 
   panel.classList.add('visible');
 }
@@ -3046,7 +3073,7 @@ function updatePcPanel(fi) {
 function initFeedObserver() {
   if (_feedObserver) _feedObserver.disconnect();
   const col = document.getElementById('feedCol');
-  if (!col || window.innerWidth < 768) return;
+  if (!col) return;
 
   _feedObserver = new IntersectionObserver(entries => {
     entries.forEach(entry => {
@@ -3057,30 +3084,26 @@ function initFeedObserver() {
   }, { root: col, threshold: 0.5 });
 
   col.querySelectorAll('.fi').forEach(fi => _feedObserver.observe(fi));
-  // 첫 카드 즉시 표시
   const first = col.querySelector('.fi');
   if (first) updatePcPanel(first);
 }
 
-// PC 여부 감지 (CSS breakpoint 기준)
-function isPcLayout() { return window.innerWidth >= 768; }
-
-// 피드 렌더 타겟 — PC: #feedCol, 모바일: #feedScreen
-function getFeedTarget() {
-  return isPcLayout()
-    ? (document.getElementById('feedCol') || document.getElementById('feedScreen'))
-    : document.getElementById('feedScreen');
-}
-
 async function loadFeed(cat='all', q='') {
   feedCat = cat;
-  const scr = getFeedTarget();
 
-  // 사이드 패널 숨기기 (로딩 중)
-  const panel = document.getElementById('pcSidePanel');
-  if (panel) panel.classList.remove('visible');
+  // PC/모바일 분기: 렌더 타겟 결정
+  let scr;
+  if (isPcLayout()) {
+    ensurePcLayout(); // wrapper 없으면 주입
+    scr = document.getElementById('feedCol');
+    // 사이드 패널 숨기기
+    const panel = document.getElementById('pcSidePanel');
+    if (panel) panel.classList.remove('visible');
+  } else {
+    scr = document.getElementById('feedScreen');
+  }
 
-  // 스켈레톤 카드 3장 즉시 표시 → 로딩 느낌 최소화
+  // 스켈레톤 카드 3장
   const sc = 'skel-card', sv = 'skel-video', sb = 'skel-bar', sl = 'skel-line';
   const skelCard = '<div class="'+sc+'"><div class="'+sv+'"></div><div class="'+sb+'">'
     +'<div class="'+sl+'" style="height:18px;width:55%"></div>'
@@ -3123,10 +3146,8 @@ async function loadFeed(cat='all', q='') {
   scr.innerHTML = merged.map(feedCardHTML).join('');
   scr.scrollTop = 0;
 
-  // PC: IntersectionObserver 연결 → 사이드 패널 업데이트
-  if (isPcLayout()) {
-    initFeedObserver();
-  }
+  // PC: Observer 연결
+  if (isPcLayout()) initFeedObserver();
 }
 
 // ── 피드 영상 재생: 썸네일 클릭 시 호출 ──
