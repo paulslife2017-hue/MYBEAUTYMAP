@@ -2949,16 +2949,48 @@ function feedPlayVideo(el, e) {
   const shopId = el.dataset.shopid;
   const ytId   = el.dataset.ytid;
   if (!ytId) return;
+  // 이미 iframe 재생 중이면 무시
+  if (el.querySelector('iframe')) return;
   // 트래킹
   const source = feedCat === 'recommended' ? 'catalog' : 'feed';
   if (feedCat === 'recommended') fetch('/api/track/rec/' + shopId, {method:'POST'}).catch(()=>{});
   trackView(shopId, source);
-  // 유튜브 앱(설치된 경우) 또는 브라우저로 열기
-  window.open('https://www.youtube.com/watch?v=' + ytId, '_blank');
+  // 썸네일 → iframe 교체 (인앱 재생)
+  el.classList.remove('yt-thumb');
+  el.style.cursor = 'default';
+  el.innerHTML = '<iframe class="feed-iframe"'
+    + ' src="https://www.youtube.com/embed/' + ytId
+    + '?autoplay=1&playsinline=1&rel=0&modestbranding=1"'
+    + ' allow="autoplay;encrypted-media;picture-in-picture;fullscreen"'
+    + ' allowfullscreen></iframe>';
 }
 
-// iframe 미사용으로 Observer 불필요 → 빈 함수 유지 (호출부 제거 안 해도 무방)
-function initFeedStopObserver() {}
+// ── 카드 이탈 시 iframe → 썸네일 복원 (영상 정지) ──
+let _feedStopObserver = null;
+function initFeedStopObserver() {
+  if (_feedStopObserver) _feedStopObserver.disconnect();
+  const scr = document.getElementById('feedScreen');
+  _feedStopObserver = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) return;
+      const ytDiv = entry.target;
+      const ytId  = ytDiv.dataset.ytid;
+      if (!ytDiv.querySelector('iframe') || !ytId) return;
+      // iframe → 썸네일로 복원
+      ytDiv.classList.add('yt-thumb');
+      ytDiv.style.cursor = 'pointer';
+      ytDiv.innerHTML =
+        '<img class="yt-thumb-img" src="https://img.youtube.com/vi/' + ytId + '/maxresdefault.jpg"'
+        + ' style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none">'
+        + '<div class="yt-play-btn">'
+          + '<div class="yt-play-icon">'
+            + '<svg width="24" height="24" viewBox="0 0 24 24" fill="white" style="margin-left:3px;pointer-events:none"><polygon points="5,3 19,12 5,21" style="pointer-events:none"/></svg>'
+          + '</div>'
+        + '</div>';
+    });
+  }, { root: scr, threshold: 0.15 });
+  scr.querySelectorAll('.yt-area[data-ytid]').forEach(el => _feedStopObserver.observe(el));
+}
 
 function filterFeed(btn, cat) {
   document.querySelectorAll('.cp').forEach((b)=>b.classList.remove('active'));
