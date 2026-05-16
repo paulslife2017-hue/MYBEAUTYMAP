@@ -2715,6 +2715,28 @@ let searchTimer = null;
 // 피드: CSS scroll-snap 방식 (JS 높이계산 없음)
 // ─────────────────────────────────────────────
 
+// 유튜브 썸네일 폴백: maxresdefault → hqdefault → 업체 썸네일 → 그라데이션
+function feedThumbFallback(img, shopThumb) {
+  const src = img.src || '';
+  if (src.includes('maxresdefault')) {
+    // 1단계: hqdefault 시도
+    img.src = src.replace('maxresdefault', 'hqdefault');
+  } else if (src.includes('hqdefault')) {
+    // 2단계: 업체 등록 썸네일 시도
+    if (shopThumb) {
+      img.src = shopThumb;
+    } else {
+      // 3단계: 그라데이션 placeholder (img 숨기고 부모 배경 적용)
+      img.style.display = 'none';
+      img.parentElement.style.background = 'linear-gradient(135deg,#1a1a1a 0%,#2a1a2a 50%,#1a1a2a 100%)';
+    }
+  } else {
+    // 업체 썸네일도 실패 → 그라데이션
+    img.style.display = 'none';
+    img.parentElement.style.background = 'linear-gradient(135deg,#1a1a1a 0%,#2a1a2a 50%,#1a1a2a 100%)';
+  }
+}
+
 function feedCardHTML(s) {
   // 썸네일 이미지 + 재생버튼 오버레이 방식
   // 클릭 시: trackView(shopId) + autoplay mute=0 iframe 교체 → 광고수익 O, 조회카운팅 O
@@ -2725,7 +2747,7 @@ function feedCardHTML(s) {
         + ' data-shopid="' + s.id + '" data-ytid="' + s.youtubeId + '"'
         + ' onclick="feedPlayVideo(this)">'
         + '<img src="https://img.youtube.com/vi/' + s.youtubeId + '/maxresdefault.jpg"'
-        + ' onerror="if(this.src.includes(\'maxresdefault\')){this.src=this.src.replace(\'maxresdefault\',\'hqdefault\')}"'
+        + ' onerror="feedThumbFallback(this,' + JSON.stringify(s.thumbnail || '') + ')"'
         + ' style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border:none">'  
         + '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none">'
           + '<div style="width:60px;height:60px;background:rgba(255,0,0,.88);border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(0,0,0,.5)">'
