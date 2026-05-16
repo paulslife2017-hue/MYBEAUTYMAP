@@ -2841,16 +2841,15 @@ function feedCardHTML(s) {
   const ytArea = s.youtubeId
     ? '<div class="yt-area yt-thumb"'
         + ' data-shopid="' + s.id + '" data-ytid="' + s.youtubeId + '"'
-        + ' onclick="feedPlayVideo(this,event)"'
-        + ' style="cursor:pointer">'  
-        // 썸네일: pointer-events:none → 클릭이 부모 div로만 전달
+        + ' data-thumb="' + (s.thumbnail||'') + '"'
+        + ' style="cursor:pointer"'
+        + ' onclick="feedPlayVideo(this)">'
         + '<img class="yt-thumb-img"'
         + ' src="https://img.youtube.com/vi/' + s.youtubeId + '/maxresdefault.jpg"'
         + ' onerror="feedThumbFallback(this,' + safeThumb + ')"'
         + ' style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none">'
-        // 재생 버튼: 시각적 역할만 (pointer-events:none → 클릭은 부모 div가 받음)
-        + '<div class="yt-play-btn">'
-          + '<div class="yt-play-icon">'
+        + '<div class="yt-play-btn" style="pointer-events:none">'
+          + '<div class="yt-play-icon" style="pointer-events:none">'
             + '<svg width="24" height="24" viewBox="0 0 24 24" fill="white" style="margin-left:3px;pointer-events:none"><polygon points="5,3 19,12 5,21" style="pointer-events:none"/></svg>'
           + '</div>'
         + '</div>'
@@ -2944,8 +2943,24 @@ async function loadFeed(cat='all', q='') {
 }
 
 // ── 피드 영상 재생: 유튜브 앱/브라우저로 열기 ──
-function feedPlayVideo(el, e) {
-  if (e) { e.preventDefault(); e.stopPropagation(); }
+function feedThumbHTML(ytId) {
+  return '<img class="yt-thumb-img" src="https://img.youtube.com/vi/' + ytId + '/maxresdefault.jpg"'
+    + ' style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none">'
+    + '<div class="yt-play-btn"><div class="yt-play-icon">'
+      + '<svg width="24" height="24" viewBox="0 0 24 24" fill="white" style="margin-left:3px;pointer-events:none">'
+        + '<polygon points="5,3 19,12 5,21" style="pointer-events:none"/>'
+      + '</svg></div></div>';
+}
+
+function feedSetThumb(ytDiv) {
+  const ytId = ytDiv.dataset.ytid;
+  ytDiv.classList.add('yt-thumb');
+  ytDiv.style.cursor = 'pointer';
+  ytDiv.onclick = function(e) { e.preventDefault(); e.stopPropagation(); feedPlayVideo(this); };
+  ytDiv.innerHTML = feedThumbHTML(ytId);
+}
+
+function feedPlayVideo(el) {
   const shopId = el.dataset.shopid;
   const ytId   = el.dataset.ytid;
   if (!ytId) return;
@@ -2958,6 +2973,7 @@ function feedPlayVideo(el, e) {
   // 썸네일 → iframe 교체 (인앱 재생)
   el.classList.remove('yt-thumb');
   el.style.cursor = 'default';
+  el.onclick = null;
   el.innerHTML = '<iframe class="feed-iframe"'
     + ' src="https://www.youtube.com/embed/' + ytId
     + '?autoplay=1&playsinline=1&rel=0&modestbranding=1"'
@@ -2974,19 +2990,8 @@ function initFeedStopObserver() {
     entries.forEach(entry => {
       if (entry.isIntersecting) return;
       const ytDiv = entry.target;
-      const ytId  = ytDiv.dataset.ytid;
-      if (!ytDiv.querySelector('iframe') || !ytId) return;
-      // iframe → 썸네일로 복원
-      ytDiv.classList.add('yt-thumb');
-      ytDiv.style.cursor = 'pointer';
-      ytDiv.innerHTML =
-        '<img class="yt-thumb-img" src="https://img.youtube.com/vi/' + ytId + '/maxresdefault.jpg"'
-        + ' style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none">'
-        + '<div class="yt-play-btn">'
-          + '<div class="yt-play-icon">'
-            + '<svg width="24" height="24" viewBox="0 0 24 24" fill="white" style="margin-left:3px;pointer-events:none"><polygon points="5,3 19,12 5,21" style="pointer-events:none"/></svg>'
-          + '</div>'
-        + '</div>';
+      if (!ytDiv.querySelector('iframe') || !ytDiv.dataset.ytid) return;
+      feedSetThumb(ytDiv); // onclick도 함께 복원
     });
   }, { root: scr, threshold: 0.15 });
   scr.querySelectorAll('.yt-area[data-ytid]').forEach(el => _feedStopObserver.observe(el));
