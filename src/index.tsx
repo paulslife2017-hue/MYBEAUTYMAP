@@ -1873,14 +1873,15 @@ html,body{height:100%;background:var(--bg);color:#fff;
 .yt-area{flex:1;position:relative;overflow:hidden;background:#000}
 .yt-area iframe,.feed-iframe{
   position:absolute;inset:0;width:100%;height:100%;border:none;}
-/* 썸네일 상태: 커서+재생버튼 */
+/* 썸네일 상태 */
 .yt-thumb{cursor:pointer;}
-.yt-thumb-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
+.yt-thumb-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none;}
+/* 재생버튼: 시각적 역할만, 클릭은 yt-area 전체 div가 담당 */
 .yt-play-btn{
-  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-  pointer-events:none;}
-.yt-play-btn > div,
-.yt-thumb .yt-play-btn > *{pointer-events:none;}
+  position:absolute;inset:0;
+  display:flex;align-items:center;justify-content:center;
+  pointer-events:none;/* 클릭 통과 → yt-area div가 받음 */
+  -webkit-tap-highlight-color:transparent;}
 /* 재생 버튼 원형 배경 */
 .yt-play-btn::before{
   content:'';
@@ -1889,6 +1890,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
   border-radius:50%;
   box-shadow:0 4px 24px rgba(0,0,0,.6);
   position:absolute;
+  pointer-events:none;
 }
 
 /* ── PC 레이아웃 (768px+): 카드 자체를 좌(영상)+우(정보) 2단으로 ── */
@@ -2842,15 +2844,16 @@ function feedCardHTML(s) {
   const ytArea = s.youtubeId
     ? '<div class="yt-area yt-thumb"'
         + ' data-shopid="' + s.id + '" data-ytid="' + s.youtubeId + '"'
-        + ' onclick="feedPlayVideo(this)">'
-        // 썸네일 이미지
+        + ' onclick="feedPlayVideo(this,event)"'
+        + ' style="cursor:pointer">'  
+        // 썸네일: pointer-events:none → 클릭이 부모 div로만 전달
         + '<img class="yt-thumb-img"'
         + ' src="https://img.youtube.com/vi/' + s.youtubeId + '/maxresdefault.jpg"'
         + ' onerror="feedThumbFallback(this,' + safeThumb + ')"'
-        + ' style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">'
-        // 재생 버튼
+        + ' style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none">'
+        // 재생 버튼: 시각적 역할만 (pointer-events:none → 클릭은 부모 div가 받음)
         + '<div class="yt-play-btn">'
-          + '<svg width="26" height="26" viewBox="0 0 24 24" fill="white" style="margin-left:4px"><polygon points="5,3 19,12 5,21"/></svg>'
+          + '<svg width="26" height="26" viewBox="0 0 24 24" fill="white" style="margin-left:4px;pointer-events:none"><polygon points="5,3 19,12 5,21" style="pointer-events:none"/></svg>'
         + '</div>'
       + '</div>'
     : '<div class="yt-area" style="background:linear-gradient(135deg,#1a1a1a,#111)"></div>';
@@ -2942,17 +2945,21 @@ async function loadFeed(cat='all', q='') {
 }
 
 // ── 피드 영상 재생: 썸네일 클릭 시 iframe 교체 ──
-function feedPlayVideo(el) {
+function feedPlayVideo(el, e) {
+  if (e) { e.preventDefault(); e.stopPropagation(); }
   const shopId = el.dataset.shopid;
   const ytId   = el.dataset.ytid;
   if (!ytId) return;
+  // 이미 iframe이 있으면 중복 실행 방지
+  if (el.querySelector('iframe')) return;
   // 트래킹
   const source = feedCat === 'recommended' ? 'catalog' : 'feed';
   if (feedCat === 'recommended') fetch('/api/track/rec/' + shopId, {method:'POST'}).catch(()=>{});
   trackView(shopId, source);
   // 썸네일 → iframe 교체 (autoplay=1, 인앱 재생)
   el.classList.remove('yt-thumb');
-  el.onclick = null;
+  el.onclick = null;  // iframe 교체 후 재클릭 방지
+  el.style.cursor = 'default';
   el.innerHTML = '<iframe class="feed-iframe"'
     + ' src="https://www.youtube.com/embed/' + ytId
     + '?autoplay=1&playsinline=1&rel=0&modestbranding=1&color=white"'
@@ -2975,13 +2982,14 @@ function initFeedStopObserver() {
       if (!iframe || !ytId) return;
       // iframe → 썸네일로 복원
       ytDiv.classList.add('yt-thumb');
-      ytDiv.onclick = function(){ feedPlayVideo(this); };
+      ytDiv.style.cursor = 'pointer';
+      ytDiv.onclick = (e) => { e.preventDefault(); e.stopPropagation(); feedPlayVideo(ytDiv); };
       ytDiv.innerHTML =
         '<img class="yt-thumb-img"'
         + ' src="https://img.youtube.com/vi/' + ytId + '/maxresdefault.jpg"'
-        + ' style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">'
+        + ' style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none">'
         + '<div class="yt-play-btn">'
-          + '<svg width="26" height="26" viewBox="0 0 24 24" fill="white" style="margin-left:4px"><polygon points="5,3 19,12 5,21"/></svg>'
+          + '<svg width="26" height="26" viewBox="0 0 24 24" fill="white" style="margin-left:4px;pointer-events:none"><polygon points="5,3 19,12 5,21" style="pointer-events:none"/></svg>'
         + '</div>';
     });
   }, { root: scr, threshold: 0.15 });
