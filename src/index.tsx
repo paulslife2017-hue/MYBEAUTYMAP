@@ -1684,6 +1684,10 @@ html,body{height:100%;background:var(--bg);color:#fff;
   display:none;background:#000;}
 #feedScreen::-webkit-scrollbar{display:none;}
 #feedScreen.active{display:block;}
+/* 모바일: feedCol/feedSpacer → 투명 pass-through (스크롤은 feedScreen이 담당) */
+#feedCol{display:contents;}
+#feedSpacer{display:none;}
+#pcSidePanel{display:none;}
 #mapScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:calc(var(--ad) + var(--nav));
   display:none;}
 #mapScreen.active{display:block;}
@@ -1872,6 +1876,172 @@ html,body{height:100%;background:var(--bg);color:#fff;
 .yt-area{flex:1;position:relative;overflow:hidden;background:#000}
 .yt-area iframe{
   position:absolute;inset:0;width:100%;height:100%;border:none;}
+
+/* ── PC 2컬럼 레이아웃 (768px+) ── */
+@media(min-width:768px){
+  /* 모바일 기본값 재정의 */
+  #feedCol{display:flex;flex-direction:column;}
+  #feedSpacer{display:block;}
+  #pcSidePanel{display:flex;}
+
+  /* feedScreen: 가로 row — 왼쪽 여백 + 카드 컬럼 + 사이드 패널 */
+  #feedScreen{
+    display:flex;
+    flex-direction:row;
+    align-items:flex-start;
+    background:linear-gradient(160deg,#0a0a0a 0%,#0f0f0f 60%,#0d0d10 100%);
+    overflow:hidden; /* 세로 스크롤은 #feedCol 안에서만 */
+    /* scroll-snap 해제 (feedCol이 담당) */
+    scroll-snap-type:none;
+    overflow-y:hidden;
+  }
+  #feedScreen.active{display:flex;}
+  /* 왼쪽 스페이서 — 카드를 시각적 중앙쪽으로 살짝 밀기 */
+  #feedSpacer{
+    flex:1;
+    min-width:0;
+    display:block;
+  }
+  /* 카드 스크롤 컬럼 */
+  #feedCol{
+    flex-shrink:0;
+    width:420px;
+    height:100%;
+    overflow-y:scroll;
+    overflow-x:hidden;
+    scroll-snap-type:y mandatory;
+    scroll-behavior:smooth;
+    -webkit-overflow-scrolling:touch;
+  }
+  #feedCol::-webkit-scrollbar{display:none}
+  /* 카드 */
+  .fi{
+    width:420px;
+    flex-shrink:0;
+    border-radius:0;
+    box-shadow:0 0 60px rgba(0,0,0,.9);
+  }
+  /* 스켈레톤도 동일 너비 */
+  .skel-card{width:420px}
+  .feed-empty{width:420px}
+  /* 스핀도 feedCol 높이에 맞게 */
+  .feed-spin{width:420px}
+
+  /* ── 사이드 패널 (오른쪽) ── */
+  #pcSidePanel{
+    flex:1;
+    min-width:240px;
+    max-width:380px;
+    align-self:flex-start;
+    position:sticky;
+    top:0;
+    padding:28px 24px 24px 20px;
+    display:flex;
+    flex-direction:column;
+    gap:20px;
+    opacity:0;
+    transition:opacity .4s ease;
+    pointer-events:none;
+  }
+  #pcSidePanel.visible{
+    opacity:1;
+    pointer-events:auto;
+  }
+
+  /* 사이드 패널 — 섹션 구분선 */
+  .pc-divider{
+    height:1px;
+    background:rgba(255,255,255,.07);
+    border-radius:1px;
+  }
+
+  /* 카테고리 뱃지 */
+  .pc-cat{
+    display:inline-flex;align-items:center;gap:5px;
+    font-size:10px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;
+    color:var(--pink);
+    background:rgba(255,77,125,.12);
+    border:1px solid rgba(255,77,125,.28);
+    padding:3px 10px;border-radius:20px;
+    width:fit-content;
+  }
+  .pc-cat.premium{
+    color:#FFD700;
+    background:rgba(255,215,0,.1);
+    border-color:rgba(255,215,0,.3);
+  }
+
+  /* 업체 이름 */
+  .pc-name{
+    font-size:22px;font-weight:900;
+    line-height:1.2;
+    color:#fff;
+    margin-top:4px;
+  }
+
+  /* 위치 + 가격 */
+  .pc-loc{
+    display:flex;align-items:center;gap:6px;
+    font-size:12px;color:rgba(255,255,255,.45);
+    margin-top:6px;
+  }
+  .pc-loc i{color:var(--green);font-size:11px}
+
+  /* 설명 */
+  .pc-desc{
+    font-size:13px;line-height:1.65;
+    color:rgba(255,255,255,.55);
+    display:-webkit-box;
+    -webkit-line-clamp:4;
+    -webkit-box-orient:vertical;
+    overflow:hidden;
+  }
+
+  /* 태그 */
+  .pc-tags{
+    display:flex;flex-wrap:wrap;gap:6px;
+  }
+  .pc-tag{
+    font-size:11px;color:rgba(255,255,255,.55);
+    background:rgba(255,255,255,.07);
+    border:1px solid rgba(255,255,255,.1);
+    padding:3px 9px;border-radius:20px;
+  }
+
+  /* 예약 버튼 (사이드 전용) */
+  .pc-book{
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    background:var(--green);color:#fff;
+    border:none;border-radius:14px;
+    padding:13px 20px;font-size:14px;font-weight:800;
+    width:100%;cursor:pointer;
+    font-family:inherit;
+    box-shadow:0 4px 20px rgba(3,199,90,.35);
+    transition:background .15s,transform .1s;
+    text-decoration:none;
+  }
+  .pc-book:active{background:var(--green2);transform:scale(.97)}
+  .pc-book i{font-size:16px}
+
+  /* 업체 번호 인디케이터 */
+  .pc-index{
+    font-size:11px;color:rgba(255,255,255,.25);
+    text-align:center;letter-spacing:.5px;
+  }
+
+  /* 배경 좌측 미묘한 그라데이션 글로우 */
+  #feedScreen::before{
+    content:'';
+    position:fixed;
+    top:calc(var(--hd) + var(--cat) + var(--sb,0px));
+    left:0;right:0;bottom:calc(var(--ad) + var(--nav));
+    background:
+      radial-gradient(ellipse 30% 80% at 10% 50%, rgba(255,77,125,.04) 0%, transparent 70%),
+      radial-gradient(ellipse 40% 80% at 75% 40%, rgba(3,199,90,.025) 0%, transparent 70%);
+    pointer-events:none;
+    z-index:0;
+  }
+}
 
 /* 업체 정보 바 */
 .shop-bar{flex-shrink:0;padding:18px 14px 14px;
@@ -2231,7 +2401,26 @@ html,body{height:100%;background:var(--bg);color:#fff;
 
 <!-- 피드 화면 -->
 <main id="feedScreen" class="active">
-  <div class="feed-spin"><div class="spinner"></div></div>
+  <!-- 모바일: feedCol/feedSpacer 없이 바로 .fi 삽입됨 (JS가 감지해서 분기) -->
+  <!-- PC(768px+): #feedSpacer + #feedCol + #pcSidePanel 구조 -->
+  <div id="feedSpacer"></div>
+  <div id="feedCol">
+    <div class="feed-spin"><div class="spinner"></div></div>
+  </div>
+  <!-- PC 사이드 패널 -->
+  <aside id="pcSidePanel">
+    <div class="pc-cat" id="pcCat"></div>
+    <div class="pc-name" id="pcName"></div>
+    <div class="pc-loc"><i class="fas fa-map-marker-alt"></i><span id="pcLoc"></span></div>
+    <div class="pc-divider"></div>
+    <div class="pc-desc" id="pcDesc"></div>
+    <div class="pc-tags" id="pcTags"></div>
+    <div class="pc-divider"></div>
+    <button class="pc-book" id="pcBook" onclick="pcBookClick()">
+      <i class="fas fa-calendar-check"></i>예약하기
+    </button>
+    <div class="pc-index" id="pcIndex"></div>
+  </aside>
 </main>
 
 <!-- 지도 화면: iframe -->
@@ -2775,7 +2964,21 @@ function feedCardHTML(s) {
     : '';
   // 프리미엄 테두리 글로우
   const premiumClass = s.isPremium ? ' fi-premium' : '';
-  return '<div class="fi' + premiumClass + '" data-id="' + s.id + '">'
+  // PC 사이드 패널용 data 속성 (JSON → HTML 안전 인코딩)
+  const safeDesc = (s.desc||'').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  const safeTags = (Array.isArray(s.tags) ? s.tags.join(',') : (s.tags||'')).replace(/"/g,'&quot;');
+  const safeCat  = (s.category||'').replace(/"/g,'&quot;');
+  const safeLoc  = (s.address||s.district||'').replace(/"/g,'&quot;') + (s.price ? ' · ' + s.price : '');
+  return '<div class="fi' + premiumClass + '"'
+    + ' data-id="' + s.id + '"'
+    + ' data-shop-name="' + safeName + '"'
+    + ' data-shop-cat="' + safeCat + '"'
+    + ' data-shop-loc="' + safeLoc + '"'
+    + ' data-shop-desc="' + safeDesc + '"'
+    + ' data-shop-tags="' + safeTags + '"'
+    + ' data-shop-url="' + safeUrl + '"'
+    + ' data-shop-prem="' + (s.isPremium ? '1' : '0') + '"'
+    + '>'
     + ytArea
     + premiumBadge
     + '<div class="shop-bar' + (s.isPremium ? ' shop-bar-premium' : '') + '">'
@@ -2792,9 +2995,90 @@ function feedCardHTML(s) {
   + '</div>';
 }
 
+// ── PC 사이드 패널용 IntersectionObserver ──
+let _feedObserver = null;
+let _pcCurShop = null; // 현재 사이드 패널에 표시 중인 shop URL (예약 버튼용)
+
+function pcBookClick() {
+  if (!_pcCurShop) return;
+  curShop = { id: +_pcCurShop.id, name: _pcCurShop.name, smartPlaceUrl: _pcCurShop.url };
+  openInapp();
+}
+
+function updatePcPanel(fi) {
+  const panel = document.getElementById('pcSidePanel');
+  if (!panel) return;
+  const name  = fi.dataset.shopName || '';
+  const cat   = fi.dataset.shopCat  || '';
+  const loc   = fi.dataset.shopLoc  || '';
+  const desc  = fi.dataset.shopDesc || '';
+  const tags  = fi.dataset.shopTags || '';
+  const url   = fi.dataset.shopUrl  || '';
+  const prem  = fi.dataset.shopPrem === '1';
+
+  _pcCurShop = { id: fi.dataset.id, name, url };
+
+  document.getElementById('pcName').textContent = name;
+  document.getElementById('pcLoc').textContent  = loc;
+  document.getElementById('pcDesc').textContent = desc;
+
+  const catEl = document.getElementById('pcCat');
+  catEl.textContent = (prem ? '✦ ' : '') + cat;
+  catEl.className = 'pc-cat' + (prem ? ' premium' : '');
+
+  const tagsEl = document.getElementById('pcTags');
+  tagsEl.innerHTML = tags ? tags.split(',').filter(Boolean)
+    .map(t => '<span class="pc-tag"># ' + t.trim() + '</span>').join('') : '';
+
+  // 예약 버튼: URL 없으면 숨김
+  const bookEl = document.getElementById('pcBook');
+  bookEl.style.display = url ? '' : 'none';
+
+  // 인덱스 표시
+  const cards = document.querySelectorAll('#feedCol .fi');
+  const idx   = Array.from(cards).indexOf(fi);
+  document.getElementById('pcIndex').textContent = idx >= 0
+    ? (idx + 1) + ' / ' + cards.length : '';
+
+  panel.classList.add('visible');
+}
+
+function initFeedObserver() {
+  if (_feedObserver) _feedObserver.disconnect();
+  const col = document.getElementById('feedCol');
+  if (!col || window.innerWidth < 768) return;
+
+  _feedObserver = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
+        updatePcPanel(entry.target);
+      }
+    });
+  }, { root: col, threshold: 0.5 });
+
+  col.querySelectorAll('.fi').forEach(fi => _feedObserver.observe(fi));
+  // 첫 카드 즉시 표시
+  const first = col.querySelector('.fi');
+  if (first) updatePcPanel(first);
+}
+
+// PC 여부 감지 (CSS breakpoint 기준)
+function isPcLayout() { return window.innerWidth >= 768; }
+
+// 피드 렌더 타겟 — PC: #feedCol, 모바일: #feedScreen
+function getFeedTarget() {
+  return isPcLayout()
+    ? (document.getElementById('feedCol') || document.getElementById('feedScreen'))
+    : document.getElementById('feedScreen');
+}
+
 async function loadFeed(cat='all', q='') {
   feedCat = cat;
-  const scr = document.getElementById('feedScreen');
+  const scr = getFeedTarget();
+
+  // 사이드 패널 숨기기 (로딩 중)
+  const panel = document.getElementById('pcSidePanel');
+  if (panel) panel.classList.remove('visible');
 
   // 스켈레톤 카드 3장 즉시 표시 → 로딩 느낌 최소화
   const sc = 'skel-card', sv = 'skel-video', sb = 'skel-bar', sl = 'skel-line';
@@ -2817,15 +3101,12 @@ async function loadFeed(cat='all', q='') {
   }
 
   // ── 프리미엄 업체 5장마다 재삽입 ──
-  // API에서 이미 프리미엄 앞 배치됨 → 일반 목록에 5장마다 끼워넣기
   const premiums = shops.filter(s => s.isPremium);
   const normals  = shops.filter(s => !s.isPremium);
-  const INTERVAL = 5; // 일반 카드 N장마다 프리미엄 1개 재삽입
+  const INTERVAL = 5;
   const merged = [];
-  let pi = 0; // 프리미엄 순환 인덱스
-  // 앞부분: 프리미엄 전체 먼저
+  let pi = 0;
   premiums.forEach(s => merged.push(s));
-  // 나머지: 일반 5장 + 프리미엄 1장(순환)
   if (premiums.length > 0) {
     normals.forEach((s, i) => {
       merged.push(s);
@@ -2842,7 +3123,10 @@ async function loadFeed(cat='all', q='') {
   scr.innerHTML = merged.map(feedCardHTML).join('');
   scr.scrollTop = 0;
 
-  // 썸네일+클릭재생 방식으로 변경 → Observer 불필요
+  // PC: IntersectionObserver 연결 → 사이드 패널 업데이트
+  if (isPcLayout()) {
+    initFeedObserver();
+  }
 }
 
 // ── 피드 영상 재생: 썸네일 클릭 시 호출 ──
