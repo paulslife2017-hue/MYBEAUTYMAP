@@ -1876,22 +1876,19 @@ html,body{height:100%;background:var(--bg);color:#fff;
 /* 썸네일 상태 */
 .yt-thumb{cursor:pointer;}
 .yt-thumb-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none;}
-/* 재생버튼: 시각적 역할만, 클릭은 yt-area 전체 div가 담당 */
+/* 재생버튼 오버레이: 시각적 역할만, 클릭은 yt-area div가 담당 */
 .yt-play-btn{
   position:absolute;inset:0;
   display:flex;align-items:center;justify-content:center;
-  pointer-events:none;/* 클릭 통과 → yt-area div가 받음 */
-  -webkit-tap-highlight-color:transparent;}
-/* 재생 버튼 원형 배경 */
-.yt-play-btn::before{
-  content:'';
+  pointer-events:none;}
+/* 재생 아이콘 원형 래퍼 */
+.yt-play-icon{
   width:64px;height:64px;
-  background:rgba(255,0,0,.88);
+  background:rgba(180,0,0,.82);
   border-radius:50%;
-  box-shadow:0 4px 24px rgba(0,0,0,.6);
-  position:absolute;
-  pointer-events:none;
-}
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 4px 20px rgba(0,0,0,.55);
+  pointer-events:none;}
 
 /* ── PC 레이아웃 (768px+): 카드 자체를 좌(영상)+우(정보) 2단으로 ── */
 @media(min-width:768px){
@@ -2853,7 +2850,9 @@ function feedCardHTML(s) {
         + ' style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none">'
         // 재생 버튼: 시각적 역할만 (pointer-events:none → 클릭은 부모 div가 받음)
         + '<div class="yt-play-btn">'
-          + '<svg width="26" height="26" viewBox="0 0 24 24" fill="white" style="margin-left:4px;pointer-events:none"><polygon points="5,3 19,12 5,21" style="pointer-events:none"/></svg>'
+          + '<div class="yt-play-icon">'
+            + '<svg width="24" height="24" viewBox="0 0 24 24" fill="white" style="margin-left:3px;pointer-events:none"><polygon points="5,3 19,12 5,21" style="pointer-events:none"/></svg>'
+          + '</div>'
         + '</div>'
       + '</div>'
     : '<div class="yt-area" style="background:linear-gradient(135deg,#1a1a1a,#111)"></div>';
@@ -2944,60 +2943,22 @@ async function loadFeed(cat='all', q='') {
   initFeedStopObserver();
 }
 
-// ── 피드 영상 재생: 썸네일 클릭 시 iframe 교체 ──
+// ── 피드 영상 재생: 유튜브 앱/브라우저로 열기 ──
 function feedPlayVideo(el, e) {
   if (e) { e.preventDefault(); e.stopPropagation(); }
   const shopId = el.dataset.shopid;
   const ytId   = el.dataset.ytid;
   if (!ytId) return;
-  // 이미 iframe이 있으면 중복 실행 방지
-  if (el.querySelector('iframe')) return;
   // 트래킹
   const source = feedCat === 'recommended' ? 'catalog' : 'feed';
   if (feedCat === 'recommended') fetch('/api/track/rec/' + shopId, {method:'POST'}).catch(()=>{});
   trackView(shopId, source);
-  // 썸네일 → iframe 교체 (autoplay=1, 인앱 재생)
-  el.classList.remove('yt-thumb');
-  el.onclick = null;  // iframe 교체 후 재클릭 방지
-  el.style.cursor = 'default';
-  el.innerHTML = '<iframe class="feed-iframe"'
-    + ' src="https://www.youtube.com/embed/' + ytId
-    + '?autoplay=1&playsinline=1&rel=0&modestbranding=1&color=white"'
-    + ' allow="autoplay;encrypted-media;picture-in-picture;fullscreen"'
-    + ' allowfullscreen></iframe>';
+  // 유튜브 앱(설치된 경우) 또는 브라우저로 열기
+  window.open('https://www.youtube.com/watch?v=' + ytId, '_blank');
 }
 
-// ── 화면 이탈 시 재생 중인 iframe → 썸네일로 복원 ──
-let _feedStopObserver = null;
-
-function initFeedStopObserver() {
-  if (_feedStopObserver) _feedStopObserver.disconnect();
-  const scr = document.getElementById('feedScreen');
-  _feedStopObserver = new IntersectionObserver(entries => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) return;   // 화면 안 → 무시
-      const ytDiv = entry.target;
-      const ytId  = ytDiv.dataset.ytid;
-      const iframe = ytDiv.querySelector('.feed-iframe');
-      if (!iframe || !ytId) return;
-      // iframe → 썸네일로 복원
-      ytDiv.classList.add('yt-thumb');
-      ytDiv.style.cursor = 'pointer';
-      ytDiv.onclick = (e) => { e.preventDefault(); e.stopPropagation(); feedPlayVideo(ytDiv); };
-      ytDiv.innerHTML =
-        '<img class="yt-thumb-img"'
-        + ' src="https://img.youtube.com/vi/' + ytId + '/maxresdefault.jpg"'
-        + ' style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none">'
-        + '<div class="yt-play-btn">'
-          + '<svg width="26" height="26" viewBox="0 0 24 24" fill="white" style="margin-left:4px;pointer-events:none"><polygon points="5,3 19,12 5,21" style="pointer-events:none"/></svg>'
-        + '</div>';
-    });
-  }, { root: scr, threshold: 0.15 });
-
-  scr.querySelectorAll('.yt-area[data-ytid]').forEach(el => {
-    _feedStopObserver.observe(el);
-  });
-}
+// iframe 미사용으로 Observer 불필요 → 빈 함수 유지 (호출부 제거 안 해도 무방)
+function initFeedStopObserver() {}
 
 function filterFeed(btn, cat) {
   document.querySelectorAll('.cp').forEach((b)=>b.classList.remove('active'));
