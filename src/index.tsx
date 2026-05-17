@@ -2857,7 +2857,7 @@ function feedCardHTML(s) {
         + '<iframe class="feed-iframe"'
         + ' src=""'
         + ' data-src="https://www.youtube.com/embed/' + s.youtubeId
-        + '?autoplay=1&mute=1&playsinline=1&rel=0&modestbranding=1&controls=1"'
+        + '?autoplay=1&mute=0&playsinline=1&rel=0&modestbranding=1&controls=1"'
         + ' allow="autoplay;encrypted-media;picture-in-picture;fullscreen"'
         + ' allowfullscreen></iframe>'
       + '</div>'
