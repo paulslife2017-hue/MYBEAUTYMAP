@@ -4570,130 +4570,141 @@ function reportPage(token: string) { return `<!DOCTYPE html>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
 <title>마이뷰티맵 · 업체 리포트</title>
-<link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;700;800;900&display=swap" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-body{background:#0a0a0f;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh}
+:root{
+  --pink:#FF4D7D;--purple:#7c3aed;--purple-light:#a78bfa;
+  --green:#10b981;--blue:#38bdf8;--amber:#f59e0b;
+  --bg:#09090f;--card:rgba(255,255,255,.04);--border:rgba(255,255,255,.08);
+  --t1:#f1f5f9;--t2:#94a3b8;--t3:#475569;--t4:#1e293b;
+}
+body{background:var(--bg);color:var(--t1);font-family:'Pretendard',-apple-system,sans-serif;min-height:100vh}
 
 /* ── 잠금 화면 ── */
 #lockScreen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:24px}
-.lock-logo{font-size:13px;font-weight:700;letter-spacing:2px;color:#a78bfa;text-transform:uppercase;margin-bottom:32px}
-.lock-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:32px 28px;width:100%;max-width:360px;text-align:center}
-.lock-icon{font-size:40px;margin-bottom:16px}
-.lock-title{font-size:18px;font-weight:700;margin-bottom:8px}
-.lock-desc{font-size:13px;color:#94a3b8;margin-bottom:28px;line-height:1.6}
-.lock-input{width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:14px 16px;color:#fff;font-size:20px;letter-spacing:6px;text-align:center;outline:none;transition:.2s}
-.lock-input:focus{border-color:#a78bfa;background:rgba(167,139,250,.08)}
-.lock-btn{width:100%;margin-top:16px;padding:14px;background:linear-gradient(135deg,#7c3aed,#a78bfa);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;transition:.2s}
+.lock-logo{font-size:12px;font-weight:700;letter-spacing:3px;color:var(--purple-light);text-transform:uppercase;margin-bottom:32px}
+.lock-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:24px;padding:36px 28px;width:100%;max-width:360px;text-align:center}
+.lock-icon{font-size:44px;margin-bottom:16px}
+.lock-title{font-size:20px;font-weight:800;margin-bottom:8px}
+.lock-desc{font-size:13px;color:var(--t2);margin-bottom:28px;line-height:1.7}
+.lock-input{width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);border-radius:14px;padding:16px;color:#fff;font-size:22px;letter-spacing:8px;text-align:center;outline:none;transition:.2s;font-family:inherit}
+.lock-input:focus{border-color:var(--purple-light);background:rgba(167,139,250,.08)}
+.lock-btn{width:100%;margin-top:16px;padding:15px;background:linear-gradient(135deg,var(--purple),var(--purple-light));border:none;border-radius:14px;color:#fff;font-size:15px;font-weight:800;cursor:pointer;transition:.2s;font-family:inherit}
 .lock-btn:active{opacity:.8;transform:scale(.98)}
 .lock-error{margin-top:12px;font-size:13px;color:#f87171;min-height:20px}
 
 /* ── 리포트 화면 ── */
-#reportScreen{display:none;padding:0 0 40px}
-.rp-header{background:linear-gradient(135deg,#1e1040,#0f0a2e);padding:28px 20px 24px;text-align:center;position:relative}
-.rp-logo{font-size:11px;font-weight:700;letter-spacing:2px;color:#a78bfa;text-transform:uppercase;margin-bottom:12px}
-.rp-shop-name{font-size:22px;font-weight:800;color:#fff;margin-bottom:4px}
-.rp-category{font-size:13px;color:#94a3b8;margin-bottom:16px}
-.rp-period{display:inline-flex;align-items:center;gap:6px;background:rgba(167,139,250,.15);border:1px solid rgba(167,139,250,.3);border-radius:20px;padding:6px 14px;font-size:12px;color:#c4b5fd}
-.rp-updated{font-size:11px;color:#475569;margin-top:8px}
+#reportScreen{display:none;max-width:480px;margin:0 auto;padding-bottom:60px}
+
+/* ── 헤더 ── */
+.rp-header{padding:36px 20px 28px;text-align:center;position:relative;overflow:hidden}
+.rp-header::before{content:'';position:absolute;top:-60px;left:50%;transform:translateX(-50%);width:320px;height:320px;background:radial-gradient(circle,rgba(124,58,237,.18) 0%,transparent 70%);pointer-events:none}
+.rp-logo{font-size:11px;font-weight:700;letter-spacing:3px;color:var(--purple-light);text-transform:uppercase;margin-bottom:14px}
+.rp-shop-name{font-size:26px;font-weight:900;color:#fff;margin-bottom:6px;line-height:1.2}
+.rp-category{font-size:13px;color:var(--t2);margin-bottom:18px}
+.rp-period{display:inline-flex;align-items:center;gap:6px;background:rgba(167,139,250,.12);border:1px solid rgba(167,139,250,.25);border-radius:20px;padding:7px 16px;font-size:12px;font-weight:600;color:#c4b5fd}
 
 /* ── 섹션 ── */
-.rp-section{padding:20px 16px 0}
-.rp-section-title{font-size:11px;font-weight:700;letter-spacing:1.5px;color:#64748b;text-transform:uppercase;margin-bottom:12px}
+.rp-section{padding:0 16px;margin-top:28px}
+.rp-section-label{font-size:10px;font-weight:700;letter-spacing:2px;color:var(--t3);text-transform:uppercase;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.rp-section-label::after{content:'';flex:1;height:1px;background:var(--border)}
 
-/* ── 핵심 지표 3개 ── */
-.kpi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-.kpi-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:16px 12px;text-align:center;position:relative;overflow:hidden}
-.kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px}
-.kpi-view::before{background:linear-gradient(90deg,#7c3aed,#a78bfa)}
-.kpi-feed::before{background:linear-gradient(90deg,#0891b2,#38bdf8)}
-.kpi-map::before{background:linear-gradient(90deg,#059669,#34d399)}
-.kpi-icon{font-size:18px;margin-bottom:6px}
-.kpi-val{font-size:22px;font-weight:800;color:#fff;line-height:1}
-.kpi-lbl{font-size:10px;color:#64748b;margin-top:4px;font-weight:600}
-.kpi-delta{font-size:10px;margin-top:6px;font-weight:700}
-.kpi-up{color:#34d399} .kpi-down{color:#f87171} .kpi-same{color:#94a3b8}
+/* ── 이번 달 핵심 지표 (대형 카드) ── */
+.kpi-main{background:linear-gradient(135deg,rgba(124,58,237,.14),rgba(167,139,250,.06));border:1px solid rgba(167,139,250,.2);border-radius:20px;padding:24px 20px;margin-bottom:12px;position:relative;overflow:hidden}
+.kpi-main::before{content:'';position:absolute;top:-20px;right:-20px;width:120px;height:120px;background:radial-gradient(circle,rgba(167,139,250,.15),transparent 70%);pointer-events:none}
+.kpi-main-label{font-size:12px;font-weight:600;color:rgba(196,181,253,.7);margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.kpi-main-value{font-size:48px;font-weight:900;color:#fff;line-height:1;letter-spacing:-2px;margin-bottom:6px}
+.kpi-main-value span{font-size:22px;font-weight:600;color:rgba(167,139,250,.7);margin-left:2px}
+.kpi-main-trend{font-size:13px;font-weight:700;margin-bottom:4px}
+.kpi-main-sub{font-size:12px;color:var(--t2)}
+.kpi-up{color:#34d399}
+.kpi-down{color:#f87171}
+.kpi-same{color:var(--t2)}
 
-/* ── 지난달 비교 배너 ── */
-.compare-banner{margin:16px 0 0;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between}
-.cb-label{font-size:12px;color:#94a3b8}
-.cb-val{font-size:16px;font-weight:800}
-.cb-up{color:#34d399} .cb-down{color:#f87171} .cb-same{color:#94a3b8}
+/* ── 보조 지표 2개 ── */
+.kpi-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.kpi-sub{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px 16px;position:relative;overflow:hidden}
+.kpi-sub::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:16px 16px 0 0}
+.kpi-sub-booking::before{background:linear-gradient(90deg,#0891b2,#38bdf8)}
+.kpi-sub-map::before{background:linear-gradient(90deg,#059669,#34d399)}
+.kpi-sub-icon{font-size:20px;margin-bottom:10px}
+.kpi-sub-value{font-size:30px;font-weight:900;color:#fff;line-height:1;letter-spacing:-1px}
+.kpi-sub-label{font-size:11px;color:var(--t2);margin-top:5px;font-weight:600}
+.kpi-sub-delta{font-size:11px;font-weight:700;margin-top:6px}
 
-/* ── 순위 배지 ── */
-.rank-banner{margin:20px 16px 0;background:linear-gradient(135deg,rgba(124,58,237,.15),rgba(167,139,250,.08));border:1px solid rgba(167,139,250,.25);border-radius:16px;padding:20px;display:flex;align-items:center;gap:16px}
-.rank-badge{width:56px;height:56px;background:linear-gradient(135deg,#7c3aed,#a78bfa);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:900;color:#fff;flex-shrink:0}
-.rank-info .rank-title{font-size:13px;color:#94a3b8;margin-bottom:4px}
-.rank-info .rank-main{font-size:17px;font-weight:800;color:#fff}
-.rank-info .rank-sub{font-size:11px;color:#7c3aed;margin-top:2px}
+/* ── 전월 비교 배너 ── */
+.compare-strip{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px 18px;display:flex;align-items:center;justify-content:space-between;margin-top:12px}
+.cs-left .cs-label{font-size:11px;color:var(--t2);margin-bottom:4px}
+.cs-left .cs-val{font-size:17px;font-weight:800}
+.cs-right .cs-label{font-size:11px;color:var(--t3);margin-bottom:4px;text-align:right}
+.cs-right .cs-prev{font-size:14px;color:var(--t2);text-align:right}
+.cs-up{color:#34d399}
+.cs-down{color:#f87171}
+.cs-same{color:var(--t2)}
 
-/* ── 차트 ── */
-.chart-wrap{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:16px;margin-top:12px}
-.chart-title{font-size:12px;font-weight:700;color:#94a3b8;margin-bottom:12px}
+/* ── 30일 추이 차트 ── */
+.chart-box{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px 14px 14px;margin-top:14px}
+.chart-box-title{font-size:12px;font-weight:700;color:var(--t2);margin-bottom:14px;display:flex;align-items:center;gap:6px}
+.chart-legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px}
+.legend-dot{display:inline-block;width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.legend-lbl{font-size:10px;color:var(--t2);display:flex;align-items:center;gap:5px}
 
-/* ── 누적 통계 ── */
-.total-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
-.total-card{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:12px;text-align:center}
-.total-val{font-size:18px;font-weight:800;color:#a78bfa}
-.total-lbl{font-size:10px;color:#475569;margin-top:3px}
-
-/* ── 출처별 영상조회 ── */
-.src-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
-.src-card{border-radius:14px;padding:14px 10px;text-align:center;border:1px solid transparent}
-.src-feed{background:rgba(16,185,129,.08);border-color:rgba(16,185,129,.2)}
-.src-cat{background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.2)}
-.src-map{background:rgba(99,102,241,.08);border-color:rgba(99,102,241,.2)}
-.src-icon{font-size:20px;margin-bottom:6px}
-.src-val{font-size:18px;font-weight:800;color:#fff}
+/* ── 출처별 조회 ── */
+.src-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
+.src-card{border-radius:14px;padding:16px 10px;text-align:center;border:1px solid transparent;position:relative;overflow:hidden}
+.src-card::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px}
+.src-feed{background:rgba(16,185,129,.07);border-color:rgba(16,185,129,.18)}
+.src-feed::after{background:#10b981}
+.src-cat{background:rgba(245,158,11,.07);border-color:rgba(245,158,11,.18)}
+.src-cat::after{background:#f59e0b}
+.src-map{background:rgba(99,102,241,.07);border-color:rgba(99,102,241,.18)}
+.src-map::after{background:#818cf8}
+.src-icon{font-size:18px;margin-bottom:8px}
+.src-val{font-size:20px;font-weight:900;color:#fff}
 .src-feed .src-val{color:#10b981}
 .src-cat  .src-val{color:#f59e0b}
 .src-map  .src-val{color:#818cf8}
-.src-lbl{font-size:10px;font-weight:700;color:#64748b;margin-top:3px}
-.src-sub{font-size:10px;color:#475569;margin-top:2px;font-weight:600}
-.src-bar-wrap{margin-top:14px;background:rgba(255,255,255,.04);border-radius:8px;overflow:hidden;height:10px;display:flex}
-.src-bar-seg{height:100%;transition:width .6s ease}
-.src-hint{font-size:10px;color:#334155;text-align:center;margin-top:8px}
+.src-lbl{font-size:10px;font-weight:700;color:var(--t3);margin-top:3px}
+.src-pct{font-size:11px;font-weight:700;margin-top:4px}
+.src-bar-wrap{margin-top:14px;background:rgba(255,255,255,.05);border-radius:8px;overflow:hidden;height:8px;display:flex}
+.src-bar-seg{height:100%;transition:width .7s ease}
 
-/* ── 출처별 전환율 ── */
-.cvr-desc{font-size:11px;color:#475569;margin:6px 0 12px;line-height:1.5}
-.cvr-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-.cvr-card{border-radius:14px;padding:14px 10px;text-align:center;border:1px solid transparent}
-.cvr-feed{background:rgba(16,185,129,.08);border-color:rgba(16,185,129,.2)}
-.cvr-cat{background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.2)}
-.cvr-map{background:rgba(99,102,241,.08);border-color:rgba(99,102,241,.2)}
-.cvr-icon{font-size:18px;margin-bottom:5px}
+/* ── 전환율 ── */
+.cvr-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
+.cvr-card{border-radius:14px;padding:16px 10px;text-align:center;border:1px solid transparent}
+.cvr-feed{background:rgba(16,185,129,.07);border-color:rgba(16,185,129,.18)}
+.cvr-cat{background:rgba(245,158,11,.07);border-color:rgba(245,158,11,.18)}
+.cvr-map{background:rgba(99,102,241,.07);border-color:rgba(99,102,241,.18)}
+.cvr-icon{font-size:16px;margin-bottom:6px}
 .cvr-pct{font-size:22px;font-weight:900}
 .cvr-feed .cvr-pct{color:#10b981}
 .cvr-cat  .cvr-pct{color:#f59e0b}
 .cvr-map  .cvr-pct{color:#818cf8}
-.cvr-lbl{font-size:10px;font-weight:700;color:#64748b;margin-top:3px}
-.cvr-detail{font-size:10px;color:#475569;margin-top:4px}
-.cvr-minibar{height:5px;border-radius:3px;margin-top:7px;background:rgba(255,255,255,.06);overflow:hidden}
-.cvr-minibar-fill{height:100%;border-radius:3px;transition:width .6s ease}
-.cvr-insight{margin-top:12px;padding:10px 14px;background:rgba(255,255,255,.03);
-  border:1px solid rgba(255,255,255,.07);border-radius:10px;
-  font-size:11px;color:#94a3b8;line-height:1.7}
-.cvr-insight strong{color:#e2e8f0}
+.cvr-lbl{font-size:10px;font-weight:700;color:var(--t3);margin-top:3px}
+.cvr-detail{font-size:10px;color:var(--t3);margin-top:3px}
 
-/* ── 30일 vts 추이 차트 ── */
-.vts-tab-row{display:flex;gap:6px;margin-top:10px}
-.vts-tab{flex:1;padding:7px 0;border-radius:8px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:#64748b;font-size:12px;font-weight:600;cursor:pointer;transition:all .2s}
-.vts-tab-on{background:rgba(167,139,250,.18);border-color:rgba(167,139,250,.4);color:#c4b5fd}
-.vts-legend-row{display:flex;align-items:center;gap:8px;margin-top:10px;justify-content:center;flex-wrap:wrap}
-.vts-dot{display:inline-block;width:8px;height:8px;border-radius:50%;flex-shrink:0}
-.vts-leg-lbl{font-size:11px;color:#64748b;margin-right:6px}
-.vts-no-data{text-align:center;font-size:12px;color:#475569;padding:24px 0}
+/* ── 인사이트 박스 ── */
+.insight-box{margin-top:12px;background:rgba(56,189,248,.07);border:1px solid rgba(56,189,248,.18);border-radius:14px;padding:14px 16px;font-size:13px;color:#cbd5e1;line-height:1.7;display:flex;gap:10px;align-items:flex-start}
+.insight-box .ib-icon{font-size:18px;flex-shrink:0;margin-top:1px}
+.insight-box strong{color:#38bdf8}
 
-/* ── 코멘트 ── */
-.comment-box{margin:20px 16px 0;background:linear-gradient(135deg,rgba(6,182,212,.08),rgba(59,130,246,.05));border:1px solid rgba(6,182,212,.2);border-radius:16px;padding:18px 16px;display:flex;gap:12px;align-items:flex-start}
-.comment-icon{font-size:22px;flex-shrink:0;margin-top:2px}
-.comment-text{font-size:13px;color:#cbd5e1;line-height:1.7}
-.comment-text strong{color:#38bdf8}
+/* ── 누적 통계 ── */
+.total-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
+.total-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px 10px;text-align:center}
+.total-val{font-size:20px;font-weight:900;color:var(--purple-light)}
+.total-lbl{font-size:10px;color:var(--t3);margin-top:4px;font-weight:600}
+
+/* ── CTA 박스 ── */
+.cta-box{margin:28px 16px 0;background:linear-gradient(135deg,rgba(255,77,125,.12),rgba(255,143,163,.06));border:1px solid rgba(255,77,125,.22);border-radius:20px;padding:24px 20px;text-align:center}
+.cta-headline{font-size:17px;font-weight:800;color:#fff;margin-bottom:6px;line-height:1.4}
+.cta-sub{font-size:13px;color:rgba(255,255,255,.55);line-height:1.6;margin-bottom:18px}
+.cta-btn{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,#FF4D7D,#FF8FA3);color:#fff;font-size:14px;font-weight:800;padding:13px 28px;border-radius:12px;text-decoration:none;border:none;cursor:pointer;font-family:inherit}
 
 /* ── 푸터 ── */
-.rp-footer{margin:28px 16px 0;text-align:center;font-size:11px;color:#334155;line-height:1.8}
-.rp-footer a{color:#7c3aed;text-decoration:none}
+.rp-footer{margin:28px 16px 0;text-align:center;font-size:11px;color:var(--t3);line-height:1.9}
+.rp-footer a{color:var(--purple-light);text-decoration:none}
 </style>
 </head>
 <body>
@@ -4705,143 +4716,119 @@ body{background:#0a0a0f;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFo
     <div class="lock-icon">🔐</div>
     <div class="lock-title">업체 리포트</div>
     <div class="lock-desc">등록하신 전화번호의<br><strong>마지막 4자리</strong>를 입력해주세요</div>
-    <input class="lock-input" id="phoneInput" type="number" maxlength="4" placeholder="0000"
+    <input class="lock-input" id="phoneInput" type="number" maxlength="4" placeholder="••••"
       oninput="if(this.value.length>4)this.value=this.value.slice(0,4)"
       onkeydown="if(event.key==='Enter')doVerify()"/>
-    <button class="lock-btn" onclick="doVerify()">
-      <i class="fas fa-unlock-alt"></i> 확인
-    </button>
+    <button class="lock-btn" onclick="doVerify()">확인</button>
     <div class="lock-error" id="lockError"></div>
   </div>
 </div>
 
 <!-- ── 리포트 화면 ── -->
 <div id="reportScreen">
+
+  <!-- 헤더 -->
   <div class="rp-header">
     <div class="rp-logo">✦ 마이뷰티맵 리포트</div>
     <div class="rp-shop-name" id="rShopName">—</div>
     <div class="rp-category" id="rCategory">—</div>
-    <div class="rp-period" id="rPeriod"><i class="fas fa-calendar-alt"></i> 이번 달 기준</div>
-    <div class="rp-updated" id="rUpdated"></div>
+    <div class="rp-period" id="rPeriod">📅 이번 달 기준</div>
   </div>
 
   <!-- 이번 달 핵심 지표 -->
   <div class="rp-section">
-    <div class="rp-section-title">이번 달 현황</div>
-    <div class="kpi-grid">
-      <div class="kpi-card kpi-view">
-        <div class="kpi-icon">👁</div>
-        <div class="kpi-val" id="kViews">—</div>
-        <div class="kpi-lbl">영상 조회</div>
-        <div class="kpi-delta" id="kViewsDelta"></div>
+    <div class="rp-section-label">이번 달 성과</div>
+
+    <!-- 영상 조회 (메인 빅카드) -->
+    <div class="kpi-main">
+      <div class="kpi-main-label">👁 영상 조회수</div>
+      <div class="kpi-main-value"><span id="kViews">—</span><span>명</span></div>
+      <div class="kpi-main-trend kpi-same" id="kViewsTrend"></div>
+      <div class="kpi-main-sub" id="kViewsSub"></div>
+    </div>
+
+    <!-- 예약 클릭 + 지도 클릭 -->
+    <div class="kpi-row">
+      <div class="kpi-sub kpi-sub-booking">
+        <div class="kpi-sub-icon">📅</div>
+        <div class="kpi-sub-value" id="kFeed">—</div>
+        <div class="kpi-sub-label">예약 버튼 클릭</div>
+        <div class="kpi-sub-delta kpi-same" id="kFeedDelta"></div>
       </div>
-      <div class="kpi-card kpi-feed">
-        <div class="kpi-icon">📅</div>
-        <div class="kpi-val" id="kFeed">—</div>
-        <div class="kpi-lbl">예약 클릭</div>
-        <div class="kpi-delta" id="kFeedDelta"></div>
-      </div>
-      <div class="kpi-card kpi-map">
-        <div class="kpi-icon">📍</div>
-        <div class="kpi-val" id="kMap">—</div>
-        <div class="kpi-lbl">지도 클릭</div>
-        <div class="kpi-delta" id="kMapDelta"></div>
+      <div class="kpi-sub kpi-sub-map">
+        <div class="kpi-sub-icon">📍</div>
+        <div class="kpi-sub-value" id="kMap">—</div>
+        <div class="kpi-sub-label">지도 클릭</div>
+        <div class="kpi-sub-delta kpi-same" id="kMapDelta"></div>
       </div>
     </div>
 
-    <!-- 지난달 비교 -->
-    <div class="compare-banner">
-      <div>
-        <div class="cb-label">지난달 대비 영상조회</div>
-        <div class="cb-val" id="compareVal">—</div>
+    <!-- 전월 비교 -->
+    <div class="compare-strip">
+      <div class="cs-left">
+        <div class="cs-label">지난달 대비 영상조회</div>
+        <div class="cs-val cs-same" id="compareVal">—</div>
       </div>
-      <div style="text-align:right">
-        <div class="cb-label">지난달</div>
-        <div style="font-size:14px;color:#64748b" id="lastMonthViews">—</div>
+      <div class="cs-right">
+        <div class="cs-label">지난달</div>
+        <div class="cs-prev" id="lastMonthViews">—</div>
       </div>
-    </div>
-  </div>
-
-  <!-- 카테고리 순위 -->
-  <div class="rank-banner" id="rankBanner">
-    <div class="rank-badge" id="rankBadge">—</div>
-    <div class="rank-info">
-      <div class="rank-title">이번 달 카테고리 순위</div>
-      <div class="rank-main" id="rankMain">—</div>
-      <div class="rank-sub" id="rankSub">이번 달 영상조회 기준</div>
     </div>
   </div>
 
   <!-- 30일 추이 차트 -->
-  <div class="rp-section" style="margin-top:20px">
-    <div class="rp-section-title">최근 30일 추이</div>
-    <div class="chart-wrap">
-      <div class="chart-title">영상조회 · 예약클릭 · 지도클릭</div>
+  <div class="rp-section">
+    <div class="rp-section-label">최근 30일 추이</div>
+    <div class="chart-box">
+      <div class="chart-box-title">📈 일별 영상조회 · 예약클릭 · 지도클릭</div>
       <canvas id="trendChart" height="160"></canvas>
+      <div class="chart-legend">
+        <div class="legend-lbl"><span class="legend-dot" style="background:#a78bfa"></span>영상조회</div>
+        <div class="legend-lbl"><span class="legend-dot" style="background:#38bdf8"></span>예약클릭</div>
+        <div class="legend-lbl"><span class="legend-dot" style="background:#34d399"></span>지도클릭</div>
+      </div>
     </div>
   </div>
 
-  <!-- 이번 달 영상조회 출처 분석 -->
-  <div class="rp-section" style="margin-top:20px" id="srcSection" style="display:none">
-    <div class="rp-section-title">이번 달 영상조회 출처</div>
+  <!-- 출처별 영상조회 -->
+  <div class="rp-section" id="srcSection" style="display:none">
+    <div class="rp-section-label">어디서 발견했나요?</div>
     <div class="src-grid">
       <div class="src-card src-feed">
         <div class="src-icon">📜</div>
         <div class="src-val" id="sFeedView">—</div>
         <div class="src-lbl">피드 스크롤</div>
-        <div class="src-sub" id="sFeedPct"></div>
+        <div class="src-pct" style="color:#10b981" id="sFeedPct"></div>
       </div>
       <div class="src-card src-cat">
         <div class="src-icon">📂</div>
         <div class="src-val" id="sCatView">—</div>
         <div class="src-lbl">카탈로그</div>
-        <div class="src-sub" id="sCatPct"></div>
+        <div class="src-pct" style="color:#f59e0b" id="sCatPct"></div>
       </div>
       <div class="src-card src-map">
         <div class="src-icon">🗺</div>
         <div class="src-val" id="sMapView">—</div>
         <div class="src-lbl">지도</div>
-        <div class="src-sub" id="sMapPct"></div>
+        <div class="src-pct" style="color:#818cf8" id="sMapPct"></div>
       </div>
     </div>
     <div class="src-bar-wrap" id="srcBarWrap"></div>
-    <div class="src-hint">어디서 내 영상을 발견했는지 알 수 있어요</div>
   </div>
 
-  <!-- 출처별 전환율 (영상 → 예약) -->
-  <div class="rp-section" style="margin-top:20px" id="cvrSection">
-    <div class="rp-section-title">이번 달 영상→예약 전환율</div>
-    <div class="cvr-desc">영상을 본 사람 중 실제로 예약버튼을 누른 비율이에요</div>
-    <div class="cvr-grid" id="cvrGrid">
-      <!-- JS로 렌더링 -->
-    </div>
-    <div class="cvr-insight" id="cvrInsight"></div>
-  </div>
-
-  <!-- 30일 출처별 전환율 추이 차트 -->
-  <div class="rp-section" style="margin-top:20px" id="vts30Section">
-    <div class="rp-section-title">30일 전환율 추이</div>
-    <div class="cvr-desc">출처별로 영상→예약 전환율이 어떻게 변했는지 보여줘요</div>
-    <div class="vts-tab-row">
-      <button class="vts-tab vts-tab-on" id="vtsTabPct" onclick="switchVtsTab('pct')">전환율 (%)</button>
-      <button class="vts-tab" id="vtsTabCnt" onclick="switchVtsTab('cnt')">전환 건수</button>
-    </div>
-    <div class="chart-wrap" style="margin-top:8px;padding:12px 8px 8px">
-      <canvas id="vtsChart" height="170"></canvas>
-    </div>
-    <div class="vts-legend-row">
-      <span class="vts-dot" style="background:#10b981"></span><span class="vts-leg-lbl">피드</span>
-      <span class="vts-dot" style="background:#f59e0b"></span><span class="vts-leg-lbl">카탈로그</span>
-      <span class="vts-dot" style="background:#818cf8"></span><span class="vts-leg-lbl">지도</span>
-    </div>
-    <div class="vts-no-data" id="vtsNoData" style="display:none">
-      아직 출처별 전환 데이터가 쌓이는 중이에요 📊
+  <!-- 출처별 전환율 -->
+  <div class="rp-section" id="cvrSection" style="display:none">
+    <div class="rp-section-label">영상 → 예약 전환율</div>
+    <div class="cvr-row" id="cvrGrid"></div>
+    <div class="insight-box" id="cvrInsight" style="display:none">
+      <div class="ib-icon">💡</div>
+      <div id="cvrInsightText"></div>
     </div>
   </div>
 
   <!-- 누적 통계 -->
-  <div class="rp-section" style="margin-top:20px">
-    <div class="rp-section-title">누적 통계 (전체)</div>
+  <div class="rp-section">
+    <div class="rp-section-label">서비스 시작 이후 누적</div>
     <div class="total-grid">
       <div class="total-card">
         <div class="total-val" id="tViews">—</div>
@@ -4858,10 +4845,11 @@ body{background:#0a0a0f;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFo
     </div>
   </div>
 
-  <!-- AI 코멘트 -->
-  <div class="comment-box" id="commentBox">
-    <div class="comment-icon">💡</div>
-    <div class="comment-text" id="commentText">분석 중...</div>
+  <!-- CTA -->
+  <div class="cta-box" id="ctaBox" style="display:none">
+    <div class="cta-headline" id="ctaHeadline">마이뷰티맵과 함께 성장하세요</div>
+    <div class="cta-sub" id="ctaSub">더 많은 고객에게 노출되고 싶다면<br>영상을 최신으로 업데이트해보세요!</div>
+    <a class="cta-btn" href="/">🌸 마이뷰티맵 바로가기</a>
   </div>
 
   <div class="rp-footer">
@@ -4882,7 +4870,7 @@ async function doVerify() {
   document.getElementById('lockError').textContent = '';
   const btn = document.querySelector('.lock-btn');
   btn.disabled = true;
-  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 확인 중...';
+  btn.textContent = '확인 중...';
 
   try {
     const res = await fetch('/api/report/' + TOKEN + '/verify', {
@@ -4892,28 +4880,22 @@ async function doVerify() {
     });
     if (res.status === 401) {
       document.getElementById('lockError').textContent = '전화번호가 일치하지 않아요';
-      btn.disabled = false;
-      btn.innerHTML = '<i class="fas fa-unlock-alt"></i> 확인';
-      return;
+      btn.disabled = false; btn.textContent = '확인'; return;
     }
     if (!res.ok) {
       document.getElementById('lockError').textContent = '잘못된 링크예요';
-      btn.disabled = false;
-      btn.innerHTML = '<i class="fas fa-unlock-alt"></i> 확인';
-      return;
+      btn.disabled = false; btn.textContent = '확인'; return;
     }
-    const data = await res.json();
-    renderReport(data);
+    renderReport(await res.json());
   } catch(e) {
     document.getElementById('lockError').textContent = '오류가 발생했어요. 다시 시도해주세요';
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fas fa-unlock-alt"></i> 확인';
+    btn.disabled = false; btn.textContent = '확인';
   }
 }
 
 function fmt(n) { return (n||0).toLocaleString(); }
 
-function delta(curr, prev) {
+function makeTrend(curr, prev) {
   if (!prev) return { text: '지난달 데이터 없음', cls: 'kpi-same' };
   const pct = Math.round(((curr - prev) / prev) * 100);
   if (pct > 0)  return { text: '▲ ' + pct + '% 지난달 대비', cls: 'kpi-up' };
@@ -4926,79 +4908,75 @@ function renderReport(d) {
   document.getElementById('reportScreen').style.display = 'block';
 
   // 헤더
-  document.getElementById('rShopName').textContent   = d.shop.name;
-  document.getElementById('rCategory').textContent   = d.shop.category + ' · ' + (d.shop.address || '').split(' ').slice(0,2).join(' ');
   const now = new Date();
-  document.getElementById('rPeriod').innerHTML = '<i class="fas fa-calendar-alt"></i> ' + now.getFullYear() + '년 ' + (now.getMonth()+1) + '월 기준';
-  document.getElementById('rUpdated').textContent    = '실시간 업데이트';
+  document.getElementById('rShopName').textContent = d.shop.name;
+  document.getElementById('rCategory').textContent = d.shop.category + ' · ' + (d.shop.address||'').split(' ').slice(0,2).join(' ');
+  document.getElementById('rPeriod').textContent = '📅 ' + now.getFullYear() + '년 ' + (now.getMonth()+1) + '월 기준';
 
-  // KPI
-  document.getElementById('kViews').textContent = fmt(d.thisMonth.views);
-  document.getElementById('kFeed').textContent  = fmt(d.thisMonth.feedSP);
-  document.getElementById('kMap').textContent   = fmt(d.thisMonth.mapSP);
+  // ── 이번 달 핵심 지표 ──
+  const tm = d.thisMonth, lm = d.lastMonth;
+  const dv = makeTrend(tm.views,  lm.views);
+  const df = makeTrend(tm.feedSP, lm.feedSP);
+  const dm = makeTrend(tm.mapSP,  lm.mapSP);
 
-  const dv = delta(d.thisMonth.views,  d.lastMonth.views);
-  const df = delta(d.thisMonth.feedSP, d.lastMonth.feedSP);
-  const dm = delta(d.thisMonth.mapSP,  d.lastMonth.mapSP);
-  const setDelta = (id, obj) => { const el=document.getElementById(id); el.textContent=obj.text; el.className='kpi-delta '+obj.cls; };
-  setDelta('kViewsDelta', dv);
-  setDelta('kFeedDelta',  df);
-  setDelta('kMapDelta',   dm);
+  // 영상 조회 (메인)
+  document.getElementById('kViews').textContent = fmt(tm.views);
+  const trendEl = document.getElementById('kViewsTrend');
+  trendEl.textContent = dv.text;
+  trendEl.className = 'kpi-main-trend ' + dv.cls;
+  document.getElementById('kViewsSub').textContent = tm.views > 0
+    ? '이번 달 ' + fmt(tm.views) + '명이 영상을 시청했어요'
+    : '아직 이번 달 데이터가 쌓이는 중이에요';
 
-  // 지난달 비교
-  const cPct = d.lastMonth.views > 0 ? Math.round(((d.thisMonth.views - d.lastMonth.views) / d.lastMonth.views) * 100) : null;
+  // 예약·지도 클릭
+  document.getElementById('kFeed').textContent = fmt(tm.feedSP);
+  const fdEl = document.getElementById('kFeedDelta');
+  fdEl.textContent = df.text; fdEl.className = 'kpi-sub-delta ' + df.cls;
+
+  document.getElementById('kMap').textContent = fmt(tm.mapSP);
+  const mpEl = document.getElementById('kMapDelta');
+  mpEl.textContent = dm.text; mpEl.className = 'kpi-sub-delta ' + dm.cls;
+
+  // 전월 비교
+  const cPct = lm.views > 0 ? Math.round(((tm.views - lm.views) / lm.views) * 100) : null;
   const cEl  = document.getElementById('compareVal');
-  if (cPct === null) { cEl.textContent = '첫 달 데이터'; cEl.className = 'cb-val cb-same'; }
-  else if (cPct > 0) { cEl.innerHTML = '<span class="cb-up">▲ ' + cPct + '%</span> 상승 🚀'; cEl.className = 'cb-val'; }
-  else if (cPct < 0) { cEl.innerHTML = '<span class="cb-down">▼ ' + Math.abs(cPct) + '%</span> 하락'; cEl.className = 'cb-val'; }
-  else { cEl.textContent = '→ 동일'; cEl.className = 'cb-val cb-same'; }
-  document.getElementById('lastMonthViews').textContent = fmt(d.lastMonth.views) + '명';
+  if (cPct === null) { cEl.textContent = '첫 달 데이터'; cEl.className = 'cs-val cs-same'; }
+  else if (cPct > 0) { cEl.innerHTML = '<span class="cs-up">▲ ' + cPct + '%</span> 상승 🚀'; cEl.className = 'cs-val'; }
+  else if (cPct < 0) { cEl.innerHTML = '<span class="cs-down">▼ ' + Math.abs(cPct) + '%</span> 하락'; cEl.className = 'cs-val'; }
+  else { cEl.textContent = '→ 동일'; cEl.className = 'cs-val cs-same'; }
+  document.getElementById('lastMonthViews').textContent = fmt(lm.views) + '명';
 
-  // 순위
-  const rank = d.rank || 1, total = d.rankTotal || 1;
-  document.getElementById('rankBadge').textContent = rank + '위';
-  document.getElementById('rankMain').textContent  = d.shop.category + ' 카테고리 ' + rank + '위 / ' + total + '개';
-  if (rank === 1) document.getElementById('rankSub').textContent = '🏆 이번 달 1등! 최고예요';
-  else if (rank <= Math.ceil(total * 0.3)) document.getElementById('rankSub').textContent = '✨ 상위 ' + Math.round((rank/total)*100) + '% 우수 업체';
-
-  // 차트
+  // ── 30일 추이 차트 ──
   const labels = [], views = [], feeds = [], maps = [];
   (d.daily30 || []).forEach(r => {
     const dt = new Date(r.d);
     labels.push((dt.getMonth()+1) + '/' + dt.getDate());
-    views.push(parseInt(r.views) || 0);
+    views.push(parseInt(r.views)   || 0);
     feeds.push(parseInt(r.feed_sp) || 0);
-    maps.push(parseInt(r.map_sp) || 0);
+    maps.push(parseInt(r.map_sp)   || 0);
   });
   new Chart(document.getElementById('trendChart'), {
     type: 'line',
     data: {
       labels,
       datasets: [
-        { label: '영상조회', data: views, borderColor: '#a78bfa', backgroundColor: 'rgba(167,139,250,.1)', tension: .4, fill: true, pointRadius: 2 },
-        { label: '예약클릭', data: feeds, borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,.08)',  tension: .4, fill: true, pointRadius: 2 },
-        { label: '지도클릭', data: maps,  borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,.08)',  tension: .4, fill: true, pointRadius: 2 },
+        { label:'영상조회', data:views, borderColor:'#a78bfa', backgroundColor:'rgba(167,139,250,.12)', tension:.4, fill:true, pointRadius:2, borderWidth:2 },
+        { label:'예약클릭', data:feeds, borderColor:'#38bdf8', backgroundColor:'rgba(56,189,248,.08)',  tension:.4, fill:true, pointRadius:2, borderWidth:2 },
+        { label:'지도클릭', data:maps,  borderColor:'#34d399', backgroundColor:'rgba(52,211,153,.07)',  tension:.4, fill:true, pointRadius:2, borderWidth:2 },
       ]
     },
     options: {
-      responsive: true, maintainAspectRatio: true,
-      plugins: { legend: { labels: { color: '#94a3b8', font: { size: 11 }, boxWidth: 12 } } },
-      scales: {
-        x: { ticks: { color: '#475569', font: { size: 9 }, maxTicksLimit: 8 }, grid: { color: 'rgba(255,255,255,.04)' } },
-        y: { ticks: { color: '#475569', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,.06)' }, min: 0 }
+      responsive:true, maintainAspectRatio:true,
+      plugins:{ legend:{ display:false } },
+      scales:{
+        x:{ ticks:{ color:'#475569', font:{ size:9 }, maxTicksLimit:8 }, grid:{ color:'rgba(255,255,255,.04)' } },
+        y:{ ticks:{ color:'#475569', font:{ size:10 } }, grid:{ color:'rgba(255,255,255,.05)' }, min:0 }
       }
     }
   });
 
-  // 누적
-  document.getElementById('tViews').textContent = fmt(d.total.views);
-  document.getElementById('tFeed').textContent  = fmt(d.total.feedSP);
-  document.getElementById('tMap').textContent   = fmt(d.total.mapSP);
-
-  // ── 출처별 영상조회 섹션 ──
-  const fv  = d.thisMonth.feedView    || 0;
-  const cv  = d.thisMonth.catalogView || 0;
-  const mv  = d.thisMonth.mapView     || 0;
+  // ── 출처별 영상조회 ──
+  const fv = tm.feedView || 0, cv = tm.catalogView || 0, mv = tm.mapView || 0;
   const svTotal = fv + cv + mv;
   const srcSec = document.getElementById('srcSection');
   if (svTotal > 0) {
@@ -5010,184 +4988,71 @@ function renderReport(d) {
     document.getElementById('sFeedPct').textContent  = pct(fv);
     document.getElementById('sCatPct').textContent   = pct(cv);
     document.getElementById('sMapPct').textContent   = pct(mv);
-    // 비율 바
     document.getElementById('srcBarWrap').innerHTML =
       '<div class="src-bar-seg" style="width:'+pct(fv)+';background:#10b981"></div>' +
       '<div class="src-bar-seg" style="width:'+pct(cv)+';background:#f59e0b"></div>' +
       '<div class="src-bar-seg" style="width:'+pct(mv)+';background:#818cf8"></div>';
-  } else {
-    // 출처 데이터 없으면 섹션 숨김 (기존 데이터 없을 때)
-    srcSec.style.display = 'none';
   }
 
-  // ── 출처별 전환율 섹션 ──
-  const vtF = d.thisMonth.vtsFeed    || 0;
-  const vtC = d.thisMonth.vtsCatalog || 0;
-  const vtM = d.thisMonth.vtsMap     || 0;
+  // ── 출처별 전환율 ──
+  const vtF = tm.vtsFeed || 0, vtC = tm.vtsCatalog || 0, vtM = tm.vtsMap || 0;
   const cvrSec = document.getElementById('cvrSection');
-  if (vtF + vtC + vtM > 0 || (fv + cv + mv > 0)) {
+  if (fv + cv + mv > 0) {
     cvrSec.style.display = '';
     const cvrPct = (view, conv) => view > 0 ? Math.round(conv / view * 100) : null;
     const pF = cvrPct(fv, vtF), pC = cvrPct(cv, vtC), pM = cvrPct(mv, vtM);
+
     const cvrCard = (icon, lbl, cls, pct, conv, view, col) => {
       const p = pct !== null ? pct + '%' : '—';
-      const w = pct !== null ? Math.min(pct, 100) : 0;
       return '<div class="cvr-card ' + cls + '">'
         + '<div class="cvr-icon">' + icon + '</div>'
         + '<div class="cvr-pct">' + p + '</div>'
         + '<div class="cvr-lbl">' + lbl + '</div>'
         + '<div class="cvr-detail">' + conv + '명 / ' + view + '명</div>'
-        + '<div class="cvr-minibar"><div class="cvr-minibar-fill" style="width:' + w + '%;background:' + col + '"></div></div>'
         + '</div>';
     };
     document.getElementById('cvrGrid').innerHTML =
       cvrCard('📜', '피드',     'cvr-feed', pF, vtF, fv, '#10b981') +
       cvrCard('📂', '카탈로그', 'cvr-cat',  pC, vtC, cv, '#f59e0b') +
       cvrCard('🗺', '지도',     'cvr-map',  pM, vtM, mv, '#818cf8');
-    // 가장 높은 전환율 출처 인사이트
-    const bestCvr = [
-      { src: '피드',     pct: pF },
-      { src: '카탈로그', pct: pC },
-      { src: '지도',     pct: pM },
-    ].filter(x => x.pct !== null).sort((a, b) => b.pct - a.pct)[0];
-    const insightEl = document.getElementById('cvrInsight');
-    if (bestCvr) {
-      insightEl.innerHTML =
-        '<strong>' + bestCvr.src + '</strong>에서 본 고객의 전환율이 <strong>' + bestCvr.pct + '%</strong>로 가장 높아요.'
-        + (bestCvr.src === '지도'     ? ' 지도로 찾아온 고객은 예약 의도가 강해요! 🗺' :
-           bestCvr.src === '카탈로그' ? ' 목적이 있는 카탈로그 방문자 전환율이 높아요! 📂' :
-                                        ' 피드에서도 예약으로 이어지고 있어요! 📜');
-      insightEl.style.display = '';
-    } else {
-      insightEl.style.display = 'none';
+
+    const best = [{src:'피드',pct:pF},{src:'카탈로그',pct:pC},{src:'지도',pct:pM}]
+      .filter(x => x.pct !== null).sort((a,b) => b.pct - a.pct)[0];
+    if (best) {
+      const insEl = document.getElementById('cvrInsight');
+      const txtEl = document.getElementById('cvrInsightText');
+      txtEl.innerHTML = '<strong>' + best.src + '</strong>에서 본 고객의 예약 전환율이 <strong>' + best.pct + '%</strong>로 가장 높아요.'
+        + (best.src === '지도'     ? ' 지도로 찾아온 고객은 예약 의도가 강해요! 🗺' :
+           best.src === '카탈로그' ? ' 목적이 있는 카탈로그 방문자 전환율이 높아요! 📂' :
+                                     ' 피드에서도 예약으로 이어지고 있어요! 📜');
+      insEl.style.display = '';
     }
-  } else {
-    cvrSec.style.display = 'none';
   }
 
-  // ── 30일 출처별 전환율 추이 차트 ──
-  (function() {
-    const rows = d.daily30 || [];
-    // vts 데이터가 하나라도 있는 날이 있으면 섹션 표시
-    const hasVts = rows.some(r =>
-      (parseInt(r.vts_feed)||0) + (parseInt(r.vts_catalog)||0) + (parseInt(r.vts_map)||0) > 0
-    );
-    const vts30Sec  = document.getElementById('vts30Section');
-    const vtsNoData = document.getElementById('vtsNoData');
-    const vtsCanvas = document.getElementById('vtsChart');
-    if (!hasVts) {
-      // 데이터 없으면 캔버스 숨기고 안내문 표시
-      vts30Sec.style.display = '';
-      vtsCanvas.style.display = 'none';
-      document.querySelector('.vts-tab-row').style.display = 'none';
-      document.querySelector('.vts-legend-row').style.display = 'none';
-      vtsNoData.style.display = '';
-      return;
-    }
+  // ── 누적 통계 ──
+  document.getElementById('tViews').textContent = fmt(d.total.views);
+  document.getElementById('tFeed').textContent  = fmt(d.total.feedSP);
+  document.getElementById('tMap').textContent   = fmt(d.total.mapSP);
 
-    // 날짜 라벨 + 데이터 배열 구성
-    const lbl = [], vF = [], vC = [], vM = [], cF = [], cC = [], cM = [];
-    rows.forEach(r => {
-      const dt = new Date(r.d);
-      lbl.push((dt.getMonth()+1) + '/' + dt.getDate());
-      const fv = parseInt(r.feed_view)    || 0;
-      const cv = parseInt(r.catalog_view) || 0;
-      const mv = parseInt(r.map_view)     || 0;
-      const tf = parseInt(r.vts_feed)     || 0;
-      const tc = parseInt(r.vts_catalog)  || 0;
-      const tm = parseInt(r.vts_map)      || 0;
-      // 전환율(%) — 분모 0이면 null (차트에서 gap으로 표시)
-      vF.push(fv > 0 ? Math.round(tf / fv * 100) : null);
-      vC.push(cv > 0 ? Math.round(tc / cv * 100) : null);
-      vM.push(mv > 0 ? Math.round(tm / mv * 100) : null);
-      // 전환 건수
-      cF.push(tf); cC.push(tc); cM.push(tm);
-    });
-
-    // Chart.js 공통 옵션
-    const commonScales = (yLabel) => ({
-      x: {
-        ticks: { color: '#475569', font: { size: 9 }, maxTicksLimit: 10 },
-        grid:  { color: 'rgba(255,255,255,.04)' }
-      },
-      y: {
-        ticks: { color: '#475569', font: { size: 10 },
-                 callback: (v) => yLabel === '%' ? v + '%' : v + '건' },
-        grid:  { color: 'rgba(255,255,255,.06)' },
-        min: 0,
-        suggestedMax: yLabel === '%' ? 100 : undefined
-      }
-    });
-
-    const makeDatasets = (mode) => [
-      { label: '피드',     data: mode==='pct'?vF:cF, borderColor:'#10b981', backgroundColor:'rgba(16,185,129,.12)',
-        tension:.4, fill:true, pointRadius:3, pointHoverRadius:5,
-        spanGaps: true },
-      { label: '카탈로그', data: mode==='pct'?vC:cC, borderColor:'#f59e0b', backgroundColor:'rgba(245,158,11,.10)',
-        tension:.4, fill:true, pointRadius:3, pointHoverRadius:5,
-        spanGaps: true },
-      { label: '지도',     data: mode==='pct'?vM:cM, borderColor:'#818cf8', backgroundColor:'rgba(129,140,248,.10)',
-        tension:.4, fill:true, pointRadius:3, pointHoverRadius:5,
-        spanGaps: true },
-    ];
-
-    let curMode = 'pct';
-    let vtsChartInst = new Chart(vtsCanvas, {
-      type: 'line',
-      data: { labels: lbl, datasets: makeDatasets('pct') },
-      options: {
-        responsive: true,
-        maintainAspectRatio: true,
-        interaction: { mode: 'index', intersect: false },
-        plugins: {
-          legend: { display: false },
-          tooltip: {
-            backgroundColor: 'rgba(15,23,42,.92)',
-            titleColor: '#94a3b8',
-            bodyColor: '#e2e8f0',
-            borderColor: 'rgba(255,255,255,.1)',
-            borderWidth: 1,
-            padding: 10,
-            callbacks: {
-              label: (ctx) => {
-                const v = ctx.parsed.y;
-                if (v === null || v === undefined) return null;
-                return ' ' + ctx.dataset.label + ': ' + (curMode==='pct' ? v+'%' : v+'건');
-              }
-            }
-          }
-        },
-        scales: commonScales('%')
-      }
-    });
-
-    // 탭 전환 함수 (전역 등록)
-    window.switchVtsTab = function(mode) {
-      if (mode === curMode) return;
-      curMode = mode;
-      document.getElementById('vtsTabPct').className = 'vts-tab' + (mode==='pct' ? ' vts-tab-on' : '');
-      document.getElementById('vtsTabCnt').className = 'vts-tab' + (mode==='cnt' ? ' vts-tab-on' : '');
-      vtsChartInst.data.datasets = makeDatasets(mode);
-      vtsChartInst.options.scales = commonScales(mode==='pct' ? '%' : 'cnt');
-      vtsChartInst.update('active');
-    };
-  })();
-
-  // AI 코멘트
-  const totalAct = d.thisMonth.views + d.thisMonth.feedSP + d.thisMonth.mapSP;
-  let comment = '';
+  // ── CTA ──
+  const ctaBox = document.getElementById('ctaBox');
+  const totalAct = tm.views + tm.feedSP + tm.mapSP;
+  ctaBox.style.display = '';
+  const ctaHeadEl = document.getElementById('ctaHeadline');
+  const ctaSubEl  = document.getElementById('ctaSub');
   if (totalAct === 0) {
-    comment = '아직 이번 달 데이터가 쌓이는 중이에요. 조금만 기다려주세요! 😊';
-  } else if (rank === 1) {
-    comment = '<strong>' + d.shop.name + '</strong>은 이번 달 ' + d.shop.category + ' 카테고리에서 <strong>1위</strong>예요! 🏆 고객들의 관심이 가장 높은 업체입니다.';
+    ctaHeadEl.textContent = '아직 데이터가 쌓이는 중이에요 📊';
+    ctaSubEl.textContent  = '영상을 등록하면 더 많은 고객에게 노출돼요!';
   } else if (cPct !== null && cPct >= 20) {
-    comment = '이번 달 영상 조회가 지난달 대비 <strong>+' + cPct + '%</strong> 올랐어요 🚀 좋은 흐름이에요!';
-  } else if (d.thisMonth.views > 50) {
-    comment = '이번 달 <strong>' + fmt(d.thisMonth.views) + '명</strong>이 영상을 봤어요. 예약 전환율을 높이면 더 많은 고객을 만날 수 있어요!';
+    ctaHeadEl.textContent = '이번 달 조회수가 급상승하고 있어요 🚀';
+    ctaSubEl.innerHTML    = '지난달 대비 <strong>+' + cPct + '%</strong> 상승! 이 흐름을 유지해보세요.';
+  } else if (tm.feedSP > 0) {
+    ctaHeadEl.textContent = '예약 버튼이 클릭되고 있어요! 🎉';
+    ctaSubEl.innerHTML    = '이번 달 <strong>' + fmt(tm.feedSP) + '명</strong>이 예약 버튼을 눌렀어요.<br>더 많은 전환을 위해 영상을 업데이트해보세요.';
   } else {
-    comment = '꾸준히 데이터가 쌓이고 있어요. 영상을 업데이트하면 더 많은 고객에게 노출돼요! 📈';
+    ctaHeadEl.textContent = '더 많은 고객과 연결되어보세요';
+    ctaSubEl.textContent  = '최신 영상을 등록하면 피드 노출이 늘어요!';
   }
-  document.getElementById('commentText').innerHTML = comment;
 }
 </script>
 </body>
