@@ -4576,7 +4576,7 @@ function reportPage(token: string) { return `<!DOCTYPE html>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 :root{
   --purple:#7c3aed;--purple-l:#a78bfa;--purple-ll:#c4b5fd;
-  --green:#10b981;--blue:#38bdf8;--amber:#f59e0b;--pink:#FF4D7D;
+  --green:#10b981;--pink:#FF4D7D;
   --bg:#09090f;--card:rgba(255,255,255,.04);--border:rgba(255,255,255,.08);
   --t1:#f1f5f9;--t2:#94a3b8;--t3:#475569;
 }
@@ -4604,118 +4604,78 @@ body{background:var(--bg);color:var(--t1);font-family:'Pretendard',-apple-system
 .lock-error{margin-top:10px;font-size:13px;color:#f87171;min-height:18px}
 
 /* ── 리포트 ── */
-#reportScreen{display:none;max-width:480px;margin:0 auto;padding-bottom:60px}
+#reportScreen{display:none;max-width:460px;margin:0 auto;padding-bottom:60px}
 
 /* 헤더 */
-.rp-header{padding:32px 20px 24px;text-align:center}
+.rp-header{padding:36px 20px 28px;text-align:center}
 .rp-logo{font-size:10px;font-weight:700;letter-spacing:3px;color:var(--purple-l);
   text-transform:uppercase;margin-bottom:12px}
-.rp-name{font-size:24px;font-weight:900;color:#fff;line-height:1.2;margin-bottom:6px}
-.rp-cat{font-size:13px;color:var(--t2);margin-bottom:16px}
+.rp-name{font-size:26px;font-weight:900;color:#fff;line-height:1.2;margin-bottom:6px}
+.rp-cat{font-size:13px;color:var(--t2);margin-bottom:18px}
 .rp-period{display:inline-flex;align-items:center;gap:6px;
   background:rgba(167,139,250,.12);border:1px solid rgba(167,139,250,.25);
   border-radius:20px;padding:7px 16px;font-size:12px;font-weight:600;color:var(--purple-ll)}
 
-/* 섹션 */
-.sec{padding:0 16px;margin-top:24px}
-.sec-label{font-size:10px;font-weight:700;letter-spacing:2px;color:var(--t3);
-  text-transform:uppercase;margin-bottom:14px;display:flex;align-items:center;gap:8px}
-.sec-label::after{content:'';flex:1;height:1px;background:var(--border)}
+/* 구분선 */
+.divider{height:1px;background:var(--border);margin:0 16px}
 
-/* 메인 조회수 카드 */
-.views-card{background:linear-gradient(135deg,rgba(124,58,237,.16),rgba(167,139,250,.07));
-  border:1px solid rgba(167,139,250,.22);border-radius:20px;padding:24px 22px;margin-bottom:12px}
-.views-label{font-size:12px;font-weight:600;color:rgba(196,181,253,.75);margin-bottom:10px}
-.views-num{font-size:52px;font-weight:900;color:#fff;line-height:1;letter-spacing:-2px;margin-bottom:8px}
-.views-num small{font-size:22px;font-weight:600;color:rgba(167,139,250,.65);margin-left:2px}
-.views-badge{display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:700;
-  padding:5px 12px;border-radius:20px;margin-bottom:6px}
-.badge-up{background:rgba(52,211,153,.12);color:#34d399}
-.badge-down{background:rgba(248,113,113,.12);color:#f87171}
+/* ── 빅 조회수 카드 ── */
+.hero-card{margin:24px 16px 0;
+  background:linear-gradient(135deg,rgba(124,58,237,.18),rgba(167,139,250,.07));
+  border:1px solid rgba(167,139,250,.25);border-radius:22px;padding:28px 24px}
+.hero-lbl{font-size:12px;font-weight:600;color:rgba(196,181,253,.7);margin-bottom:12px;
+  display:flex;align-items:center;gap:6px}
+.hero-num{font-size:56px;font-weight:900;color:#fff;line-height:1;letter-spacing:-3px;margin-bottom:12px}
+.hero-num small{font-size:22px;font-weight:600;color:rgba(167,139,250,.6);margin-left:4px;letter-spacing:0}
+.hero-badge{display:inline-flex;align-items:center;gap:6px;
+  font-size:14px;font-weight:800;padding:6px 14px;border-radius:20px;margin-bottom:8px}
+.badge-up{background:rgba(52,211,153,.14);color:#34d399}
+.badge-down{background:rgba(248,113,113,.14);color:#f87171}
 .badge-same{background:rgba(148,163,184,.1);color:var(--t2)}
-.views-sub{font-size:12px;color:var(--t2)}
+.hero-sub{font-size:13px;color:var(--t2);line-height:1.5}
 
-/* 보조 2칸 */
-.mini-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
-.mini-card{background:var(--card);border:1px solid var(--border);border-radius:16px;
-  padding:18px 16px;position:relative;overflow:hidden}
-.mini-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px}
-.mini-booking::before{background:linear-gradient(90deg,#0891b2,var(--blue))}
-.mini-map::before{background:linear-gradient(90deg,#059669,var(--green))}
-.mini-icon{font-size:18px;margin-bottom:10px}
-.mini-num{font-size:28px;font-weight:900;color:#fff;line-height:1;letter-spacing:-1px}
-.mini-lbl{font-size:11px;color:var(--t2);margin-top:5px;font-weight:600}
-.mini-delta{font-size:11px;font-weight:700;margin-top:6px}
-.delta-up{color:#34d399} .delta-down{color:#f87171} .delta-same{color:var(--t2)}
+/* ── 액션 수 카드 ── */
+.action-card{margin:12px 16px 0;
+  background:var(--card);border:1px solid var(--border);
+  border-radius:18px;padding:22px 24px;
+  display:flex;align-items:center;gap:20px}
+.action-left{flex:1}
+.action-lbl{font-size:12px;font-weight:600;color:var(--t2);margin-bottom:10px;
+  display:flex;align-items:center;gap:6px}
+.action-num{font-size:40px;font-weight:900;color:var(--green);line-height:1;letter-spacing:-1px}
+.action-num small{font-size:18px;font-weight:600;color:rgba(16,185,129,.6);margin-left:3px;letter-spacing:0}
+.action-sub{font-size:12px;color:var(--t2);margin-top:6px}
+.action-right{text-align:right}
+.action-prev-lbl{font-size:10px;color:var(--t3);margin-bottom:4px}
+.action-prev{font-size:13px;color:var(--t2);font-weight:600}
+.action-badge{font-size:12px;font-weight:800;padding:4px 10px;border-radius:12px;margin-top:6px;display:inline-block}
 
-/* 전월비교 */
-.compare-strip{background:var(--card);border:1px solid var(--border);
-  border-radius:14px;padding:16px 18px;display:flex;align-items:center;
-  justify-content:space-between}
-.cs-lbl{font-size:11px;color:var(--t2);margin-bottom:4px}
-.cs-val{font-size:17px;font-weight:800}
-.cs-up{color:#34d399} .cs-down{color:#f87171} .cs-same{color:var(--t2)}
-.cs-prev-lbl{font-size:11px;color:var(--t3);margin-bottom:4px;text-align:right}
-.cs-prev{font-size:14px;color:var(--t2);text-align:right}
-
-/* 30일 차트 */
+/* ── 30일 차트 ── */
+.chart-section{margin:20px 16px 0}
+.chart-title{font-size:12px;font-weight:700;color:var(--t2);margin-bottom:12px;
+  display:flex;align-items:center;gap:6px}
 .chart-box{background:var(--card);border:1px solid var(--border);
-  border-radius:16px;padding:18px 12px 12px;margin-top:0}
-.chart-box-ttl{font-size:12px;font-weight:700;color:var(--t2);margin-bottom:14px}
-.chart-legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px}
+  border-radius:16px;padding:18px 12px 12px}
+.chart-legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;padding:0 4px}
 .leg{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--t2)}
 .leg-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 
-/* 출처별 조회 */
-.src-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.src-card{border-radius:14px;padding:16px 10px;text-align:center;border:1px solid transparent}
-.src-feed{background:rgba(16,185,129,.07);border-color:rgba(16,185,129,.2)}
-.src-cat {background:rgba(245,158,11,.07);border-color:rgba(245,158,11,.2)}
-.src-map {background:rgba(99,102,241,.07);border-color:rgba(99,102,241,.2)}
-.src-icon{font-size:18px;margin-bottom:8px}
-.src-num{font-size:20px;font-weight:900}
-.src-feed .src-num{color:#10b981}
-.src-cat  .src-num{color:#f59e0b}
-.src-map  .src-num{color:#818cf8}
-.src-lbl{font-size:10px;font-weight:700;color:var(--t3);margin-top:3px}
-.src-pct{font-size:11px;font-weight:700;margin-top:4px}
-.src-bar-wrap{margin-top:12px;background:rgba(255,255,255,.05);
-  border-radius:6px;overflow:hidden;height:7px;display:flex}
-.src-bar-seg{height:100%;transition:width .6s}
+/* ── 누적 한줄 ── */
+.total-bar{margin:16px 16px 0;background:var(--card);border:1px solid var(--border);
+  border-radius:14px;padding:16px 20px;
+  display:flex;align-items:center;justify-content:space-between}
+.total-lbl{font-size:12px;color:var(--t2)}
+.total-num{font-size:18px;font-weight:900;color:var(--purple-l)}
+.total-unit{font-size:12px;color:var(--t3);margin-left:2px}
 
-/* 전환율 */
-.cvr-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.cvr-card{border-radius:14px;padding:16px 10px;text-align:center;border:1px solid transparent}
-.cvr-feed{background:rgba(16,185,129,.07);border-color:rgba(16,185,129,.2)}
-.cvr-cat {background:rgba(245,158,11,.07);border-color:rgba(245,158,11,.2)}
-.cvr-map {background:rgba(99,102,241,.07);border-color:rgba(99,102,241,.2)}
-.cvr-icon{font-size:16px;margin-bottom:7px}
-.cvr-pct{font-size:22px;font-weight:900}
-.cvr-feed .cvr-pct{color:#10b981}
-.cvr-cat  .cvr-pct{color:#f59e0b}
-.cvr-map  .cvr-pct{color:#818cf8}
-.cvr-lbl{font-size:10px;font-weight:700;color:var(--t3);margin-top:3px}
-.cvr-detail{font-size:10px;color:var(--t3);margin-top:3px}
-.insight-box{margin-top:12px;background:rgba(56,189,248,.07);
-  border:1px solid rgba(56,189,248,.18);border-radius:14px;
-  padding:14px 16px;font-size:13px;color:#cbd5e1;line-height:1.7}
-.insight-box strong{color:var(--blue)}
-
-/* 누적 */
-.total-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.total-card{background:var(--card);border:1px solid var(--border);
-  border-radius:14px;padding:16px 10px;text-align:center}
-.total-num{font-size:20px;font-weight:900;color:var(--purple-l)}
-.total-lbl{font-size:10px;color:var(--t3);margin-top:4px;font-weight:600}
-
-/* CTA */
-.cta-box{margin:28px 16px 0;background:linear-gradient(135deg,rgba(255,77,125,.12),rgba(255,143,163,.06));
-  border:1px solid rgba(255,77,125,.22);border-radius:20px;padding:24px 20px;text-align:center}
-.cta-head{font-size:17px;font-weight:800;color:#fff;margin-bottom:6px;line-height:1.4}
-.cta-sub{font-size:13px;color:rgba(255,255,255,.5);line-height:1.6;margin-bottom:18px}
-.cta-btn{display:inline-block;background:linear-gradient(135deg,#FF4D7D,#FF8FA3);
-  color:#fff;font-size:14px;font-weight:800;padding:13px 28px;
-  border-radius:12px;text-decoration:none}
+/* ── 응원 메시지 ── */
+.cheer-box{margin:20px 16px 0;
+  background:linear-gradient(135deg,rgba(255,77,125,.1),rgba(255,143,163,.05));
+  border:1px solid rgba(255,77,125,.2);border-radius:18px;padding:22px 20px;
+  display:flex;gap:14px;align-items:flex-start}
+.cheer-icon{font-size:26px;flex-shrink:0}
+.cheer-head{font-size:16px;font-weight:800;color:#fff;margin-bottom:5px;line-height:1.3}
+.cheer-sub{font-size:13px;color:rgba(255,255,255,.5);line-height:1.6}
 
 /* 푸터 */
 .rp-footer{margin:28px 16px 0;text-align:center;font-size:11px;color:var(--t3);line-height:1.9}
@@ -4724,7 +4684,7 @@ body{background:var(--bg);color:var(--t1);font-family:'Pretendard',-apple-system
 </head>
 <body>
 
-<!-- 잠금 화면 -->
+<!-- 잠금 -->
 <div id="lockScreen">
   <div class="lock-logo">✦ 마이뷰티맵</div>
   <div class="lock-card">
@@ -4739,7 +4699,7 @@ body{background:var(--bg);color:var(--t1);font-family:'Pretendard',-apple-system
   </div>
 </div>
 
-<!-- 리포트 화면 (초기 hidden) -->
+<!-- 리포트 -->
 <div id="reportScreen" style="display:none">
 
   <div class="rp-header">
@@ -4749,119 +4709,55 @@ body{background:var(--bg);color:var(--t1);font-family:'Pretendard',-apple-system
     <div class="rp-period" id="rPeriod">📅 이번 달 기준</div>
   </div>
 
-  <!-- 이번달 성과 -->
-  <div class="sec">
-    <div class="sec-label">이번 달 성과</div>
+  <div class="divider"></div>
 
-    <div class="views-card">
-      <div class="views-label">👁 영상 조회수</div>
-      <div class="views-num"><span id="kViews">0</span><small>명</small></div>
-      <div class="views-badge badge-same" id="kViewsBadge">—</div>
-      <div class="views-sub" id="kViewsSub"></div>
+  <!-- 영상 조회수 (핵심) -->
+  <div class="hero-card">
+    <div class="hero-lbl">👁 이번 달 영상 조회수</div>
+    <div class="hero-num"><span id="kViews">0</span><small>명</small></div>
+    <div class="hero-badge badge-same" id="kViewsBadge">—</div>
+    <div class="hero-sub" id="kViewsSub"></div>
+  </div>
+
+  <!-- 예약+지도 합산 액션 -->
+  <div class="action-card">
+    <div class="action-left">
+      <div class="action-lbl">🎯 이번 달 고객 액션</div>
+      <div class="action-num"><span id="kAction">0</span><small>건</small></div>
+      <div class="action-sub">예약 버튼 + 지도 클릭 합산</div>
     </div>
-
-    <div class="mini-row">
-      <div class="mini-card mini-booking">
-        <div class="mini-icon">📅</div>
-        <div class="mini-num" id="kFeed">0</div>
-        <div class="mini-lbl">예약 버튼 클릭</div>
-        <div class="mini-delta delta-same" id="kFeedDelta"></div>
-      </div>
-      <div class="mini-card mini-map">
-        <div class="mini-icon">📍</div>
-        <div class="mini-num" id="kMap">0</div>
-        <div class="mini-lbl">지도 클릭</div>
-        <div class="mini-delta delta-same" id="kMapDelta"></div>
-      </div>
-    </div>
-
-    <div class="compare-strip">
-      <div>
-        <div class="cs-lbl">지난달 대비 영상조회</div>
-        <div class="cs-val cs-same" id="compareVal">—</div>
-      </div>
-      <div>
-        <div class="cs-prev-lbl">지난달</div>
-        <div class="cs-prev" id="lastMonthViews">—</div>
-      </div>
+    <div class="action-right">
+      <div class="action-prev-lbl">지난달</div>
+      <div class="action-prev" id="kActionPrev">—</div>
+      <div class="action-badge badge-same" id="kActionBadge"></div>
     </div>
   </div>
 
-  <!-- 30일 추이 -->
-  <div class="sec">
-    <div class="sec-label">최근 30일 추이</div>
+  <!-- 30일 추이 차트 -->
+  <div class="chart-section">
+    <div class="chart-title">📈 최근 30일 추이</div>
     <div class="chart-box">
-      <div class="chart-box-ttl">📈 일별 조회 · 예약 · 지도클릭</div>
       <canvas id="trendChart" height="160"></canvas>
       <div class="chart-legend">
         <div class="leg"><span class="leg-dot" style="background:#a78bfa"></span>영상조회</div>
-        <div class="leg"><span class="leg-dot" style="background:#38bdf8"></span>예약클릭</div>
-        <div class="leg"><span class="leg-dot" style="background:#34d399"></span>지도클릭</div>
+        <div class="leg"><span class="leg-dot" style="background:#34d399"></span>고객액션</div>
       </div>
     </div>
   </div>
 
-  <!-- 출처별 조회 -->
-  <div class="sec" id="srcSection" style="display:none">
-    <div class="sec-label">어디서 발견했나요?</div>
-    <div class="src-grid">
-      <div class="src-card src-feed">
-        <div class="src-icon">📜</div>
-        <div class="src-num" id="sFeedNum">0</div>
-        <div class="src-lbl">피드 스크롤</div>
-        <div class="src-pct" style="color:#10b981" id="sFeedPct"></div>
-      </div>
-      <div class="src-card src-cat">
-        <div class="src-icon">📂</div>
-        <div class="src-num" id="sCatNum">0</div>
-        <div class="src-lbl">카탈로그</div>
-        <div class="src-pct" style="color:#f59e0b" id="sCatPct"></div>
-      </div>
-      <div class="src-card src-map">
-        <div class="src-icon">🗺</div>
-        <div class="src-num" id="sMapNum">0</div>
-        <div class="src-lbl">지도</div>
-        <div class="src-pct" style="color:#818cf8" id="sMapPct"></div>
-      </div>
-    </div>
-    <div class="src-bar-wrap">
-      <div class="src-bar-seg" id="srcBarFeed" style="background:#10b981;width:0%"></div>
-      <div class="src-bar-seg" id="srcBarCat"  style="background:#f59e0b;width:0%"></div>
-      <div class="src-bar-seg" id="srcBarMap"  style="background:#818cf8;width:0%"></div>
-    </div>
+  <!-- 누적 조회수 한줄 -->
+  <div class="total-bar">
+    <div class="total-lbl">📊 서비스 시작 이후 누적 조회수</div>
+    <div><span class="total-num" id="tViews">0</span><span class="total-unit">명</span></div>
   </div>
 
-  <!-- 전환율 -->
-  <div class="sec" id="cvrSection" style="display:none">
-    <div class="sec-label">영상 → 예약 전환율</div>
-    <div class="cvr-grid" id="cvrGrid"></div>
-    <div class="insight-box" id="cvrInsight" style="display:none"></div>
-  </div>
-
-  <!-- 누적 -->
-  <div class="sec">
-    <div class="sec-label">서비스 시작 이후 누적</div>
-    <div class="total-grid">
-      <div class="total-card">
-        <div class="total-num" id="tViews">0</div>
-        <div class="total-lbl">총 영상조회</div>
-      </div>
-      <div class="total-card">
-        <div class="total-num" id="tFeed">0</div>
-        <div class="total-lbl">총 예약클릭</div>
-      </div>
-      <div class="total-card">
-        <div class="total-num" id="tMap">0</div>
-        <div class="total-lbl">총 지도클릭</div>
-      </div>
+  <!-- 응원 메시지 -->
+  <div class="cheer-box" id="cheerBox">
+    <div class="cheer-icon" id="cheerIcon">💡</div>
+    <div>
+      <div class="cheer-head" id="cheerHead">—</div>
+      <div class="cheer-sub"  id="cheerSub">—</div>
     </div>
-  </div>
-
-  <!-- CTA -->
-  <div class="cta-box" id="ctaBox" style="display:none">
-    <div class="cta-head" id="ctaHead">마이뷰티맵과 함께 성장하세요</div>
-    <div class="cta-sub"  id="ctaSub">영상을 최신으로 업데이트하면 더 많이 노출돼요!</div>
-    <a class="cta-btn" href="/">🌸 마이뷰티맵 바로가기</a>
   </div>
 
   <div class="rp-footer">
@@ -4873,7 +4769,6 @@ body{background:var(--bg);color:var(--t1);font-family:'Pretendard',-apple-system
 <script>
 const TOKEN = '${token}';
 
-/* ── 인증 ── */
 async function doVerify() {
   const v = document.getElementById('phoneInput').value.trim();
   if (v.length !== 4) { document.getElementById('lockError').textContent = '4자리를 입력해주세요'; return; }
@@ -4894,20 +4789,18 @@ async function doVerify() {
   }
 }
 
-/* ── 헬퍼 ── */
 const fmt = n => (n||0).toLocaleString();
 
-function trendText(curr, prev) {
-  if (!prev) return { text:'—', cls:'delta-same' };
+function pctBadge(curr, prev) {
+  if (!prev) return { text:'첫 달 데이터', cls:'badge-same' };
   const p = Math.round(((curr-prev)/prev)*100);
-  if (p > 0) return { text:'▲ '+p+'% 지난달 대비', cls:'delta-up' };
-  if (p < 0) return { text:'▼ '+Math.abs(p)+'% 지난달 대비', cls:'delta-down' };
-  return { text:'→ 지난달과 동일', cls:'delta-same' };
+  if (p > 0) return { text:'▲ '+p+'% 지난달보다 상승', cls:'badge-up' };
+  if (p < 0) return { text:'▼ '+Math.abs(p)+'% 지난달보다 하락', cls:'badge-down' };
+  return { text:'→ 지난달과 동일', cls:'badge-same' };
 }
 
-/* ── 렌더 ── */
 function renderReport(d) {
-  document.getElementById('lockScreen').style.display  = 'none';
+  document.getElementById('lockScreen').style.display   = 'none';
   document.getElementById('reportScreen').style.display = 'block';
 
   const now = new Date();
@@ -4915,61 +4808,49 @@ function renderReport(d) {
   const lm  = d.lastMonth || {};
 
   /* 헤더 */
-  document.getElementById('rName').textContent  = d.shop.name;
-  document.getElementById('rCat').textContent   = d.shop.category + ' · ' + (d.shop.address||'').split(' ').slice(0,2).join(' ');
+  document.getElementById('rName').textContent   = d.shop.name;
+  document.getElementById('rCat').textContent    = d.shop.category + ' · ' + (d.shop.address||'').split(' ').slice(0,2).join(' ');
   document.getElementById('rPeriod').textContent = '📅 ' + now.getFullYear() + '년 ' + (now.getMonth()+1) + '월 기준';
 
-  /* 영상 조회수 */
-  const cPct = lm.views > 0 ? Math.round(((tm.views - lm.views) / lm.views) * 100) : null;
+  /* ── 영상 조회수 ── */
   document.getElementById('kViews').textContent = fmt(tm.views);
 
+  const vb = pctBadge(tm.views, lm.views);
   const badge = document.getElementById('kViewsBadge');
-  if (cPct === null)  { badge.textContent='첫 달 데이터';                     badge.className='views-badge badge-same'; }
-  else if (cPct > 0)  { badge.textContent='▲ '+cPct+'% 지난달보다 상승 🚀';  badge.className='views-badge badge-up';   }
-  else if (cPct < 0)  { badge.textContent='▼ '+Math.abs(cPct)+'% 지난달보다 하락'; badge.className='views-badge badge-down'; }
-  else                { badge.textContent='→ 지난달과 동일';                   badge.className='views-badge badge-same'; }
+  badge.textContent = vb.text; badge.className = 'hero-badge ' + vb.cls;
 
   document.getElementById('kViewsSub').textContent = tm.views > 0
-    ? '이번 달 내 영상을 시청한 사람 수예요'
+    ? '이번 달 내 영상을 시청한 잠재 고객 수예요'
     : '아직 이번 달 데이터가 쌓이는 중이에요';
 
-  /* 예약·지도 */
-  document.getElementById('kFeed').textContent = fmt(tm.feedSP);
-  document.getElementById('kMap').textContent  = fmt(tm.mapSP);
+  /* ── 고객 액션 (예약+지도 합산) ── */
+  const thisAction = (tm.feedSP||0) + (tm.mapSP||0);
+  const lastAction = (lm.feedSP||0) + (lm.mapSP||0);
+  document.getElementById('kAction').textContent    = fmt(thisAction);
+  document.getElementById('kActionPrev').textContent = fmt(lastAction) + '건';
 
-  const df = trendText(tm.feedSP, lm.feedSP);
-  const dm = trendText(tm.mapSP,  lm.mapSP);
-  const fdEl = document.getElementById('kFeedDelta');
-  fdEl.textContent = df.text; fdEl.className = 'mini-delta ' + df.cls;
-  const mpEl = document.getElementById('kMapDelta');
-  mpEl.textContent = dm.text; mpEl.className = 'mini-delta ' + dm.cls;
+  const ab = pctBadge(thisAction, lastAction);
+  const abadge = document.getElementById('kActionBadge');
+  abadge.textContent = ab.text; abadge.className = 'action-badge ' + ab.cls;
 
-  /* 전월 비교 */
-  const cEl = document.getElementById('compareVal');
-  if (cPct === null)  { cEl.textContent='첫 달 데이터';                        cEl.className='cs-val cs-same'; }
-  else if (cPct > 0)  { cEl.innerHTML='<span class="cs-up">▲ '+cPct+'%</span> 상승 🚀'; cEl.className='cs-val'; }
-  else if (cPct < 0)  { cEl.innerHTML='<span class="cs-down">▼ '+Math.abs(cPct)+'%</span> 하락'; cEl.className='cs-val'; }
-  else                { cEl.textContent='→ 동일'; cEl.className='cs-val cs-same'; }
-  document.getElementById('lastMonthViews').textContent = fmt(lm.views) + '명';
-
-  /* 30일 차트 */
+  /* ── 30일 차트 (조회 + 액션 합산) ── */
   const rows   = d.daily30 || [];
-  const labels = [], views = [], feeds = [], maps = [];
+  const labels = [], views = [], actions = [];
   rows.forEach(r => {
     const dt = new Date(r.d);
     labels.push((dt.getMonth()+1)+'/'+dt.getDate());
     views.push(parseInt(r.views)   || 0);
-    feeds.push(parseInt(r.feed_sp) || 0);
-    maps.push(parseInt(r.map_sp)   || 0);
+    actions.push((parseInt(r.feed_sp)||0) + (parseInt(r.map_sp)||0));
   });
   new Chart(document.getElementById('trendChart'), {
-    type:'line',
-    data:{ labels, datasets:[
-      { label:'영상조회', data:views, borderColor:'#a78bfa', backgroundColor:'rgba(167,139,250,.12)', tension:.4, fill:true, pointRadius:2, borderWidth:2 },
-      { label:'예약클릭', data:feeds, borderColor:'#38bdf8', backgroundColor:'rgba(56,189,248,.08)',  tension:.4, fill:true, pointRadius:2, borderWidth:2 },
-      { label:'지도클릭', data:maps,  borderColor:'#34d399', backgroundColor:'rgba(52,211,153,.07)',  tension:.4, fill:true, pointRadius:2, borderWidth:2 },
+    type: 'line',
+    data: { labels, datasets: [
+      { label:'영상조회', data:views,   borderColor:'#a78bfa', backgroundColor:'rgba(167,139,250,.12)',
+        tension:.4, fill:true, pointRadius:2, borderWidth:2 },
+      { label:'고객액션', data:actions, borderColor:'#34d399', backgroundColor:'rgba(52,211,153,.08)',
+        tension:.4, fill:true, pointRadius:2, borderWidth:2 },
     ]},
-    options:{
+    options: {
       responsive:true, maintainAspectRatio:true,
       plugins:{ legend:{ display:false } },
       scales:{
@@ -4979,76 +4860,33 @@ function renderReport(d) {
     }
   });
 
-  /* 출처별 조회 */
-  const fv = tm.feedView||0, cv = tm.catalogView||0, mv = tm.mapView||0;
-  const svTot = fv + cv + mv;
-  if (svTot > 0) {
-    document.getElementById('srcSection').style.display = '';
-    const pct = n => svTot > 0 ? Math.round(n/svTot*100)+'%' : '0%';
-    document.getElementById('sFeedNum').textContent = fmt(fv);
-    document.getElementById('sCatNum').textContent  = fmt(cv);
-    document.getElementById('sMapNum').textContent  = fmt(mv);
-    document.getElementById('sFeedPct').textContent = pct(fv);
-    document.getElementById('sCatPct').textContent  = pct(cv);
-    document.getElementById('sMapPct').textContent  = pct(mv);
-    document.getElementById('srcBarFeed').style.width = pct(fv);
-    document.getElementById('srcBarCat').style.width  = pct(cv);
-    document.getElementById('srcBarMap').style.width  = pct(mv);
-  }
-
-  /* 전환율 */
-  const vtF = tm.vtsFeed||0, vtC = tm.vtsCatalog||0, vtM = tm.vtsMap||0;
-  if (fv + cv + mv > 0) {
-    document.getElementById('cvrSection').style.display = '';
-    const cvrP = (view, conv) => view > 0 ? Math.round(conv/view*100) : null;
-    const pF = cvrP(fv,vtF), pC = cvrP(cv,vtC), pM = cvrP(mv,vtM);
-    const card = (icon, lbl, cls, p, conv, view) =>
-      '<div class="cvr-card '+cls+'">'
-      +'<div class="cvr-icon">'+icon+'</div>'
-      +'<div class="cvr-pct">'+(p!==null?p+'%':'—')+'</div>'
-      +'<div class="cvr-lbl">'+lbl+'</div>'
-      +'<div class="cvr-detail">'+conv+'명 / '+view+'명</div>'
-      +'</div>';
-    document.getElementById('cvrGrid').innerHTML =
-      card('📜','피드',    'cvr-feed',pF,vtF,fv)+
-      card('📂','카탈로그','cvr-cat', pC,vtC,cv)+
-      card('🗺', '지도',   'cvr-map', pM,vtM,mv);
-    const best = [{src:'피드',pct:pF},{src:'카탈로그',pct:pC},{src:'지도',pct:pM}]
-      .filter(x=>x.pct!==null).sort((a,b)=>b.pct-a.pct)[0];
-    if (best) {
-      const ins = document.getElementById('cvrInsight');
-      ins.innerHTML = '<strong>'+best.src+'</strong>에서 본 고객의 예약 전환율이 <strong>'+best.pct+'%</strong>로 가장 높아요.'
-        +(best.src==='지도'?     ' 지도로 찾아온 고객은 예약 의지가 강해요! 🗺':
-          best.src==='카탈로그'? ' 목적 있는 방문자 전환율이 높아요! 📂':
-                                  ' 피드에서도 예약으로 이어지고 있어요! 📜');
-      ins.style.display = '';
-    }
-  }
-
-  /* 누적 */
+  /* ── 누적 조회수 ── */
   document.getElementById('tViews').textContent = fmt(d.total.views);
-  document.getElementById('tFeed').textContent  = fmt(d.total.feedSP);
-  document.getElementById('tMap').textContent   = fmt(d.total.mapSP);
 
-  /* CTA */
-  const ctaBox = document.getElementById('ctaBox');
-  ctaBox.style.display = '';
-  const totalAct = (tm.views||0) + (tm.feedSP||0) + (tm.mapSP||0);
-  const headEl = document.getElementById('ctaHead');
-  const subEl  = document.getElementById('ctaSub');
+  /* ── 응원 메시지 ── */
+  const cPct = lm.views > 0 ? Math.round(((tm.views - lm.views) / lm.views) * 100) : null;
+  const totalAct = (tm.views||0) + thisAction;
+  let icon = '💡', head = '', sub = '';
+
   if (totalAct === 0) {
-    headEl.textContent = '아직 데이터가 쌓이는 중이에요 📊';
-    subEl.textContent  = '영상을 등록하면 더 많은 고객에게 노출돼요!';
-  } else if (cPct !== null && cPct >= 20) {
-    headEl.textContent = '이번 달 조회수가 급상승하고 있어요 🚀';
-    subEl.innerHTML    = '지난달 대비 <strong>+'+cPct+'%</strong> 상승! 이 흐름을 유지해보세요.';
-  } else if ((tm.feedSP||0) > 0) {
-    headEl.textContent = '예약 버튼이 클릭되고 있어요! 🎉';
-    subEl.innerHTML    = '이번 달 <strong>'+fmt(tm.feedSP)+'명</strong>이 예약 버튼을 눌렀어요.<br>영상을 업데이트하면 더 많은 전환으로 이어져요.';
+    icon = '🌱'; head = '데이터가 쌓이는 중이에요';
+    sub  = '곧 결과가 나타날 거예요. 영상을 최신으로 유지해보세요!';
+  } else if (cPct !== null && cPct >= 30) {
+    icon = '🚀'; head = '이번 달 조회수가 크게 올랐어요! +' + cPct + '%';
+    sub  = '지난달보다 훨씬 많은 잠재 고객이 업체를 발견하고 있어요.';
+  } else if (thisAction >= 5) {
+    icon = '🎉'; head = fmt(thisAction) + '명이 직접 행동했어요!';
+    sub  = '영상을 보고 예약 또는 지도를 클릭한 실질적인 관심 고객이에요.';
+  } else if ((tm.views||0) >= 20) {
+    icon = '📣'; head = fmt(tm.views) + '명이 내 영상을 봤어요';
+    sub  = '많은 잠재 고객이 관심을 보이고 있어요. 꾸준히 노출되는 중이에요.';
   } else {
-    headEl.textContent = '더 많은 고객과 연결되어보세요';
-    subEl.textContent  = '최신 영상을 등록하면 피드 노출이 늘어요!';
+    icon = '📈'; head = '꾸준히 노출되고 있어요';
+    sub  = '마이뷰티맵에서 업체 정보가 고객들에게 전달되고 있어요.';
   }
+  document.getElementById('cheerIcon').textContent = icon;
+  document.getElementById('cheerHead').textContent = head;
+  document.getElementById('cheerSub').textContent  = sub;
 }
 </script>
 </body>
