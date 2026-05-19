@@ -4896,135 +4896,161 @@ async function doVerify() {
 function fmt(n) { return (n||0).toLocaleString(); }
 
 function makeTrend(curr, prev) {
-  if (!prev) return { text: '지난달 데이터 없음', cls: 'kpi-same' };
+  if (!prev) return { text: '—', cls: 'delta-same' };
   const pct = Math.round(((curr - prev) / prev) * 100);
-  if (pct > 0)  return { text: '▲ ' + pct + '% 지난달 대비', cls: 'kpi-up' };
-  if (pct < 0)  return { text: '▼ ' + Math.abs(pct) + '% 지난달 대비', cls: 'kpi-down' };
-  return { text: '→ 지난달과 동일', cls: 'kpi-same' };
+  if (pct > 0)  return { text: '▲ ' + pct + '%', cls: 'delta-up' };
+  if (pct < 0)  return { text: '▼ ' + Math.abs(pct) + '%', cls: 'delta-down' };
+  return { text: '→ 동일', cls: 'delta-same' };
 }
 
 function renderReport(d) {
   document.getElementById('lockScreen').style.display = 'none';
   document.getElementById('reportScreen').style.display = 'block';
 
-  // 헤더
   const now = new Date();
+  const tm = d.thisMonth, lm = d.lastMonth;
+
+  // ── 헤더 ──
   document.getElementById('rShopName').textContent = d.shop.name;
   document.getElementById('rCategory').textContent = d.shop.category + ' · ' + (d.shop.address||'').split(' ').slice(0,2).join(' ');
   document.getElementById('rPeriod').textContent = '📅 ' + now.getFullYear() + '년 ' + (now.getMonth()+1) + '월 기준';
 
-  // ── 이번 달 핵심 지표 ──
-  const tm = d.thisMonth, lm = d.lastMonth;
-  const dv = makeTrend(tm.views,  lm.views);
+  // ── 영상 조회 하이라이트 ──
+  const cPct = lm.views > 0 ? Math.round(((tm.views - lm.views) / lm.views) * 100) : null;
+  document.getElementById('kViews').textContent = fmt(tm.views);
+  document.getElementById('kViewsSub').textContent = tm.views === 0
+    ? '이번 달 아직 데이터가 쌓이는 중이에요'
+    : '이번 달 내 영상을 시청한 사람 수예요';
+
+  const badgeEl = document.getElementById('kViewsBadge');
+  if (cPct === null) {
+    badgeEl.textContent = '첫 달 데이터';
+    badgeEl.className = 'hl-badge badge-same';
+  } else if (cPct > 0) {
+    badgeEl.textContent = '▲ ' + cPct + '% 지난달보다 상승 🚀';
+    badgeEl.className = 'hl-badge badge-up';
+  } else if (cPct < 0) {
+    badgeEl.textContent = '▼ ' + Math.abs(cPct) + '% 지난달보다 하락';
+    badgeEl.className = 'hl-badge badge-down';
+  } else {
+    badgeEl.textContent = '→ 지난달과 동일';
+    badgeEl.className = 'hl-badge badge-same';
+  }
+
+  // ── 예약 / 지도 / 순위 미니 카드 ──
+  document.getElementById('kFeed').textContent = fmt(tm.feedSP);
+  document.getElementById('kMap').textContent  = fmt(tm.mapSP);
+
   const df = makeTrend(tm.feedSP, lm.feedSP);
   const dm = makeTrend(tm.mapSP,  lm.mapSP);
 
-  // 영상 조회 (메인)
-  document.getElementById('kViews').textContent = fmt(tm.views);
-  const trendEl = document.getElementById('kViewsTrend');
-  trendEl.textContent = dv.text;
-  trendEl.className = 'kpi-main-trend ' + dv.cls;
-  document.getElementById('kViewsSub').textContent = tm.views > 0
-    ? '이번 달 ' + fmt(tm.views) + '명이 영상을 시청했어요'
-    : '아직 이번 달 데이터가 쌓이는 중이에요';
+  const setMiniDelta = (id, obj) => {
+    const el = document.getElementById(id);
+    el.textContent = obj.text;
+    el.className = 'mini-delta ' + obj.cls;
+  };
+  setMiniDelta('kFeedDelta', df);
+  setMiniDelta('kMapDelta',  dm);
 
-  // 예약·지도 클릭
-  document.getElementById('kFeed').textContent = fmt(tm.feedSP);
-  const fdEl = document.getElementById('kFeedDelta');
-  fdEl.textContent = df.text; fdEl.className = 'kpi-sub-delta ' + df.cls;
+  const rank = d.rank || 1, total = d.rankTotal || 1;
+  document.getElementById('kRankShort').textContent = rank + '위';
+  const rankDeltaEl = document.getElementById('kRankDelta');
+  if (rank === 1) rankDeltaEl.textContent = '🏆 1등!';
+  else if (rank <= Math.ceil(total * 0.3)) rankDeltaEl.textContent = '상위 ' + Math.round((rank/total)*100) + '%';
+  else rankDeltaEl.textContent = total + '개 중';
 
-  document.getElementById('kMap').textContent = fmt(tm.mapSP);
-  const mpEl = document.getElementById('kMapDelta');
-  mpEl.textContent = dm.text; mpEl.className = 'kpi-sub-delta ' + dm.cls;
-
-  // 전월 비교
-  const cPct = lm.views > 0 ? Math.round(((tm.views - lm.views) / lm.views) * 100) : null;
-  const cEl  = document.getElementById('compareVal');
-  if (cPct === null) { cEl.textContent = '첫 달 데이터'; cEl.className = 'cs-val cs-same'; }
-  else if (cPct > 0) { cEl.innerHTML = '<span class="cs-up">▲ ' + cPct + '%</span> 상승 🚀'; cEl.className = 'cs-val'; }
-  else if (cPct < 0) { cEl.innerHTML = '<span class="cs-down">▼ ' + Math.abs(cPct) + '%</span> 하락'; cEl.className = 'cs-val'; }
-  else { cEl.textContent = '→ 동일'; cEl.className = 'cs-val cs-same'; }
+  // ── 지난달 비교 카드 ──
+  const cEl = document.getElementById('compareVal');
+  if (cPct === null) {
+    cEl.textContent = '첫 달 데이터';
+    cEl.className = 'cc-val cc-same';
+  } else if (cPct > 0) {
+    cEl.innerHTML = '<span class="cc-up">▲ ' + cPct + '%</span> 상승 🚀';
+  } else if (cPct < 0) {
+    cEl.innerHTML = '<span class="cc-down">▼ ' + Math.abs(cPct) + '%</span> 하락';
+  } else {
+    cEl.textContent = '→ 동일';
+    cEl.className = 'cc-val cc-same';
+  }
   document.getElementById('lastMonthViews').textContent = fmt(lm.views) + '명';
 
-  // ── 30일 추이 차트 ──
-  const labels = [], views = [], feeds = [], maps = [];
-  (d.daily30 || []).forEach(r => {
-    const dt = new Date(r.d);
-    labels.push((dt.getMonth()+1) + '/' + dt.getDate());
-    views.push(parseInt(r.views)   || 0);
-    feeds.push(parseInt(r.feed_sp) || 0);
-    maps.push(parseInt(r.map_sp)   || 0);
-  });
-  new Chart(document.getElementById('trendChart'), {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [
-        { label:'영상조회', data:views, borderColor:'#a78bfa', backgroundColor:'rgba(167,139,250,.12)', tension:.4, fill:true, pointRadius:2, borderWidth:2 },
-        { label:'예약클릭', data:feeds, borderColor:'#38bdf8', backgroundColor:'rgba(56,189,248,.08)',  tension:.4, fill:true, pointRadius:2, borderWidth:2 },
-        { label:'지도클릭', data:maps,  borderColor:'#34d399', backgroundColor:'rgba(52,211,153,.07)',  tension:.4, fill:true, pointRadius:2, borderWidth:2 },
-      ]
-    },
-    options: {
-      responsive:true, maintainAspectRatio:true,
-      plugins:{ legend:{ display:false } },
-      scales:{
-        x:{ ticks:{ color:'#475569', font:{ size:9 }, maxTicksLimit:8 }, grid:{ color:'rgba(255,255,255,.04)' } },
-        y:{ ticks:{ color:'#475569', font:{ size:10 } }, grid:{ color:'rgba(255,255,255,.05)' }, min:0 }
-      }
-    }
-  });
+  // ── 순위 카드 ──
+  const medalEl = document.getElementById('rankBadge');
+  medalEl.textContent = rank + '위';
+  if (rank === 1) medalEl.className = 'rank-medal gold';
+  document.getElementById('rankMain').textContent = d.shop.category + ' 카테고리 ' + rank + '위 / ' + total + '개 업체';
+  const rankSubEl = document.getElementById('rankSub');
+  if (rank === 1) rankSubEl.textContent = '🏆 이번 달 1등! 최고예요';
+  else if (rank <= Math.ceil(total * 0.3)) rankSubEl.textContent = '✨ 상위 ' + Math.round((rank/total)*100) + '% 우수 업체';
+  else rankSubEl.textContent = '영상조회 기준';
+
+  // ── 30일 막대 그래프 ──
+  const rows = d.daily30 || [];
+  const maxV = Math.max(...rows.map(r => parseInt(r.views)||0), 1);
+  const barsWrap = document.getElementById('barsWrap');
+  if (rows.length === 0) {
+    barsWrap.innerHTML = '<div style="color:#ccc;font-size:12px;padding:20px;text-align:center;width:100%">아직 데이터가 없어요</div>';
+  } else {
+    barsWrap.innerHTML = rows.map(r => {
+      const dt = new Date(r.d);
+      const v  = parseInt(r.views) || 0;
+      const h  = Math.max(Math.round((v / maxV) * 76), 3);
+      const lbl = (dt.getMonth()+1) + '/' + dt.getDate();
+      return '<div class="bar-item" title="' + lbl + ' : ' + v + '명">'
+        + '<div class="bar-fill" style="height:' + h + 'px"></div>'
+        + '<div class="bar-lbl">' + lbl + '</div>'
+        + '</div>';
+    }).join('');
+  }
 
   // ── 출처별 영상조회 ──
   const fv = tm.feedView || 0, cv = tm.catalogView || 0, mv = tm.mapView || 0;
   const svTotal = fv + cv + mv;
-  const srcSec = document.getElementById('srcSection');
   if (svTotal > 0) {
-    srcSec.style.display = '';
-    const pct = (n) => svTotal > 0 ? Math.round(n / svTotal * 100) + '%' : '0%';
+    document.getElementById('srcSectionLabel').style.display = '';
+    document.getElementById('srcSection').style.display = '';
+    const pctNum = (n) => svTotal > 0 ? Math.round(n / svTotal * 100) : 0;
     document.getElementById('sFeedView').textContent = fmt(fv);
     document.getElementById('sCatView').textContent  = fmt(cv);
     document.getElementById('sMapView').textContent  = fmt(mv);
-    document.getElementById('sFeedPct').textContent  = pct(fv);
-    document.getElementById('sCatPct').textContent   = pct(cv);
-    document.getElementById('sMapPct').textContent   = pct(mv);
-    document.getElementById('srcBarWrap').innerHTML =
-      '<div class="src-bar-seg" style="width:'+pct(fv)+';background:#10b981"></div>' +
-      '<div class="src-bar-seg" style="width:'+pct(cv)+';background:#f59e0b"></div>' +
-      '<div class="src-bar-seg" style="width:'+pct(mv)+';background:#818cf8"></div>';
+    document.getElementById('sFeedPct').textContent  = pctNum(fv) + '%';
+    document.getElementById('sCatPct').textContent   = pctNum(cv) + '%';
+    document.getElementById('sMapPct').textContent   = pctNum(mv) + '%';
+    document.getElementById('srcBarFeed').style.width = pctNum(fv) + '%';
+    document.getElementById('srcBarCat').style.width  = pctNum(cv) + '%';
+    document.getElementById('srcBarMap').style.width  = pctNum(mv) + '%';
   }
 
   // ── 출처별 전환율 ──
   const vtF = tm.vtsFeed || 0, vtC = tm.vtsCatalog || 0, vtM = tm.vtsMap || 0;
-  const cvrSec = document.getElementById('cvrSection');
   if (fv + cv + mv > 0) {
-    cvrSec.style.display = '';
+    document.getElementById('cvrSectionLabel').style.display = '';
+    document.getElementById('cvrSection').style.display = '';
     const cvrPct = (view, conv) => view > 0 ? Math.round(conv / view * 100) : null;
     const pF = cvrPct(fv, vtF), pC = cvrPct(cv, vtC), pM = cvrPct(mv, vtM);
 
-    const cvrCard = (icon, lbl, cls, pct, conv, view, col) => {
-      const p = pct !== null ? pct + '%' : '—';
-      return '<div class="cvr-card ' + cls + '">'
-        + '<div class="cvr-icon">' + icon + '</div>'
-        + '<div class="cvr-pct">' + p + '</div>'
-        + '<div class="cvr-lbl">' + lbl + '</div>'
-        + '<div class="cvr-detail">' + conv + '명 / ' + view + '명</div>'
+    const cvrRow = (ico, name, detail, pctVal) => {
+      const p = pctVal !== null ? pctVal + '%' : '데이터 없음';
+      return '<div class="cvr-row">'
+        + '<div class="cvr-left"><div class="cvr-ico">' + ico + '</div>'
+        + '<div><div class="cvr-name">' + name + '</div>'
+        + '<div class="cvr-detail-txt">' + detail + '</div></div></div>'
+        + '<div class="cvr-pct-big">' + p + '</div>'
         + '</div>';
     };
-    document.getElementById('cvrGrid').innerHTML =
-      cvrCard('📜', '피드',     'cvr-feed', pF, vtF, fv, '#10b981') +
-      cvrCard('📂', '카탈로그', 'cvr-cat',  pC, vtC, cv, '#f59e0b') +
-      cvrCard('🗺', '지도',     'cvr-map',  pM, vtM, mv, '#818cf8');
+    document.getElementById('cvrRows').innerHTML =
+      cvrRow('📜', '피드 스크롤', vtF + '명 예약 / ' + fv + '명 시청', pF) +
+      cvrRow('📂', '카탈로그',    vtC + '명 예약 / ' + cv + '명 시청', pC) +
+      cvrRow('🗺️', '지도',        vtM + '명 예약 / ' + mv + '명 시청', pM);
 
-    const best = [{src:'피드',pct:pF},{src:'카탈로그',pct:pC},{src:'지도',pct:pM}]
+    const bestCvr = [{src:'피드',pct:pF},{src:'카탈로그',pct:pC},{src:'지도',pct:pM}]
       .filter(x => x.pct !== null).sort((a,b) => b.pct - a.pct)[0];
-    if (best) {
+    if (bestCvr) {
       const insEl = document.getElementById('cvrInsight');
-      const txtEl = document.getElementById('cvrInsightText');
-      txtEl.innerHTML = '<strong>' + best.src + '</strong>에서 본 고객의 예약 전환율이 <strong>' + best.pct + '%</strong>로 가장 높아요.'
-        + (best.src === '지도'     ? ' 지도로 찾아온 고객은 예약 의도가 강해요! 🗺' :
-           best.src === '카탈로그' ? ' 목적이 있는 카탈로그 방문자 전환율이 높아요! 📂' :
-                                     ' 피드에서도 예약으로 이어지고 있어요! 📜');
+      insEl.innerHTML = '<strong>' + bestCvr.src + '</strong>에서 본 고객이 예약 버튼을 가장 많이 눌러요 (<strong>' + bestCvr.pct + '%</strong>).'
+        + (bestCvr.src === '지도'     ? ' 지도로 찾아온 고객은 예약 의지가 강해요! 🗺️' :
+           bestCvr.src === '카탈로그' ? ' 목적 있는 방문자가 전환율이 높아요! 📂' :
+                                        ' 피드에서도 예약으로 이어지고 있어요! 📜');
       insEl.style.display = '';
     }
   }
@@ -5034,25 +5060,21 @@ function renderReport(d) {
   document.getElementById('tFeed').textContent  = fmt(d.total.feedSP);
   document.getElementById('tMap').textContent   = fmt(d.total.mapSP);
 
-  // ── CTA ──
-  const ctaBox = document.getElementById('ctaBox');
+  // ── AI 코멘트 ──
   const totalAct = tm.views + tm.feedSP + tm.mapSP;
-  ctaBox.style.display = '';
-  const ctaHeadEl = document.getElementById('ctaHeadline');
-  const ctaSubEl  = document.getElementById('ctaSub');
+  let comment = '';
   if (totalAct === 0) {
-    ctaHeadEl.textContent = '아직 데이터가 쌓이는 중이에요 📊';
-    ctaSubEl.textContent  = '영상을 등록하면 더 많은 고객에게 노출돼요!';
+    comment = '아직 이번 달 데이터가 쌓이는 중이에요. 조금만 기다려주세요! 😊';
+  } else if (rank === 1) {
+    comment = '<strong>' + d.shop.name + '</strong>은 이번 달 ' + d.shop.category + ' 카테고리 <strong>1위</strong>예요! 🏆 고객들의 관심이 가장 높은 업체입니다.';
   } else if (cPct !== null && cPct >= 20) {
-    ctaHeadEl.textContent = '이번 달 조회수가 급상승하고 있어요 🚀';
-    ctaSubEl.innerHTML    = '지난달 대비 <strong>+' + cPct + '%</strong> 상승! 이 흐름을 유지해보세요.';
-  } else if (tm.feedSP > 0) {
-    ctaHeadEl.textContent = '예약 버튼이 클릭되고 있어요! 🎉';
-    ctaSubEl.innerHTML    = '이번 달 <strong>' + fmt(tm.feedSP) + '명</strong>이 예약 버튼을 눌렀어요.<br>더 많은 전환을 위해 영상을 업데이트해보세요.';
+    comment = '이번 달 영상 조회가 지난달보다 <strong>+' + cPct + '%</strong> 늘었어요 🚀 좋은 흐름이에요!';
+  } else if (tm.views > 50) {
+    comment = '이번 달 <strong>' + fmt(tm.views) + '명</strong>이 영상을 봤어요. 예약 버튼을 잘 노출하면 더 많은 예약으로 이어질 수 있어요!';
   } else {
-    ctaHeadEl.textContent = '더 많은 고객과 연결되어보세요';
-    ctaSubEl.textContent  = '최신 영상을 등록하면 피드 노출이 늘어요!';
+    comment = '꾸준히 데이터가 쌓이고 있어요. 최신 영상을 올리면 더 많은 고객에게 노출돼요! 📈';
   }
+  document.getElementById('commentText').innerHTML = comment;
 }
 </script>
 </body>
