@@ -1689,12 +1689,12 @@ html,body{height:100%;background:var(--bg);color:#fff;
   display:none;}
 #mapScreen.active{display:block;}
 /* 쇼츠 릴스 스타일 */
-#honeyScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:var(--nav);
+#shortsScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:var(--nav);
   display:none;overflow-y:scroll;scroll-snap-type:y mandatory;
   background:#000;-webkit-overflow-scrolling:touch;}
-/* 꿀템 활성 시 광고 영역 없으므로 bottom = nav만 */
-#honeyScreen::-webkit-scrollbar{display:none;}
-#honeyScreen.active{display:block;}
+/* 숏폼 탭: 광고 영역 없으므로 bottom = nav만 */
+#shortsScreen::-webkit-scrollbar{display:none;}
+#shortsScreen.active{display:block;}
 #inquiryScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:calc(var(--ad) + var(--nav));
   overflow-y:auto;display:none;background:var(--bg);}
 #inquiryScreen.active{display:block;}
@@ -1795,12 +1795,8 @@ html,body{height:100%;background:var(--bg);color:#fff;
 .tab i{font-size:22px;transition:transform .2s}
 .tab.active{color:#fff}
 .tab.active i{color:var(--pink);transform:scale(1.1)}
-.tab-honey.active{color:#fbbf24 !important}
-.tab-honey.active i{color:#fbbf24 !important}
-
-/* 꿀템 피드 */
-/* 쇼츠 릴스 카드 */
-.honey-slide{
+/* ── 숏폼 탭 스타일 ── */
+.shorts-slide{
   position:relative;
   width:100%;
   height:100%;
@@ -1813,54 +1809,71 @@ html,body{height:100%;background:var(--bg);color:#fff;
   justify-content:center;
   overflow:hidden;
 }
-.honey-slide iframe{
+.shorts-slide iframe{
   position:absolute;inset:0;
   width:100%;height:100%;
   border:none;
   pointer-events:auto;
 }
-/* 파트너스 고지 배너 - 상단 */
-.honey-notice{
-  position:absolute;top:0;left:0;right:0;
-  background:rgba(0,0,0,.55);
-  backdrop-filter:blur(4px);
-  -webkit-backdrop-filter:blur(4px);
-  color:rgba(255,255,255,.7);
-  font-size:10px;font-weight:500;
-  text-align:center;
-  padding:6px 12px;
-  z-index:10;
-  pointer-events:none;
-  letter-spacing:-.1px;
-}
-/* 하단 오버레이: 제목 + 구매하기 */
-.honey-overlay{
+/* 하단 그라데이션 오버레이 */
+.shorts-overlay{
   position:absolute;bottom:0;left:0;right:0;
-  background:linear-gradient(transparent,rgba(0,0,0,.75) 40%);
-  padding:48px 16px 18px;
+  background:linear-gradient(transparent,rgba(0,0,0,.82) 35%);
+  padding:80px 16px 20px;
   z-index:10;
   pointer-events:none;
 }
-.honey-overlay-title{
-  font-size:14px;font-weight:800;color:#fff;
-  line-height:1.4;margin-bottom:12px;
-  text-shadow:0 1px 4px rgba(0,0,0,.6);
+/* 업체 카테고리 뱃지 */
+.shorts-cat{
+  display:inline-block;
+  background:rgba(255,77,125,.25);
+  border:1px solid rgba(255,77,125,.45);
+  color:#FF4D7D;
+  font-size:11px;font-weight:800;
+  padding:3px 10px;border-radius:20px;
+  margin-bottom:7px;
   pointer-events:none;
 }
-.honey-buy-btn{
-  display:flex;align-items:center;justify-content:center;gap:7px;
-  width:100%;
-  padding:13px 0;
-  border-radius:12px;
-  background:linear-gradient(135deg,#f59e0b,#fbbf24);
-  color:#000;font-size:15px;font-weight:900;
-  text-decoration:none;
-  pointer-events:auto;
-  box-shadow:0 4px 16px rgba(0,0,0,.35);
+/* 업체명 */
+.shorts-name{
+  font-size:18px;font-weight:900;color:#fff;
+  line-height:1.25;margin-bottom:5px;
+  text-shadow:0 2px 8px rgba(0,0,0,.7);
+  pointer-events:none;
 }
-.honey-buy-btn i{font-size:15px}
-.honey-empty{height:100%;display:flex;align-items:center;justify-content:center;
-  color:rgba(255,255,255,.4);font-size:15px;}
+/* 주소 */
+.shorts-addr{
+  font-size:12px;color:rgba(255,255,255,.65);
+  margin-bottom:16px;
+  display:flex;align-items:center;gap:5px;
+  pointer-events:none;
+}
+/* 예약 버튼 */
+.shorts-book-btn{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  width:100%;
+  padding:15px 0;
+  border-radius:14px;
+  background:linear-gradient(135deg,#FF4D7D,#FF8FA3);
+  color:#fff;font-size:16px;font-weight:900;
+  border:none;cursor:pointer;
+  font-family:inherit;
+  box-shadow:0 4px 20px rgba(255,77,125,.45);
+  pointer-events:auto;
+  letter-spacing:-.3px;
+}
+.shorts-book-btn i{font-size:16px}
+/* 영상 없는 슬라이드 배경 */
+.shorts-no-video{
+  width:100%;height:100%;
+  background:linear-gradient(135deg,#1a1a1a,#2a1a2a);
+  display:flex;align-items:center;justify-content:center;
+  font-size:48px;
+}
+.shorts-empty{
+  height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  color:rgba(255,255,255,.4);font-size:15px;gap:12px;
+}
 
 /* 피드 카드 */
 .fi{
@@ -2525,17 +2538,17 @@ html,body{height:100%;background:var(--bg);color:#fff;
 </div>
 
 <!-- 꿀템 스크린 -->
-<section id="honeyScreen">
-  <div id="honeyFeed" style="height:100%"></div>
+<section id="shortsScreen">
+  <div id="shortsFeed" style="height:100%;display:flex;flex-direction:column"></div>
 </section>
 
-<!-- 하단 탭바 -->
+<!-- 하단 탭바: 숏폼 → 영상 → 지도 → 입점 -->
 <nav class="tabbar">
-  <button class="tab active" id="tab-feed" onclick="switchTab('feed')">
-    <i class="fas fa-play-circle"></i>영상
+  <button class="tab active" id="tab-shorts" onclick="switchTab('shorts')">
+    <i class="fas fa-bolt"></i>숏폼
   </button>
-  <button class="tab tab-honey" id="tab-honey" onclick="switchTab('honey')">
-    <i class="fas fa-shopping-bag"></i>뷰티템
+  <button class="tab" id="tab-feed" onclick="switchTab('feed')">
+    <i class="fas fa-play-circle"></i>영상
   </button>
   <button class="tab" id="tab-map" onclick="switchTab('map')">
     <i class="fas fa-map-marker-alt"></i>지도
@@ -2624,7 +2637,7 @@ const CAT_CLASS = {
 
 // ── 탭 전환 ───────────────────────────────────────────────────────────────
 function switchTab(tab) {
-  ['feed','map','honey','inquiry'].forEach(t => {
+  ['shorts','feed','map','inquiry'].forEach(t => {
     const tabEl = document.getElementById('tab-'+t);
     const scrEl = document.getElementById(t+'Screen');
     if(tabEl) tabEl.classList.toggle('active', t===tab);
@@ -2644,38 +2657,30 @@ function switchTab(tab) {
     }, 300);
   }
   if (tab==='feed') closeMapPopup();
-  // 쿠팡 광고 배너: 꿀템 탭에서는 숨김 (꿀템 자체 구매버튼 사용), 다른 탭에서는 표시
+
+  // 쿠팡 광고 배너: 숏폼 탭에서는 숨김, 다른 탭에서는 표시
   const coupangAd = document.getElementById('coupang-ad');
-  if (coupangAd) coupangAd.style.display = (tab === 'honey') ? 'none' : '';
+  if (coupangAd) coupangAd.style.display = (tab === 'shorts') ? 'none' : '';
+
   // 검색바 placeholder·힌트 탭에 따라 변경
   const si = document.getElementById('searchInput');
   const sh = document.querySelector('.search-hint');
   if (si && sh) {
-    if (tab === 'honey') {
-      si.placeholder = '뷰티템 이름, 태그 검색...';
-      sh.textContent = '예) 마사지건  ·  두피케어  ·  에센스';
-    } else {
-      si.placeholder = '샵 이름, 지역, 태그 검색...';
-      sh.textContent = '예) 강남 마사지  ·  눈썹문신  ·  리프팅';
-    }
+    si.placeholder = '샵 이름, 지역, 태그 검색...';
+    sh.textContent = '예) 강남 마사지  ·  눈썹문신  ·  리프팅';
   }
 
-  if (tab==='honey') {
-    // 탭 버튼 클릭 = 인터랙션 → 소리 바로 허용
-    _honeyUnlocked = true;
-    // 오버레이 제거
-    const overlay = document.getElementById('honeyStartOverlay');
-    if (overlay) overlay.remove();
-    // 이미 로드됐으면 재진입 → 첫 슬라이드만 즉시 재생
-    if (_honeyLoaded && _honeyAllItems.length) {
-      requestAnimationFrame(() => requestAnimationFrame(() => honeyPlayFirst()));
+  if (tab==='shorts') {
+    // 숏폼 탭 진입 → 로드 & 재생
+    if (_shortsLoaded && _shortsItems.length) {
+      requestAnimationFrame(() => requestAnimationFrame(() => shortsPlayFirst()));
     } else {
-      loadHoney(_honeySearchQ);
+      loadShorts();
     }
   }
-  // 꿀템 탭 이탈 시 모든 영상 정지
-  if (tab !== 'honey') {
-    document.querySelectorAll('.honey-slide iframe').forEach(f => { f.src = ''; });
+  // 숏폼 탭 이탈 시 모든 영상 정지
+  if (tab !== 'shorts') {
+    document.querySelectorAll('.shorts-slide iframe').forEach(f => { f.src = 'about:blank'; });
   }
 }
 
@@ -2691,121 +2696,108 @@ document.getElementById('logoBtn').addEventListener('click', ()=>{
   }
 });
 
-// ── 🍯 꿀템 쇼츠 피드 ─────────────────────────────────────────────
-let _honeyLoaded   = false;
-let _honeyObserver = null;
-let _honeyUnlocked = false; // 사용자 인터랙션 허용 여부
-let _honeyAllItems = [];    // 전체 꿀템 캐시 (검색용)
-let _honeySearchQ  = '';    // 꿀템 검색어
+// ── ⚡ 숏폼 피드 ────────────────────────────────────────────────────────
+let _shortsLoaded   = false;
+let _shortsObserver = null;
+let _shortsItems    = [];   // 전체 업체 캐시
 
-// 꿀템 첫 슬라이드 즉시 재생 (타이밍 보장)
-function honeyPlayFirst() {
-  const screen = document.getElementById('honeyScreen');
+// 숏폼 첫 슬라이드 재생
+function shortsPlayFirst() {
+  const screen = document.getElementById('shortsScreen');
   if (!screen) return;
-  const first = screen.querySelector('.honey-slide');
+  const first = screen.querySelector('.shorts-slide');
   if (!first) return;
   const frame = first.querySelector('iframe');
   if (!frame) return;
-  // src가 비어있거나 현재 페이지 주소이면 즉시 재생
-  if (!frame.src || frame.src === '' || frame.src === window.location.href) {
-    frame.src = frame.dataset.srcUnmuted || '';
+  if (!frame.src || frame.src === 'about:blank' || frame.src === window.location.href) {
+    frame.src = frame.dataset.src || '';
   }
 }
 
-async function loadHoney(q) {
-  q = (q || '').trim().toLowerCase();
-  _honeySearchQ = q;
-  const screen = document.getElementById('honeyScreen');
-  const el     = document.getElementById('honeyFeed');
+async function loadShorts() {
+  const screen = document.getElementById('shortsScreen');
+  const el     = document.getElementById('shortsFeed');
+  if (!el) return;
 
-  // 전체 데이터 캐시가 없으면 fetch
-  if (!_honeyLoaded) {
-    _honeyLoaded = true;
-    el.innerHTML = '<div class="honey-empty">불러오는 중...</div>';
+  if (!_shortsLoaded) {
+    _shortsLoaded = true;
+    el.innerHTML = '<div class="shorts-empty">불러오는 중...</div>';
     try {
-      _honeyAllItems = await fetch('/api/honey').then(r=>r.json());
+      _shortsItems = await fetch('/api/shops').then(r => r.json());
     } catch(e) {
-      el.innerHTML = '<div class="honey-empty">불러오기 실패</div>';
-      _honeyLoaded = false;
+      el.innerHTML = '<div class="shorts-empty">불러오기 실패</div>';
+      _shortsLoaded = false;
       return;
     }
   }
 
-  // 검색 필터 (제목 · 태그)
-  const items = q
-    ? _honeyAllItems.filter(it =>
-        (it.title||'').toLowerCase().includes(q) ||
-        (it.description||'').toLowerCase().includes(q) ||
-        (it.tags||[]).some(t => t.toLowerCase().includes(q))
-      )
-    : _honeyAllItems;
+  // 영상(youtube_id)이 있는 업체만 필터
+  const items = _shortsItems.filter(s => s.youtube_id);
 
   if (!items.length) {
-    el.innerHTML = q
-      ? '<div class="honey-empty">🔍 &quot;' + q + '&quot; 검색 결과가 없어요</div>'
-      : '<div class="honey-empty">✨ 뷰티템을 준비 중입니다!</div>';
-    if (_honeyObserver) _honeyObserver.disconnect();
+    el.innerHTML = '<div class="shorts-empty">🎬 숏폼 영상을 준비 중입니다!</div>';
+    if (_shortsObserver) _shortsObserver.disconnect();
     return;
   }
 
   el.style.cssText = 'height:100%;display:flex;flex-direction:column;';
-  el.innerHTML = items.map(item => honeySlide(item)).join('');
-  // 스크롤 맨 위로
+  el.innerHTML = items.map(shop => shortsSlide(shop)).join('');
   screen.scrollTop = 0;
-  initHoneyObserver(screen);
-  // 첫 슬라이드 즉시 재생 (requestAnimationFrame으로 DOM 반영 후 실행)
-  requestAnimationFrame(() => requestAnimationFrame(() => honeyPlayFirst()));
+  initShortsObserver(screen);
+  requestAnimationFrame(() => requestAnimationFrame(() => shortsPlayFirst()));
 }
 
-function honeySlide(item) {
-  const ytId       = item.youtube_id || '';
-  const srcMuted   = ytId ? 'https://www.youtube.com/embed/'+ytId+'?autoplay=1&mute=1&loop=1&playlist='+ytId+'&rel=0&playsinline=1&controls=1' : '';
-  const srcUnmuted = ytId ? 'https://www.youtube.com/embed/'+ytId+'?autoplay=1&mute=0&loop=1&playlist='+ytId+'&rel=0&playsinline=1&controls=1' : '';
-  // coupang_url이 있으면 해당 링크로, 없으면 버튼 자체를 숨김
-  const buyBtn = item.coupang_url
-    ? '<a href="'+item.coupang_url+'" target="_blank" rel="noopener sponsored" class="honey-buy-btn" onclick="trackHoneyCta('+item.id+')">' +
-        '<i class="fas fa-shopping-bag"></i>쿠팡 구매하기' +
-      '</a>'
+function shortsSlide(shop) {
+  const ytId = shop.youtube_id || '';
+  const src  = ytId
+    ? 'https://www.youtube.com/embed/' + ytId + '?autoplay=1&mute=0&loop=1&playlist=' + ytId + '&rel=0&playsinline=1&controls=1'
     : '';
-  return '<div class="honey-slide" id="hslide-'+item.id+'" data-ytid="'+ytId+'">' +
-    '<div class="honey-notice">이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</div>' +
+  const cat  = shop.category || '';
+  const name = shop.name || '';
+  const addr = shop.address || '';
+
+  return (
+    '<div class="shorts-slide" data-shop-id="' + shop.id + '">' +
     (ytId
-      ? '<iframe id="hframe-'+item.id+'" src=""' +
-          ' data-src-muted="'+srcMuted+'"' +
-          ' data-src-unmuted="'+srcUnmuted+'"' +
+      ? '<iframe src="about:blank" data-src="' + src + '"' +
           ' allow="autoplay;encrypted-media;fullscreen" allowfullscreen playsinline></iframe>'
-      : '') +
-    '<div class="honey-overlay">' +
-      '<div class="honey-overlay-title">'+item.title+'</div>' +
-      buyBtn +
+      : '<div class="shorts-no-video"></div>') +
+    '<div class="shorts-overlay">' +
+      (cat ? '<span class="shorts-cat">' + cat + '</span>' : '') +
+      '<div class="shorts-name">' + name + '</div>' +
+      (addr ? '<div class="shorts-addr"><i class="fas fa-map-marker-alt"></i> ' + addr + '</div>' : '') +
+      '<button class="shorts-book-btn" onclick="shortsOpenBook(' + JSON.stringify(shop).replace(/"/g,'&quot;') + ')">' +
+        '<i class="fas fa-calendar-check"></i>예약하기' +
+      '</button>' +
     '</div>' +
-  '</div>';
+    '</div>'
+  );
 }
 
-function initHoneyObserver(screen) {
-  if (_honeyObserver) _honeyObserver.disconnect();
-  _honeyObserver = new IntersectionObserver(entries => {
+function shortsOpenBook(shop) {
+  // 기존 바텀시트 재활용: curShop 세팅 후 openInapp()
+  curShop = shop;
+  openInapp(shop);
+}
+
+function initShortsObserver(screen) {
+  if (_shortsObserver) _shortsObserver.disconnect();
+  _shortsObserver = new IntersectionObserver(entries => {
     entries.forEach(entry => {
       const slide = entry.target;
       const frame = slide.querySelector('iframe');
       if (!frame) return;
       if (entry.isIntersecting) {
-        // 진입: 항상 소리 있게 재생 (탭 버튼 클릭이 인터랙션)
-        if (!frame.src || frame.src === window.location.href) {
-          frame.src = frame.dataset.srcUnmuted;
+        if (!frame.src || frame.src === 'about:blank' || frame.src === window.location.href) {
+          frame.src = frame.dataset.src || '';
         }
       } else {
-        // 이탈: 정지
-        frame.src = '';
+        frame.src = 'about:blank';
       }
     });
   }, { root: screen, threshold: 0.6 });
 
-  document.querySelectorAll('.honey-slide').forEach(s => _honeyObserver.observe(s));
-}
-
-function trackHoneyCta(id) {
-  fetch('/api/track/honey-cta/'+id, {method:'POST'}).catch(()=>{});
+  document.querySelectorAll('.shorts-slide').forEach(s => _shortsObserver.observe(s));
 }
 
 function showAdminPicker() {
@@ -3035,7 +3027,7 @@ function toggleSearch() {
 }
 
 function getActiveTab() {
-  if (document.getElementById('honeyScreen').classList.contains('active')) return 'honey';
+  if (document.getElementById('shortsScreen').classList.contains('active')) return 'shorts';
   if (document.getElementById('mapScreen').classList.contains('active'))   return 'map';
   if (document.getElementById('inquiryScreen').classList.contains('active')) return 'inquiry';
   return 'feed';
@@ -3047,10 +3039,10 @@ function onSearchInput(val) {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(() => {
     const activeTab = getActiveTab();
-    if (activeTab === 'honey') {
-      loadHoney(searchQ);
-    } else if (activeTab === 'map') {
+    if (activeTab === 'map') {
       loadMapShops(mapCat, nearbyOn, searchQ);
+    } else if (activeTab === 'shorts') {
+      // 숏폼 탭은 검색 미지원 (업체 전체 피드)
     } else {
       loadFeed(feedCat, searchQ);
     }
@@ -3063,10 +3055,10 @@ function clearSearch() {
   if (input) input.value = '';
   document.getElementById('searchClear').classList.remove('show');
   const activeTab = getActiveTab();
-  if (activeTab === 'honey') {
-    loadHoney('');
-  } else if (activeTab === 'map') {
+  if (activeTab === 'map') {
     loadMapShops(mapCat, nearbyOn, '');
+  } else if (activeTab === 'shorts') {
+    // 숏폼은 검색 미지원
   } else {
     loadFeed(feedCat, '');
   }
