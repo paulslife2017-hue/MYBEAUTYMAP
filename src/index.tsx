@@ -3004,17 +3004,57 @@ function closeShortsSheet() {
 
 function shortsGoNaver() {
   if (!_shortsBookShop) return;
-  if (_shortsBookShop.smart_place_url) {
-    window.open(_shortsBookShop.smart_place_url, '_blank', 'noopener');
+  // 바텀시트 먼저 닫기
+  closeShortsSheet();
+  const shop = _shortsBookShop;
+  if (shop.smart_place_url) {
+    // 인앱 iframe 모달로 열기 (영상탭과 동일)
+    setTimeout(() => {
+      curShop = shop;
+      const name = shop.name || '';
+      document.getElementById('rsvTitle').textContent = name + ' 예약하기';
+      document.getElementById('rsvExtBtn').onclick = () =>
+        window.open(shop.smart_place_url, '_blank', 'noopener,noreferrer');
+      const frame   = document.getElementById('rsvFrame');
+      const loading = document.getElementById('rsvLoading');
+      frame.src = '';
+      loading.classList.remove('hide');
+      document.getElementById('rsvDim').classList.add('show');
+      document.getElementById('rsvModal').classList.add('show');
+      document.body.style.overflow = 'hidden';
+      fetch('/api/resolve-naver?url=' + encodeURIComponent(shop.smart_place_url))
+        .then(r => r.json())
+        .then(d => { frame.src = d.resolved; frame.onload = () => loading.classList.add('hide'); })
+        .catch(() => { frame.src = shop.smart_place_url; frame.onload = () => loading.classList.add('hide'); });
+    }, 400); // 바텀시트 닫힘 애니메이션(380ms) 후 열기
   } else {
+    // 예약링크 없으면 네이버 지도 인앱 검색
     shortsGoSearch();
   }
 }
 
 function shortsGoSearch() {
   if (!_shortsBookShop) return;
-  const q = encodeURIComponent(_shortsBookShop.name || '');
-  window.open('https://map.naver.com/p/search/' + q, '_blank', 'noopener');
+  // 바텀시트 먼저 닫기
+  closeShortsSheet();
+  const shop = _shortsBookShop;
+  const q = encodeURIComponent(shop.name || '');
+  const searchUrl = 'https://map.naver.com/p/search/' + q;
+  setTimeout(() => {
+    // 인앱 iframe 모달로 열기
+    document.getElementById('rsvTitle').textContent = (shop.name || '') + ' 지도 검색';
+    document.getElementById('rsvExtBtn').onclick = () =>
+      window.open(searchUrl, '_blank', 'noopener,noreferrer');
+    const frame   = document.getElementById('rsvFrame');
+    const loading = document.getElementById('rsvLoading');
+    frame.src = '';
+    loading.classList.remove('hide');
+    document.getElementById('rsvDim').classList.add('show');
+    document.getElementById('rsvModal').classList.add('show');
+    document.body.style.overflow = 'hidden';
+    frame.src = searchUrl;
+    frame.onload = () => loading.classList.add('hide');
+  }, 400);
 }
 
 function initShortsObserver(screen) {
