@@ -2714,41 +2714,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
     allowfullscreen></iframe>
 </div>
 
-<!-- 숏폼 전용 예약 바텀시트 -->
-<div id="shortsDim" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:600;backdrop-filter:blur(4px)" onclick="closeShortsSheet()"></div>
-<div id="shortsSheet" style="display:none;position:fixed;left:0;right:0;bottom:0;z-index:601;
-  background:#111;border-radius:20px 20px 0 0;padding:20px 20px 36px;
-  transform:translateY(100%);transition:transform .35s cubic-bezier(.32,1,.23,1)">
-  <div style="width:40px;height:4px;background:rgba(255,255,255,.15);border-radius:2px;margin:0 auto 18px"></div>
-  <!-- 썸네일 + 업체 정보 -->
-  <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px">
-    <img id="ssThumb" src="" alt="" style="width:72px;height:72px;object-fit:cover;border-radius:12px;background:#222;flex-shrink:0"/>
-    <div style="flex:1;min-width:0">
-      <div id="ssCat" style="font-size:11px;font-weight:800;color:var(--pink);margin-bottom:4px"></div>
-      <div id="ssName" style="font-size:17px;font-weight:900;color:#fff;margin-bottom:4px;line-height:1.2"></div>
-      <div id="ssAddr" style="font-size:12px;color:rgba(255,255,255,.45);display:flex;align-items:center;gap:4px">
-        <i class="fas fa-map-marker-alt" style="color:rgba(255,255,255,.3)"></i><span></span>
-      </div>
-    </div>
-  </div>
-  <!-- 버튼들 -->
-  <div style="display:flex;flex-direction:column;gap:10px">
-    <button id="ssNaverBtn" onclick="shortsGoNaver()"
-      style="display:flex;align-items:center;justify-content:center;gap:8px;
-        width:100%;padding:15px;border-radius:14px;border:none;cursor:pointer;font-family:inherit;
-        background:linear-gradient(135deg,#FF4D7D,#FF8FA3);color:#fff;font-size:16px;font-weight:900;
-        box-shadow:0 4px 20px rgba(255,77,125,.4)">
-      <i class="fas fa-calendar-check"></i>네이버 예약하기
-    </button>
-    <button onclick="shortsGoSearch()"
-      style="display:flex;align-items:center;justify-content:center;gap:8px;
-        width:100%;padding:13px;border-radius:14px;border:1.5px solid rgba(255,255,255,.12);
-        background:rgba(255,255,255,.06);color:rgba(255,255,255,.7);font-size:14px;font-weight:700;
-        cursor:pointer;font-family:inherit">
-      <i class="fas fa-search"></i>네이버 지도에서 찾기
-    </button>
-  </div>
-</div>
+
 
 <script>
 // ── 전역 ──────────────────────────────────────────────────────────────────
@@ -2945,116 +2911,13 @@ function shortsSlide(shop) {
 }
 
 function shortsOpenBook(shop) {
-  openShortsSheet(shop);
-}
-
-// ── 숏폼 전용 바텀시트 ────────────────────────────────────────────────────────
-let _shortsBookShop = null;
-
-function openShortsSheet(shop) {
-  _shortsBookShop = shop;
-  const ytId = shop.youtube_id || '';
-  // 썸네일
-  const thumb = document.getElementById('ssThumb');
-  if (thumb) thumb.src = ytId ? 'https://img.youtube.com/vi/' + ytId + '/mqdefault.jpg' : '';
-  // 카테고리
-  const cat = document.getElementById('ssCat');
-  if (cat) cat.textContent = shop.category || '';
-  // 업체명
-  const name = document.getElementById('ssName');
-  if (name) name.textContent = shop.name || '';
-  // 주소
-  const addr = document.getElementById('ssAddr');
-  if (addr) {
-    const span = addr.querySelector('span');
-    if (span) span.textContent = shop.address || '';
-  }
-  // 네이버 예약 버튼: smart_place_url 있으면 활성, 없으면 반투명
-  const naverBtn = document.getElementById('ssNaverBtn');
-  if (naverBtn) {
-    if (shop.smart_place_url) {
-      naverBtn.style.opacity = '1';
-      naverBtn.style.cursor = 'pointer';
-    } else {
-      naverBtn.style.opacity = '.45';
-      naverBtn.style.cursor = 'default';
-    }
-  }
-  // 딤 + 시트 표시
-  const dim = document.getElementById('shortsDim');
-  const sheet = document.getElementById('shortsSheet');
-  if (dim) dim.style.display = 'block';
-  if (sheet) {
-    sheet.style.display = 'block';
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => { sheet.style.transform = 'translateY(0)'; });
-    });
-  }
-}
-
-function closeShortsSheet() {
-  const sheet = document.getElementById('shortsSheet');
-  if (sheet) sheet.style.transform = 'translateY(100%)';
-  setTimeout(() => {
-    if (sheet) sheet.style.display = 'none';
-    const dim = document.getElementById('shortsDim');
-    if (dim) dim.style.display = 'none';
-  }, 380);
-}
-
-function shortsGoNaver() {
-  if (!_shortsBookShop) return;
-  // 바텀시트 먼저 닫기
-  closeShortsSheet();
-  const shop = _shortsBookShop;
-  if (shop.smart_place_url) {
-    // 인앱 iframe 모달로 열기 (영상탭과 동일)
-    setTimeout(() => {
-      curShop = shop;
-      const name = shop.name || '';
-      document.getElementById('rsvTitle').textContent = name + ' 예약하기';
-      document.getElementById('rsvExtBtn').onclick = () =>
-        window.open(shop.smart_place_url, '_blank', 'noopener,noreferrer');
-      const frame   = document.getElementById('rsvFrame');
-      const loading = document.getElementById('rsvLoading');
-      frame.src = '';
-      loading.classList.remove('hide');
-      document.getElementById('rsvDim').classList.add('show');
-      document.getElementById('rsvModal').classList.add('show');
-      document.body.style.overflow = 'hidden';
-      fetch('/api/resolve-naver?url=' + encodeURIComponent(shop.smart_place_url))
-        .then(r => r.json())
-        .then(d => { frame.src = d.resolved; frame.onload = () => loading.classList.add('hide'); })
-        .catch(() => { frame.src = shop.smart_place_url; frame.onload = () => loading.classList.add('hide'); });
-    }, 400); // 바텀시트 닫힘 애니메이션(380ms) 후 열기
-  } else {
-    // 예약링크 없으면 네이버 지도 인앱 검색
-    shortsGoSearch();
-  }
-}
-
-function shortsGoSearch() {
-  if (!_shortsBookShop) return;
-  // 바텀시트 먼저 닫기
-  closeShortsSheet();
-  const shop = _shortsBookShop;
-  const q = encodeURIComponent(shop.name || '');
-  const searchUrl = 'https://map.naver.com/p/search/' + q;
-  setTimeout(() => {
-    // 인앱 iframe 모달로 열기
-    document.getElementById('rsvTitle').textContent = (shop.name || '') + ' 지도 검색';
-    document.getElementById('rsvExtBtn').onclick = () =>
-      window.open(searchUrl, '_blank', 'noopener,noreferrer');
-    const frame   = document.getElementById('rsvFrame');
-    const loading = document.getElementById('rsvLoading');
-    frame.src = '';
-    loading.classList.remove('hide');
-    document.getElementById('rsvDim').classList.add('show');
-    document.getElementById('rsvModal').classList.add('show');
-    document.body.style.overflow = 'hidden';
-    frame.src = searchUrl;
-    frame.onload = () => loading.classList.add('hide');
-  }, 400);
+  // 영상탭과 동일: curShop 세팅 후 바로 인앱 모달 열기
+  if (!shop.smart_place_url) { showToast('예약 링크가 없어요'); return; }
+  curShop = {
+    name: shop.name || '',
+    smartPlaceUrl: shop.smart_place_url || ''
+  };
+  openInapp();
 }
 
 function initShortsObserver(screen) {
