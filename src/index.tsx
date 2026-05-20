@@ -260,6 +260,19 @@ async function runMigrations() {
     try {
       await sql`ALTER TABLE honey_items ADD COLUMN IF NOT EXISTS coupang_url2 TEXT NOT NULL DEFAULT ''`
     } catch (_) {}
+    // 숏폼 전용 테이블
+    try {
+      await sql`CREATE TABLE IF NOT EXISTS shorts_items (
+        id           SERIAL PRIMARY KEY,
+        name         TEXT    NOT NULL DEFAULT '',
+        category     TEXT    NOT NULL DEFAULT '',
+        address      TEXT    NOT NULL DEFAULT '',
+        youtube_id   TEXT    NOT NULL DEFAULT '',
+        sort_order   INTEGER NOT NULL DEFAULT 0,
+        active       BOOLEAN NOT NULL DEFAULT true,
+        created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`
+    } catch (_) {}
     _migrationDone = true
   })()
   return _migrationPromise
@@ -1051,6 +1064,59 @@ app.post('/api/admin/upload-thumbnail', async (c) => {
   if (!dataUrl || !shopId) return c.json({ error: 'required' }, 400)
   await sql`UPDATE shops SET thumbnail = ${dataUrl} WHERE id = ${shopId}`
   return c.json({ ok: true, url: dataUrl })
+})
+
+// ══════════════════════════════════════════════════════════════════════════
+// ⚡ 숏폼 API
+// ══════════════════════════════════════════════════════════════════════════
+
+// 목록 조회 (사용자 - 활성 항목만)
+app.get('/api/shorts', async (c) => {
+  const rows = await sql`
+    SELECT * FROM shorts_items WHERE active = true ORDER BY sort_order ASC, id DESC
+  `
+  return c.json(rows)
+})
+
+// 전체 목록 (관리자)
+app.get('/api/admin/shorts', async (c) => {
+  const rows = await sql`SELECT * FROM shorts_items ORDER BY sort_order ASC, id DESC`
+  return c.json(rows)
+})
+
+// 등록
+app.post('/api/admin/shorts', async (c) => {
+  const b = await c.req.json()
+  const rows = await sql`
+    INSERT INTO shorts_items (name, category, address, youtube_id, sort_order, active)
+    VALUES (${b.name||''}, ${b.category||''}, ${b.address||''}, ${b.youtubeId||''}, ${b.sortOrder||0}, ${b.active!==false})
+    RETURNING *
+  `
+  return c.json(rows[0])
+})
+
+// 수정
+app.put('/api/admin/shorts/:id', async (c) => {
+  const id = +c.req.param('id')
+  const b  = await c.req.json()
+  const rows = await sql`
+    UPDATE shorts_items SET
+      name       = ${b.name||''},
+      category   = ${b.category||''},
+      address    = ${b.address||''},
+      youtube_id = ${b.youtubeId||''},
+      sort_order = ${b.sortOrder||0},
+      active     = ${b.active!==false}
+    WHERE id = ${id} RETURNING *
+  `
+  return c.json(rows[0])
+})
+
+// 삭제
+app.delete('/api/admin/shorts/:id', async (c) => {
+  const id = +c.req.param('id')
+  await sql`DELETE FROM shorts_items WHERE id = ${id}`
+  return c.json({ ok: true })
 })
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -2542,12 +2608,9 @@ html,body{height:100%;background:var(--bg);color:#fff;
   <div id="shortsFeed" style="height:100%;display:flex;flex-direction:column"></div>
 </section>
 
-<!-- 하단 탭바: 숏폼 → 영상 → 지도 → 입점 -->
+<!-- 하단 탭바: 영상 → 지도 → 입점 → 숏폼 -->
 <nav class="tabbar">
-  <button class="tab active" id="tab-shorts" onclick="switchTab('shorts')">
-    <i class="fas fa-bolt"></i>숏폼
-  </button>
-  <button class="tab" id="tab-feed" onclick="switchTab('feed')">
+  <button class="tab active" id="tab-feed" onclick="switchTab('feed')">
     <i class="fas fa-play-circle"></i>영상
   </button>
   <button class="tab" id="tab-map" onclick="switchTab('map')">
@@ -2555,6 +2618,9 @@ html,body{height:100%;background:var(--bg);color:#fff;
   </button>
   <button class="tab" id="tab-inquiry" onclick="switchTab('inquiry')">
     <i class="fas fa-store"></i>입점문의
+  </button>
+  <button class="tab" id="tab-shorts" onclick="switchTab('shorts')">
+    <i class="fas fa-bolt"></i>숏폼
   </button>
 </nav>
 
@@ -2637,7 +2703,7 @@ const CAT_CLASS = {
 
 // ── 탭 전환 ───────────────────────────────────────────────────────────────
 function switchTab(tab) {
-  ['shorts','feed','map','inquiry'].forEach(t => {
+  ['feed','map','inquiry','shorts'].forEach(t => {
     const tabEl = document.getElementById('tab-'+t);
     const scrEl = document.getElementById(t+'Screen');
     if(tabEl) tabEl.classList.toggle('active', t===tab);
@@ -2723,7 +2789,7 @@ async function loadShorts() {
     _shortsLoaded = true;
     el.innerHTML = '<div class="shorts-empty">불러오는 중...</div>';
     try {
-      _shortsItems = await fetch('/api/shops').then(r => r.json());
+      _shortsItems = await fetch('/api/shorts').then(r => r.json());
     } catch(e) {
       el.innerHTML = '<div class="shorts-empty">불러오기 실패</div>';
       _shortsLoaded = false;
@@ -2731,8 +2797,7 @@ async function loadShorts() {
     }
   }
 
-  // 영상(youtube_id)이 있는 업체만 필터
-  const items = _shortsItems.filter(s => s.youtube_id);
+  const items = _shortsItems;
 
   if (!items.length) {
     el.innerHTML = '<div class="shorts-empty">🎬 숏폼 영상을 준비 중입니다!</div>';
@@ -5302,8 +5367,8 @@ body{font-family:'Pretendard',sans-serif;background:var(--bg);color:var(--t1);mi
   <button class="tabbtn" id="tab-cal" onclick="switchTab('cal')">
     <i class="fas fa-calendar-alt"></i>달력
   </button>
-  <button class="tabbtn" id="tab-honey-admin" onclick="switchTab('honey-admin')">
-    ✨뷰티템
+  <button class="tabbtn" id="tab-shorts-admin" onclick="switchTab('shorts-admin')">
+    <i class="fas fa-bolt" style="font-size:11px"></i>숏폼
   </button>
 </div>
 
@@ -5314,7 +5379,7 @@ body{font-family:'Pretendard',sans-serif;background:var(--bg);color:var(--t1);mi
   <div id="panel-pay"         style="display:none"></div>
   <div id="panel-inq"         style="display:none"></div>
   <div id="panel-cal"         style="display:none"></div>
-  <div id="panel-honey-admin" style="display:none"></div>
+  <div id="panel-shorts-admin" style="display:none"></div>
 </div>
 
 <!-- 업체 추가/수정 모달 -->
@@ -5466,7 +5531,7 @@ let _stats = null, _dvRows = [], _chartMode = 'view', _rankMode = 'today', _insi
 // ── 탭 전환
 function switchTab(t) {
   curTab = t;
-  ['stats','shops','pay','inq','cal','honey-admin'].forEach(x => {
+  ['stats','shops','pay','inq','cal','shorts-admin'].forEach(x => {
     const tabEl = document.getElementById('tab-'+x);
     const panEl = document.getElementById('panel-'+x);
     if (tabEl) tabEl.classList.toggle('on', x===t);
@@ -5477,7 +5542,7 @@ function switchTab(t) {
   if (t==='inq') loadInquiries();
   if (t==='pay') renderPayTab();
   if (t==='cal') renderCalendar();
-  if (t==='honey-admin') loadHoneyAdmin();
+  if (t==='shorts-admin') loadShortsAdmin();
 }
 
 // ── 토스트
@@ -5495,87 +5560,106 @@ function toast(msg) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// 🍯 관리자 꿀템 관리
+// ⚡ 관리자 숏폼 관리
 // ══════════════════════════════════════════════════════════════════════════
-let _honeyItems = [];
-let _honeyEditId = null;
+let _shortsAdminItems = [];
+let _shortsAdminEditId = null;
 
-async function loadHoneyAdmin() {
-  const p = document.getElementById('panel-honey-admin');
+const CAT_OPTIONS = ['마사지','헤드스파','피부관리','헤어','메이크업','왁싱','반영구','병원','그외'];
+
+async function loadShortsAdmin() {
+  const p = document.getElementById('panel-shorts-admin');
   p.innerHTML = '<div style="padding:20px;text-align:center;color:#64748b">불러오는 중...</div>';
-  _honeyItems = await fetch('/api/admin/honey').then(r=>r.json());
-  renderHoneyAdmin();
+  _shortsAdminItems = await fetch('/api/admin/shorts').then(r=>r.json());
+  renderShortsAdmin();
 }
 
-function renderHoneyAdmin() {
-  const p = document.getElementById('panel-honey-admin');
-  const cards = _honeyItems.map(item => {
+function renderShortsAdmin() {
+  const p = document.getElementById('panel-shorts-admin');
+  const cards = _shortsAdminItems.map(item => {
     const thumb = item.youtube_id
-      ? '<img src="https://img.youtube.com/vi/'+item.youtube_id+'/mqdefault.jpg" style="width:72px;height:48px;object-fit:cover;border-radius:8px;flex-shrink:0"/>'
-      : '<div style="width:72px;height:48px;background:rgba(255,255,255,.06);border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:20px">🍯</div>';
+      ? '<img src="https://img.youtube.com/vi/'+item.youtube_id+'/mqdefault.jpg" style="width:80px;height:52px;object-fit:cover;border-radius:8px;flex-shrink:0"/>'
+      : '<div style="width:80px;height:52px;background:rgba(255,255,255,.06);border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:22px">⚡</div>';
     return '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:12px;margin-bottom:10px">' +
       '<div style="display:flex;gap:10px;align-items:center">' +
         thumb +
         '<div style="flex:1;min-width:0">' +
-          '<div style="font-size:13px;font-weight:700;color:#f1f5f9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+item.title+'</div>' +
-          '<div style="font-size:11px;color:#64748b;margin-top:2px">'+(item.price||'가격 미설정')+'</div>' +
+          '<div style="font-size:13px;font-weight:700;color:#f1f5f9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(item.name||'(업체명 없음)')+'</div>' +
+          '<div style="font-size:11px;color:#64748b;margin-top:2px">'+(item.category||'')+(item.address ? ' · '+item.address : '')+'</div>' +
           '<div style="margin-top:4px;display:flex;gap:4px">' +
-            (item.coupang_url ? '<span style="font-size:10px;background:rgba(255,165,0,.15);color:#f59e0b;padding:1px 6px;border-radius:6px">쿠팡링크</span>' : '') +
-            (item.youtube_id  ? '<span style="font-size:10px;background:rgba(255,0,0,.12);color:#f87171;padding:1px 6px;border-radius:6px">유튜브</span>' : '') +
+            (item.youtube_id ? '<span style="font-size:10px;background:rgba(255,0,0,.12);color:#f87171;padding:1px 6px;border-radius:6px">유튜브</span>' : '<span style="font-size:10px;background:rgba(255,255,255,.06);color:#64748b;padding:1px 6px;border-radius:6px">영상없음</span>') +
             '<span style="font-size:10px;background:'+(item.active?'rgba(3,199,90,.12)':'rgba(255,255,255,.06)')+';color:'+(item.active?'#34d399':'#64748b')+';padding:1px 6px;border-radius:6px">'+(item.active?'노출중':'숨김')+'</span>' +
           '</div>' +
         '</div>' +
         '<div style="display:flex;gap:6px;flex-shrink:0">' +
-          '<button onclick="openHoneyModal('+item.id+')" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);color:#f1f5f9;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">수정</button>' +
-          '<button onclick="delHoney('+item.id+')" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);color:#f87171;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">삭제</button>' +
+          '<button onclick="openShortsModal('+item.id+')" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);color:#f1f5f9;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">수정</button>' +
+          '<button onclick="delShorts('+item.id+')" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);color:#f87171;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">삭제</button>' +
         '</div>' +
       '</div>' +
     '</div>';
   }).join('');
 
+  const catOpts = CAT_OPTIONS.map(c => '<option value="'+c+'">'+c+'</option>').join('');
+
   p.innerHTML =
     '<div style="padding:16px">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">' +
-        '<div style="font-size:16px;font-weight:800;color:#fbbf24">✨ 뷰티템 관리 <span style="font-size:12px;color:#64748b;font-weight:500">('+_honeyItems.length+'개)</span></div>' +
-        '<button onclick="openHoneyModal(null)" style="background:linear-gradient(135deg,#f59e0b,#fbbf24);color:#000;border:none;border-radius:10px;padding:8px 14px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit">+ 뷰티템 추가</button>' +
+        '<div style="font-size:16px;font-weight:800;color:#e879f9">⚡ 숏폼 관리 <span style="font-size:12px;color:#64748b;font-weight:500">('+_shortsAdminItems.length+'개)</span></div>' +
+        '<button onclick="openShortsModal(null)" style="background:linear-gradient(135deg,#c026d3,#e879f9);color:#fff;border:none;border-radius:10px;padding:8px 14px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit">+ 숏폼 추가</button>' +
       '</div>' +
-      (cards || '<div style="padding:40px;text-align:center;color:#475569;font-size:13px">등록된 뷰티템이 없습니다</div>') +
+      (cards || '<div style="padding:40px;text-align:center;color:#475569;font-size:13px">등록된 숏폼이 없습니다</div>') +
     '</div>' +
     // 모달
-    '<div id="honeyModalBg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:flex-end" onclick="if(event.target===this)closeHoneyModal()">' +
-      '<div id="honeyModal" style="background:#161616;border-radius:20px 20px 0 0;padding:20px;width:100%;max-height:85vh;overflow-y:auto">' +
-        '<div style="font-size:15px;font-weight:800;margin-bottom:16px" id="honeyModalTitle">뷰티템 추가</div>' +
-        '<div style="display:flex;flex-direction:column;gap:16px">' +
+    '<div id="shortsModalBg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:flex-end" onclick="if(event.target===this)closeShortsModal()">' +
+      '<div id="shortsAdminModal" style="background:#161616;border-radius:20px 20px 0 0;padding:20px;width:100%;max-height:90vh;overflow-y:auto">' +
+        '<div style="font-size:15px;font-weight:800;margin-bottom:16px" id="shortsModalTitle">숏폼 추가</div>' +
+        '<div style="display:flex;flex-direction:column;gap:14px">' +
+          // 업체명
           '<div>' +
-            '<label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">제목 *</label>' +
-            '<input id="h-title" placeholder="예: 이 마스크팩 요즘 핫해요" style="'+adminInputStyle()+'"/>' +
+            '<label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">업체명 *</label>' +
+            '<input id="s-name" placeholder="예: 강남 힐링 마사지" style="'+adminInputStyle()+'"/>' +
           '</div>' +
+          // 카테고리
           '<div>' +
-            '<label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">유튜브 영상 링크 또는 ID</label>' +
-            '<input id="h-ytid" placeholder="https://youtu.be/xxxxx 또는 영상 ID" style="'+adminInputStyle()+'"/>' +
-            '<div id="h-yt-preview" style="margin-top:8px;border-radius:10px;overflow:hidden;display:none;aspect-ratio:16/9;background:#000"><iframe id="h-yt-frame" width="100%" height="100%" style="border:none"></iframe></div>' +
+            '<label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">카테고리</label>' +
+            '<select id="s-cat" style="'+adminInputStyle()+'background:rgba(255,255,255,.06)">' +
+              '<option value="">선택 안함</option>' + catOpts +
+            '</select>' +
           '</div>' +
+          // 주소
           '<div>' +
-            '<label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">쿠팡 파트너스 링크</label>' +
-            '<input id="h-url" placeholder="https://link.coupang.com/..." style="'+adminInputStyle()+'"/>' +
+            '<label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">주소</label>' +
+            '<input id="s-addr" placeholder="예: 서울 강남구 역삼동" style="'+adminInputStyle()+'"/>' +
           '</div>' +
+          // 유튜브
+          '<div>' +
+            '<label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">유튜브 숏츠 링크 또는 ID *</label>' +
+            '<input id="s-ytid" placeholder="https://youtube.com/shorts/xxxxx" style="'+adminInputStyle()+'"/>' +
+            '<div id="s-yt-preview" style="margin-top:8px;border-radius:10px;overflow:hidden;display:none;aspect-ratio:9/16;max-height:280px;background:#000"><iframe id="s-yt-frame" width="100%" height="100%" style="border:none"></iframe></div>' +
+          '</div>' +
+          // 순서
+          '<div>' +
+            '<label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">정렬 순서 (숫자 작을수록 앞)</label>' +
+            '<input id="s-order" type="number" value="0" style="'+adminInputStyle()+'"/>' +
+          '</div>' +
+          // 노출
           '<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0">' +
             '<label style="font-size:14px;font-weight:700;color:#f1f5f9">노출</label>' +
-            '<input id="h-active" type="checkbox" checked style="width:20px;height:20px;cursor:pointer;accent-color:#fbbf24"/>' +
+            '<input id="s-active" type="checkbox" checked style="width:20px;height:20px;cursor:pointer;accent-color:#c026d3"/>' +
           '</div>' +
         '</div>' +
         '<div style="display:flex;gap:10px;margin-top:18px">' +
-          '<button onclick="saveHoney()" style="flex:1;background:linear-gradient(135deg,#f59e0b,#fbbf24);color:#000;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit">저장</button>' +
-          '<button onclick="closeHoneyModal()" style="background:rgba(255,255,255,.06);color:#94a3b8;border:1.5px solid rgba(255,255,255,.09);border-radius:12px;padding:14px 18px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">취소</button>' +
+          '<button onclick="saveShorts()" style="flex:1;background:linear-gradient(135deg,#c026d3,#e879f9);color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit">저장</button>' +
+          '<button onclick="closeShortsModal()" style="background:rgba(255,255,255,.06);color:#94a3b8;border:1.5px solid rgba(255,255,255,.09);border-radius:12px;padding:14px 18px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">취소</button>' +
         '</div>' +
       '</div>' +
     '</div>';
 
-  // 유튜브 URL/ID 입력 시 미리보기
-  document.getElementById('h-ytid').addEventListener('input', function() {
+  // 유튜브 입력 시 미리보기
+  document.getElementById('s-ytid').addEventListener('input', function() {
     const vid = extractYtId(this.value.trim());
-    const preview = document.getElementById('h-yt-preview');
-    const frame = document.getElementById('h-yt-frame');
+    const preview = document.getElementById('s-yt-preview');
+    const frame   = document.getElementById('s-yt-frame');
     if (vid) { preview.style.display='block'; frame.src='https://www.youtube.com/embed/'+vid+'?rel=0'; }
     else { preview.style.display='none'; frame.src=''; }
   });
@@ -5585,26 +5669,27 @@ function adminInputStyle() {
   return 'width:100%;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.09);border-radius:10px;padding:10px 12px;color:#fff;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;';
 }
 
-function openHoneyModal(id) {
-  _honeyEditId = id;
-  const item = id ? _honeyItems.find(x=>x.id===id) : null;
-  document.getElementById('honeyModalTitle').textContent = id ? '뷰티템 수정' : '뷰티템 추가';
-  document.getElementById('h-title').value   = item?.title       || '';
-  document.getElementById('h-ytid').value    = item?.youtube_id  || '';
-  document.getElementById('h-url').value     = item?.coupang_url || '';
-  document.getElementById('h-active').checked = item ? item.active : true;
+function openShortsModal(id) {
+  _shortsAdminEditId = id;
+  const item = id ? _shortsAdminItems.find(x=>x.id===id) : null;
+  document.getElementById('shortsModalTitle').textContent = id ? '숏폼 수정' : '숏폼 추가';
+  document.getElementById('s-name').value   = item?.name       || '';
+  document.getElementById('s-cat').value    = item?.category   || '';
+  document.getElementById('s-addr').value   = item?.address    || '';
+  document.getElementById('s-ytid').value   = item?.youtube_id || '';
+  document.getElementById('s-order').value  = item?.sort_order ?? 0;
+  document.getElementById('s-active').checked = item ? item.active : true;
   // 유튜브 미리보기
   const ytId = item?.youtube_id || '';
-  const preview = document.getElementById('h-yt-preview');
-  const frame   = document.getElementById('h-yt-frame');
+  const preview = document.getElementById('s-yt-preview');
+  const frame   = document.getElementById('s-yt-frame');
   if (ytId) { preview.style.display='block'; frame.src='https://www.youtube.com/embed/'+ytId+'?rel=0'; }
   else { preview.style.display='none'; frame.src=''; }
-  const bg = document.getElementById('honeyModalBg');
-  bg.style.display = 'flex';
+  document.getElementById('shortsModalBg').style.display = 'flex';
 }
 
-function closeHoneyModal() {
-  document.getElementById('honeyModalBg').style.display = 'none';
+function closeShortsModal() {
+  document.getElementById('shortsModalBg').style.display = 'none';
 }
 
 // 유튜브 URL → 영상 ID 추출 (정규식 없이 문자열 파싱)
@@ -5628,34 +5713,38 @@ function extractYtId(raw) {
   return '';
 }
 
-async function saveHoney() {
-  const title = document.getElementById('h-title').value.trim();
-  if (!title) { toast('제목을 입력하세요'); return; }
-  const rawYt = document.getElementById('h-ytid').value.trim();
+async function saveShorts() {
+  const name = document.getElementById('s-name').value.trim();
+  if (!name) { toast('업체명을 입력하세요'); return; }
+  const rawYt = document.getElementById('s-ytid').value.trim();
+  const ytId  = extractYtId(rawYt) || rawYt;
+  if (!ytId) { toast('유튜브 링크를 입력하세요'); return; }
   const body = {
-    title,
-    youtubeId:  extractYtId(rawYt) || rawYt,
-    coupangUrl: document.getElementById('h-url').value.trim(),
-    active:     document.getElementById('h-active').checked,
+    name,
+    category:  document.getElementById('s-cat').value,
+    address:   document.getElementById('s-addr').value.trim(),
+    youtubeId: ytId,
+    sortOrder: parseInt(document.getElementById('s-order').value)||0,
+    active:    document.getElementById('s-active').checked,
   };
-  const url = _honeyEditId ? '/api/admin/honey/'+_honeyEditId : '/api/admin/honey';
-  const method = _honeyEditId ? 'PUT' : 'POST';
+  const url    = _shortsAdminEditId ? '/api/admin/shorts/'+_shortsAdminEditId : '/api/admin/shorts';
+  const method = _shortsAdminEditId ? 'PUT' : 'POST';
   const r = await fetch(url, {method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
   if (r.ok) {
-    closeHoneyModal();
-    toast(_honeyEditId ? '뷰티템 수정 완료!' : '뷰티템 등록 완료!');
-    await loadHoneyAdmin();
+    closeShortsModal();
+    toast(_shortsAdminEditId ? '숏폼 수정 완료!' : '숏폼 등록 완료!');
+    await loadShortsAdmin();
   } else {
     toast('저장 실패');
   }
 }
 
-async function delHoney(id) {
-  const found = _honeyItems.find(x => x.id === id);
-  const name = found ? found.title : '이 뷰티템을';
+async function delShorts(id) {
+  const found = _shortsAdminItems.find(x => x.id === id);
+  const name = found ? found.name : '이 숏폼을';
   if (!confirm(name+' 삭제할까요?')) return;
-  const r = await fetch('/api/admin/honey/'+id, {method:'DELETE'});
-  if (r.ok) { toast('삭제 완료'); await loadHoneyAdmin(); }
+  const r = await fetch('/api/admin/shorts/'+id, {method:'DELETE'});
+  if (r.ok) { toast('삭제 완료'); await loadShortsAdmin(); }
   else toast('삭제 실패');
 }
 
