@@ -1755,12 +1755,33 @@ html,body{height:100%;background:var(--bg);color:#fff;
   display:none;}
 #mapScreen.active{display:block;}
 /* 쇼츠 릴스 스타일 */
-#shortsScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:var(--nav);
+/* 숏폼: 헤더 아래 catBar + 배너광고 위까지 */
+#shortsScreen{position:fixed;
+  top:calc(var(--hd) + var(--scat,0px));
+  left:0;right:0;
+  bottom:calc(var(--ad) + var(--nav));
   display:none;overflow-y:scroll;scroll-snap-type:y mandatory;
   background:#000;-webkit-overflow-scrolling:touch;}
-/* 숏폼 탭: 광고 영역 없으므로 bottom = nav만 */
 #shortsScreen::-webkit-scrollbar{display:none;}
 #shortsScreen.active{display:block;}
+/* 숏폼 전용 카탈로그 바 */
+#shortsCatBar{
+  position:fixed;
+  top:var(--hd);
+  left:0;right:0;
+  z-index:299;
+  height:44px;
+  background:rgba(10,10,10,.96);
+  backdrop-filter:blur(12px);
+  border-bottom:1px solid rgba(255,255,255,.07);
+  display:none;
+}
+#shortsCatBar.show{display:block;}
+#shortsCatBar .cat-scroll{
+  display:flex;align-items:center;gap:6px;
+  overflow-x:auto;padding:6px 12px;height:100%;scrollbar-width:none;
+}
+#shortsCatBar .cat-scroll::-webkit-scrollbar{display:none;}
 #inquiryScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:calc(var(--ad) + var(--nav));
   overflow-y:auto;display:none;background:var(--bg);}
 #inquiryScreen.active{display:block;}
@@ -1866,7 +1887,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
   position:relative;
   width:100%;
   /* 뷰포트 전체 - 헤더 - 네비 = 한 슬라이드 */
-  height:calc(100dvh - var(--hd) - var(--nav));
+  height:calc(100dvh - var(--hd) - var(--scat,0px) - var(--ad) - var(--nav));
   scroll-snap-align:start;
   scroll-snap-stop:always;
   flex-shrink:0;
@@ -2420,6 +2441,22 @@ html,body{height:100%;background:var(--bg);color:#fff;
   </div>
 </div>
 
+<!-- 숏폼 전용 카탈로그 바 -->
+<div id="shortsCatBar">
+  <div class="cat-scroll">
+    <button class="cp active" id="scat-all"   onclick="filterShorts(this,'all')">🏠 전체</button>
+    <button class="cp"        id="scat-마사지" onclick="filterShorts(this,'마사지')">💆 마사지</button>
+    <button class="cp"        id="scat-헤드스파" onclick="filterShorts(this,'헤드스파')">🧖 헤드스파</button>
+    <button class="cp"        id="scat-피부관리" onclick="filterShorts(this,'피부관리')">✨ 피부관리</button>
+    <button class="cp"        id="scat-헤어" onclick="filterShorts(this,'헤어')">💇 헤어</button>
+    <button class="cp"        id="scat-메이크업" onclick="filterShorts(this,'메이크업')">💄 메이크업</button>
+    <button class="cp"        id="scat-왁싱" onclick="filterShorts(this,'왁싱')">🪒 왁싱</button>
+    <button class="cp"        id="scat-반영구" onclick="filterShorts(this,'반영구')">🖊️ 반영구</button>
+    <button class="cp"        id="scat-병원" onclick="filterShorts(this,'병원')">🏥 병원</button>
+    <button class="cp"        id="scat-그외" onclick="filterShorts(this,'그외')">🌸 그외</button>
+  </div>
+</div>
+
 <!-- 피드 화면 -->
 <main id="feedScreen" class="active">
   <div class="feed-spin"><div class="spinner"></div></div>
@@ -2725,9 +2762,8 @@ function switchTab(tab) {
   }
   if (tab==='feed') closeMapPopup();
 
-  // 쿠팡 광고 배너: 숏폼 탭에서는 숨김, 다른 탭에서는 표시
-  const coupangAd = document.getElementById('coupang-ad');
-  if (coupangAd) coupangAd.style.display = (tab === 'shorts') ? 'none' : '';
+  // 쿠팡 광고 배너: 모든 탭에서 표시 (숏폼 포함)
+  // → shortsScreen bottom이 이미 --ad 반영됨
 
   // 검색바 placeholder·힌트 탭에 따라 변경
   const si = document.getElementById('searchInput');
@@ -2737,12 +2773,20 @@ function switchTab(tab) {
     sh.textContent = '예) 강남 마사지  ·  눈썹문신  ·  리프팅';
   }
 
+  // 숏폼 카탈로그 바 show/hide + CSS 변수 --scat 세팅
+  const sCatBar = document.getElementById('shortsCatBar');
+  if (sCatBar) {
+    const show = tab === 'shorts';
+    sCatBar.classList.toggle('show', show);
+    document.documentElement.style.setProperty('--scat', show ? '44px' : '0px');
+  }
+
   if (tab==='shorts') {
     // 숏폼 탭 진입 → 로드 & 재생
     if (_shortsLoaded && _shortsItems.length) {
       requestAnimationFrame(() => requestAnimationFrame(() => shortsPlayFirst()));
     } else {
-      loadShorts();
+      loadShorts(_shortsCat);
     }
   }
   // 숏폼 탭 이탈 시 모든 영상 정지
@@ -2767,6 +2811,7 @@ document.getElementById('logoBtn').addEventListener('click', ()=>{
 let _shortsLoaded   = false;
 let _shortsObserver = null;
 let _shortsItems    = [];   // 전체 업체 캐시
+let _shortsCat      = 'all'; // 현재 선택된 카테고리
 
 // 숏폼 첫 슬라이드 재생
 function shortsPlayFirst() {
@@ -2781,7 +2826,17 @@ function shortsPlayFirst() {
   }
 }
 
-async function loadShorts() {
+function filterShorts(btn, cat) {
+  // 버튼 active 토글
+  document.querySelectorAll('#shortsCatBar .cp').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  // 캐시 유지하면서 필터만 변경 (재fetch 없음)
+  loadShorts(cat);
+}
+
+async function loadShorts(cat) {
+  cat = cat || 'all';
+  _shortsCat = cat;
   const screen = document.getElementById('shortsScreen');
   const el     = document.getElementById('shortsFeed');
   if (!el) return;
@@ -2798,7 +2853,9 @@ async function loadShorts() {
     }
   }
 
-  const items = _shortsItems;
+  const items = (cat === 'all')
+    ? _shortsItems
+    : _shortsItems.filter(s => s.category === cat);
 
   if (!items.length) {
     el.innerHTML = '<div class="shorts-empty">🎬 숏폼 영상을 준비 중입니다!</div>';
