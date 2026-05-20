@@ -1865,7 +1865,8 @@ html,body{height:100%;background:var(--bg);color:#fff;
 .shorts-slide{
   position:relative;
   width:100%;
-  height:100%;
+  /* 뷰포트 전체 - 헤더 - 네비 = 한 슬라이드 */
+  height:calc(100dvh - var(--hd) - var(--nav));
   scroll-snap-align:start;
   scroll-snap-stop:always;
   flex-shrink:0;
@@ -2603,7 +2604,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
   </script>
 </div>
 
-<!-- 꿀템 스크린 -->
+<!-- 숏폼 스크린 -->
 <section id="shortsScreen">
   <div id="shortsFeed" style="height:100%;display:flex;flex-direction:column"></div>
 </section>
