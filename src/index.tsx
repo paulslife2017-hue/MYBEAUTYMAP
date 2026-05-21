@@ -1875,12 +1875,11 @@ html,body{height:100%;background:var(--bg);color:#fff;
   left:0;right:0;
   height:var(--ad);
   z-index:299;
-  background:#000;
+  background:#fff;
   overflow:hidden;
   display:flex;align-items:center;justify-content:center;
 }
-#coupang-ad iframe,
-#coupang-ad > div{width:100%!important;height:var(--ad)!important;}
+#coupang-ad ins.adsbygoogle{display:block!important;width:100%!important;height:var(--ad)!important;}
 
 .tabbar{position:fixed;bottom:0;left:0;right:0;z-index:300;height:var(--nav);
   background:rgba(10,10,10,.98);backdrop-filter:blur(20px);
@@ -2644,12 +2643,15 @@ html,body{height:100%;background:var(--bg);color:#fff;
   </div>
 </section>
 
-<!-- 쿠팡 파트너스 광고 배너 -->
+<!-- 구글 애드센스 광고 배너 -->
 <div id="coupang-ad">
-  <script src="https://ads-partners.coupang.com/g.js"></script>
-  <script>
-    new PartnersCoupang.G({"id":212396,"template":"carousel","trackingCode":"AF5989144","width":"100%","height":"50","tsource":""});
-  </script>
+  <ins class="adsbygoogle"
+    style="display:block;width:100%;height:50px"
+    data-ad-client="ca-pub-6943282483618134"
+    data-ad-slot="5241168678"
+    data-ad-format="auto"
+    data-full-width-responsive="true"></ins>
+  <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
 </div>
 
 <!-- 숏폼 스크린 -->
