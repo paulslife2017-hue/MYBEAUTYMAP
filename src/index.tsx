@@ -1880,6 +1880,11 @@ html,body{height:100%;background:var(--bg);color:#fff;
   display:flex;align-items:center;justify-content:center;
 }
 #coupang-ad ins.adsbygoogle{display:block!important;width:100%!important;height:var(--ad)!important;}
+/* PC에서 광고 배너 크게 */
+@media(min-width:768px){
+  :root{--ad:90px;}
+  #coupang-ad ins.adsbygoogle{height:90px!important;}
+}
 
 .tabbar{position:fixed;bottom:0;left:0;right:0;z-index:300;height:var(--nav);
   background:rgba(10,10,10,.98);backdrop-filter:blur(20px);
@@ -2646,10 +2651,11 @@ html,body{height:100%;background:var(--bg);color:#fff;
 <!-- 구글 애드센스 광고 배너 -->
 <div id="coupang-ad">
   <ins class="adsbygoogle"
-    style="display:inline-block;width:100%;height:50px"
+    style="display:inline-block;width:100%"
     data-ad-client="ca-pub-6943282483618134"
     data-ad-slot="5241168678"
-    data-ad-format="fixed"></ins>
+    data-ad-format="auto"
+    data-full-width-responsive="true"></ins>
   <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
 </div>
 
