@@ -2646,11 +2646,10 @@ html,body{height:100%;background:var(--bg);color:#fff;
 <!-- 구글 애드센스 광고 배너 -->
 <div id="coupang-ad">
   <ins class="adsbygoogle"
-    style="display:block;width:100%;height:50px"
+    style="display:inline-block;width:100%;height:50px"
     data-ad-client="ca-pub-6943282483618134"
     data-ad-slot="5241168678"
-    data-ad-format="auto"
-    data-full-width-responsive="true"></ins>
+    data-ad-format="fixed"></ins>
   <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
 </div>
 
