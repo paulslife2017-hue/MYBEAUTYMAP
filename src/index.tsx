@@ -1674,7 +1674,7 @@ function mainPage(baseUrl = 'https://www.mybeautymap.co.kr') { return `<!DOCTYPE
   --pink:#FF4D7D; --pink2:#FF8FA3;
   --green:#03C75A; --green2:#02a84e;
   --bg:#0a0a0a;
-  --hd:50px; --cat:44px; --nav:60px; --ad:50px;
+  --hd:50px; --cat:44px; --nav:60px; --ad:60px;
   --safe:env(safe-area-inset-bottom,0px);
 }
 html,body{height:100%;background:var(--bg);color:#fff;
@@ -2647,7 +2647,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
 <!-- 구글 애드센스 광고 배너 -->
 <div id="coupang-ad">
   <ins class="adsbygoogle"
-    style="display:inline-block;width:100%;height:50px"
+    style="display:inline-block;width:100%;height:60px"
     data-ad-client="ca-pub-6943282483618134"
     data-ad-slot="5241168678"
     data-ad-format="fixed"></ins>
