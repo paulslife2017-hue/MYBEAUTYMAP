@@ -1970,6 +1970,11 @@ body.shorts-mode #shorts-mute-btn{ display:flex; }
   position:absolute;inset:0;
   width:100%;height:100%;
 }
+/* YT.Player가 이 div를 iframe으로 교체 — wrap을 꽉 채워야 함 */
+.shorts-yt-placeholder{
+  position:absolute;inset:0;
+  width:100%;height:100%;
+}
 .shorts-iframe-wrap iframe{
   position:absolute;inset:0;
   width:100%;height:100%;
@@ -2995,6 +3000,8 @@ async function loadShorts(cat) {
     return;
   }
 
+  // 기존 YT 플레이어 전부 destroy 후 innerHTML 교체 (메모리 누수 방지)
+  _shortsDestroyAll();
   el.style.cssText = 'height:100%;display:flex;flex-direction:column;';
   el.innerHTML = items.map((shop, i) => shortsSlide(shop, i)).join('');
   _shortsTotal = items.length;
@@ -3010,30 +3017,15 @@ let _shortsMuted = true;
 
 function shortsSlide(shop, idx) {
   const ytId = shop.youtube_id || '';
-  const src  = ytId
-    ? 'https://www.youtube.com/embed/' + ytId
-      + '?autoplay=1&mute=1&loop=1&playlist=' + ytId
-      + '&rel=0&playsinline=1&controls=0&enablejsapi=1&modestbranding=1'
-    : '';
   const cat  = shop.category || '';
   const name = shop.name || '';
   const addr = shop.address || '';
-
-  // ── iOS autoplay 핵심: iframe을 처음부터 DOM에 넣되 visibility:hidden으로 숨김
-  // 나중에 visibility:visible로만 전환 → iOS가 autoplay 허용
-  const iframeHtml = ytId
-    ? '<div class="shorts-iframe-wrap" style="visibility:hidden">' +
-        '<iframe src="' + src + '"' +
-        ' allow="autoplay;encrypted-media;fullscreen;picture-in-picture"' +
-        ' allowfullscreen playsinline' +
-        ' style="position:absolute;inset:0;width:100%;height:100%;border:none;pointer-events:none">' +
-        '</iframe></div>'
-    : '<div class="shorts-no-video"></div>';
-
   return (
-    '<div class="shorts-slide" data-shop-id="' + shop.id + '" data-yt-src="' + src + '" data-idx="' + idx + '" data-playing="1"' +
+    '<div class="shorts-slide" data-shop-id="' + shop.id + '" data-ytid="' + ytId + '" data-idx="' + idx + '"' +
     ' onclick="shortsSlideClick(event,this)">' +
-    iframeHtml +
+    (ytId
+      ? '<div class="shorts-iframe-wrap"><div class="shorts-yt-placeholder" id="yt-ph-' + idx + '"></div></div>'
+      : '<div class="shorts-no-video"></div>') +
     '<div class="shorts-overlay">' +
       '<div class="shorts-info-row">' +
         '<div class="shorts-info-body">' +
@@ -3051,90 +3043,64 @@ function shortsSlide(shop, idx) {
   );
 }
 
-// ── 릴스 슬라이드 클릭 (재생/정지 토글) ─────────────────────────────────
+// ── 릴스 슬라이드 탭: 재생/정지 토글 ──────────────────────────────────────
 function shortsSlideClick(e, slide) {
   if (!slide) return;
   if (e.target.closest('.shorts-overlay')) return;
-
-  const wrap      = slide.querySelector('.shorts-iframe-wrap');
-  const iframe    = wrap ? wrap.querySelector('iframe') : null;
-  const isPlaying = slide.dataset.playing === '1';
-
-  if (isPlaying) {
-    // ── 재생 중 → 정지
-    slide.dataset.playing = '0';
-    if (iframe) {
-      try { iframe.contentWindow.postMessage(
-        JSON.stringify({event:'command',func:'pauseVideo',args:[]}), '*');
-      } catch(e2) {}
-    }
+  const idx = parseInt(slide.dataset.idx || '0', 10);
+  const player = _ytPlayers[idx];
+  if (!player) return;
+  // 첫 탭: iOS 사용자 제스처 컨텍스트에서 재생 시작
+  if (!_shortsUserGestured) {
+    _shortsUserGestured = true;
+    try { player.playVideo(); } catch(e2) {}
+    _shortsShowIcon(slide, 'play');
+    return;
+  }
+  const state = player.getPlayerState ? player.getPlayerState() : -1;
+  // YT.PlayerState.PLAYING = 1
+  if (state === 1) {
+    player.pauseVideo();
     _shortsShowIcon(slide, 'pause');
   } else {
-    // ── 정지 중 → 재생
-    // iOS: postMessage playVideo는 차단됨 → wrap src 복원으로 재로드
-    slide.dataset.playing = '1';
-    if (wrap) {
-      _shortsRestoreWrap(wrap); // src 복원 + visible (이미 visible이어도 src만 재세팅)
-    }
+    player.playVideo();
     _shortsShowIcon(slide, 'play');
   }
 }
 
-// 재생/정지 아이콘 팝인 표시
+// ── 재생/정지 아이콘 팝인 ─────────────────────────────────────────────────
 function _shortsShowIcon(slide, type) {
-  // 기존 아이콘 요소 찾거나 생성
   let icon = slide.querySelector('.shorts-pi');
   if (!icon) {
     icon = document.createElement('div');
     icon.className = 'shorts-pi';
     icon.innerHTML = '<i></i>';
-    icon.style.cssText = [
-      'position:absolute',
-      'top:50%', 'left:50%',
-      'transform:translate(-50%,-50%) scale(0)',
-      'width:72px', 'height:72px',
-      'background:rgba(0,0,0,.55)',
-      'border-radius:50%',
-      'display:flex', 'align-items:center', 'justify-content:center',
-      'pointer-events:none',
-      'z-index:15',
-      'transition:transform .15s,opacity .15s',
-      'opacity:0',
-    ].join(';');
+    icon.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) scale(0);' +
+      'width:72px;height:72px;background:rgba(0,0,0,.55);border-radius:50%;' +
+      'display:flex;align-items:center;justify-content:center;' +
+      'pointer-events:none;z-index:15;transition:transform .15s,opacity .15s;opacity:0;';
     icon.querySelector('i').style.cssText = 'font-size:28px;color:#fff;pointer-events:none';
     slide.appendChild(icon);
   }
   const i = icon.querySelector('i');
   if (i) i.className = type === 'pause' ? 'fas fa-pause' : 'fas fa-play';
-
-  // 팝인
-  icon.style.transform = 'translate(-50%,-50%) scale(0)';
-  icon.style.opacity   = '0';
+  icon.style.transform = 'translate(-50%,-50%) scale(0)'; icon.style.opacity = '0';
   requestAnimationFrame(() => {
-    icon.style.transform = 'translate(-50%,-50%) scale(1)';
-    icon.style.opacity   = '1';
+    icon.style.transform = 'translate(-50%,-50%) scale(1)'; icon.style.opacity = '1';
   });
-
-  // 재생 시에는 잠깐 보이다 사라짐, 정지는 유지
-  clearTimeout(icon._hideTimer);
+  clearTimeout(icon._t);
   if (type === 'play') {
-    icon._hideTimer = setTimeout(() => {
-      icon.style.transform = 'translate(-50%,-50%) scale(0.7)';
-      icon.style.opacity   = '0';
+    icon._t = setTimeout(() => {
+      icon.style.transform = 'translate(-50%,-50%) scale(0.7)'; icon.style.opacity = '0';
     }, 700);
   }
 }
 
-// 음소거 토글 버튼 클릭
+// ── 음소거 토글 ───────────────────────────────────────────────────────────
 function toggleShortsMute() {
   _shortsMuted = !_shortsMuted;
-  // 현재 활성 iframe에 postMessage
-  document.querySelectorAll('.shorts-iframe-wrap iframe').forEach(f => {
-    try {
-      f.contentWindow.postMessage(
-        JSON.stringify({ event: 'command', func: _shortsMuted ? 'mute' : 'unMute', args: [] }), '*'
-      );
-    } catch(e) {}
+  Object.values(_ytPlayers).forEach(p => {
+    try { _shortsMuted ? p.mute() : p.unMute(); } catch(e) {}
   });
   const btn = document.getElementById('shorts-mute-btn');
   if (btn) btn.innerHTML = _shortsMuted
@@ -3144,90 +3110,131 @@ function toggleShortsMute() {
 
 function shortsOpenBook(shop) {
   if (!shop.smart_place_url) { showToast('예약 링크가 없어요'); return; }
-  // 숏폼 예약클릭 통계
   fetch('/api/track/shorts/sp/' + shop.id, { method: 'POST' }).catch(() => {});
-  curShop = {
-    name: shop.name || '',
-    smartPlaceUrl: shop.smart_place_url || ''
-  };
+  curShop = { name: shop.name || '', smartPlaceUrl: shop.smart_place_url || '' };
   openInapp();
 }
 
-// ── 릴스 재생 엔진 ────────────────────────────────────────────────────────
-let _shortsActiveIdx = -1;
-let _shortsTotal     = 0;
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// YouTube IFrame Player API 엔진
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+let _ytPlayers        = {};   // { idx: YT.Player }
+let _ytApiReady       = false;
+let _ytApiLoading     = false;
+let _ytPendingInits   = [];   // API 로드 전에 요청된 슬라이드 대기열
+let _shortsActiveIdx  = -1;
+let _shortsTotal      = 0;
+let _shortsUserGestured = false; // iOS: 첫 탭 후 재생 가능 여부
 
-// visible 전환 + 재생 상태 세팅
-function _shortsShowWrap(wrap) {
-  wrap.style.visibility = 'visible';
-  const slide = wrap.closest('.shorts-slide');
-  if (slide) {
-    // playing 상태는 외부(shortsSlideClick, _shortsActivateSlide)에서 관리
-    // 여기선 아이콘만 초기화
-    const icon = slide.querySelector('.shorts-pi');
-    if (icon) { icon.style.opacity = '0'; icon.style.transform = 'translate(-50%,-50%) scale(0)'; }
+// YouTube IFrame API 스크립트 로드 (1회)
+function _ytLoadApi() {
+  if (_ytApiReady || _ytApiLoading) return;
+  _ytApiLoading = true;
+  const tag = document.createElement('script');
+  tag.src = 'https://www.youtube.com/iframe_api';
+  document.head.appendChild(tag);
+}
+
+// YouTube API 준비 완료 콜백 (전역 함수 — YT API가 호출)
+(window as any).onYouTubeIframeAPIReady = function() {
+  _ytApiReady = true;
+  // 대기 중인 슬라이드 초기화
+  _ytPendingInits.forEach(fn => fn());
+  _ytPendingInits = [];
+};
+
+// 슬라이드에 YT.Player 생성
+function _ytCreatePlayer(slide) {
+  const idx  = parseInt(slide.dataset.idx || '0', 10);
+  const ytId = slide.dataset.ytid || '';
+  if (!ytId || _ytPlayers[idx]) return; // 이미 있으면 스킵
+
+  const ph = slide.querySelector('.shorts-yt-placeholder');
+  if (!ph) return;
+
+  const create = () => {
+    // placeholder div를 대상으로 YT.Player 생성
+    const player = new (window as any).YT.Player(ph, {
+      videoId: ytId,
+      playerVars: {
+        autoplay: 1,
+        mute:     1,   // 자동재생을 위해 음소거로 시작
+        loop:     1,
+        playlist: ytId,
+        controls: 0,
+        playsinline: 1,
+        rel:      0,
+        modestbranding: 1,
+        enablejsapi: 1,
+      },
+      events: {
+        onReady: (e) => {
+          // 플레이어 준비 완료
+          if (_shortsMuted) {
+            e.target.mute();
+          } else {
+            e.target.unMute();
+          }
+          // 현재 활성 슬라이드면 바로 재생
+          if (_shortsActiveIdx === idx) {
+            try { e.target.playVideo(); } catch(err) {}
+          }
+        },
+        onStateChange: (e) => {
+          // 영상 끝나면 처음부터 (loop=1 이지만 보험)
+          if (e.data === 0) { // ENDED
+            try { e.target.seekTo(0); e.target.playVideo(); } catch(err) {}
+          }
+        },
+        onError: () => {
+          // 에러 시 placeholder 복구 시도 안 함
+        }
+      }
+    });
+    _ytPlayers[idx] = player;
+    // YT.Player가 생성되면 placeholder div를 iframe으로 교체함 (YT API가 자동 처리)
+    // iframe에 스타일 적용
+    const applyStyle = () => {
+      const iframe = slide.querySelector('.shorts-iframe-wrap iframe');
+      if (iframe) {
+        iframe.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:none;pointer-events:none;';
+      } else {
+        setTimeout(applyStyle, 100);
+      }
+    };
+    applyStyle();
+  };
+
+  if (_ytApiReady) {
+    create();
+  } else {
+    _ytPendingInits.push(create);
+    _ytLoadApi();
   }
-  // 소리 켜진 상태면 unMute
-  if (!_shortsMuted) {
-    const f = wrap.querySelector('iframe');
-    if (f) {
-      const tryUnmute = () => {
-        try { f.contentWindow.postMessage(JSON.stringify({event:'command',func:'unMute',args:[]}), '*'); } catch(e) {}
-      };
-      tryUnmute();
-      f.onload = () => { tryUnmute(); f.onload = null; };
-    }
-  }
 }
 
-// 슬라이드 비활성화: hidden + src=about:blank (네트워크/메모리 해제)
-function _shortsHideWrap(wrap) {
-  if (wrap.style.visibility === 'hidden') return; // 이미 숨겨진 경우 스킵
-  wrap.style.visibility = 'hidden';
-  const f = wrap.querySelector('iframe');
-  if (f) f.src = 'about:blank'; // 리소스 해제 — 복귀 시 _shortsRestoreWrap이 wrap.dataset.ytSrc로 복원
-}
-
-// 슬라이드 활성화: src 세팅 + visible 전환
-// src가 about:blank일 때만 YouTube URL로 세팅 (이미 로드된 경우 playVideo로 재생)
-function _shortsRestoreWrap(wrap) {
-  const f = wrap.querySelector('iframe');
-  if (!f) return;
-  const src = wrap.dataset.ytSrc ||
-              (wrap.closest('.shorts-slide') || {}).dataset?.ytSrc || '';
-  const isBlank = !f.src || f.src === 'about:blank' || f.src === window.location.href;
-  if (src && isBlank) {
-    // about:blank → YouTube URL 세팅 → autoplay=1 트리거
-    f.src = src;
-  } else if (!isBlank) {
-    // 이미 YouTube URL 로드된 상태 → postMessage로 재생
-    try { f.contentWindow.postMessage(
-      JSON.stringify({event:'command', func:'playVideo', args:[]}), '*');
-    } catch(e) {}
-  }
-  _shortsShowWrap(wrap);
-}
-
-function _shortsStopAll() {
-  document.querySelectorAll('.shorts-slide .shorts-iframe-wrap').forEach(w => {
-    _shortsHideWrap(w);
-  });
-  _shortsActiveIdx = -1;
-  const sc = document.getElementById('shortsScreen');
-  if (sc && sc._shortsScrollTimer) { clearTimeout(sc._shortsScrollTimer); sc._shortsScrollTimer = null; }
-}
-
-// ── 슬라이드 활성화 공통 로직 (Observer / scroll fallback 호출) ─────────────
+// 슬라이드 활성화: 플레이어 생성 또는 재생
 function _shortsActivateSlide(slide) {
-  const wrap = slide.querySelector('.shorts-iframe-wrap');
-  if (!wrap) return;
-  // 이미 보이는 중이면 스킵
-  if (wrap.style.visibility === 'visible') return;
+  const idx  = parseInt(slide.dataset.idx || '0', 10);
+  const ytId = slide.dataset.ytid || '';
+  if (!ytId) return;
+  if (_shortsActiveIdx === idx) return; // 이미 활성
+  _shortsActiveIdx = idx;
 
-  _shortsActiveIdx = parseInt(slide.dataset.idx || '0', 10);
-  slide.dataset.playing = '1'; // 새 슬라이드 진입 시 재생 상태로
-  _shortsRestoreWrap(wrap);    // src 세팅 + visible 전환
+  // 아이콘 초기화
+  const icon = slide.querySelector('.shorts-pi');
+  if (icon) { icon.style.opacity='0'; icon.style.transform='translate(-50%,-50%) scale(0)'; }
 
+  // 플레이어 없으면 생성
+  if (!_ytPlayers[idx]) {
+    _ytCreatePlayer(slide);
+  } else {
+    // 이미 있으면 재생
+    try { _ytPlayers[idx].playVideo(); } catch(e) {}
+    if (!_shortsMuted) { try { _ytPlayers[idx].unMute(); } catch(e) {} }
+  }
+
+  // 조회수 트래킹
   const sid = slide.dataset.shopId;
   if (sid && !slide.dataset.viewed) {
     slide.dataset.viewed = '1';
@@ -3235,87 +3242,78 @@ function _shortsActivateSlide(slide) {
   }
 }
 
+// 슬라이드 비활성화: 정지 + 리소스 유지 (플레이어는 재사용)
+function _shortsDeactivateSlide(slide) {
+  const idx = parseInt(slide.dataset.idx || '0', 10);
+  if (!_ytPlayers[idx]) return;
+  try { _ytPlayers[idx].pauseVideo(); } catch(e) {}
+}
+
+function _shortsStopAll() {
+  Object.values(_ytPlayers).forEach(p => { try { p.pauseVideo(); } catch(e) {} });
+  _shortsActiveIdx = -1;
+  const sc = document.getElementById('shortsScreen');
+  if (sc && sc._shortsScrollTimer) { clearTimeout(sc._shortsScrollTimer); sc._shortsScrollTimer = null; }
+}
+
+function _shortsDestroyAll() {
+  Object.values(_ytPlayers).forEach(p => { try { p.destroy(); } catch(e) {} });
+  _ytPlayers = {};
+  _shortsActiveIdx = -1;
+  _shortsUserGestured = false;
+}
+
 function initShortsObserver(screen) {
-  // 기존 observer + scroll 리스너 해제
   if (_shortsObserver) { _shortsObserver.disconnect(); _shortsObserver = null; }
   if (screen._shortsScrollHandler) {
     screen.removeEventListener('scroll', screen._shortsScrollHandler);
     screen._shortsScrollHandler = null;
   }
-  if (screen._shortsScrollTimer) {
-    clearTimeout(screen._shortsScrollTimer);
-    screen._shortsScrollTimer = null;
-  }
 
-  // ── IntersectionObserver
+  // YouTube API 미리 로드
+  _ytLoadApi();
+
+  // IntersectionObserver: 50% 이상 보이면 활성화, 20% 미만이면 비활성화
   _shortsObserver = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
       const slide = entry.target;
-      const wrap  = slide.querySelector('.shorts-iframe-wrap');
-      if (!wrap) return;
-
-      if (entry.intersectionRatio >= 0.3) {
-        // 30% 이상 보임 → 활성화(visible + src 복원)
+      if (entry.intersectionRatio >= 0.5) {
         _shortsActivateSlide(slide);
-      } else if (entry.intersectionRatio < 0.1) {
-        // 10% 미만 → 이탈 → hidden + src 비움
-        _shortsHideWrap(wrap);
+      } else if (entry.intersectionRatio < 0.2) {
+        _shortsDeactivateSlide(slide);
       }
     });
-  }, {
-    root: screen,
-    threshold: [0.1, 0.3, 0.5]
-  });
+  }, { root: screen, threshold: [0.2, 0.5] });
 
   document.querySelectorAll('.shorts-slide').forEach(s => _shortsObserver.observe(s));
 
-  // ── scroll 이벤트 fallback: Observer가 놓친 경우를 대비
-  // 스크롤이 멈춘 뒤 가장 많이 보이는 슬라이드를 찾아 iframe 삽입
+  // scroll fallback: snap 후 Observer 미동작 시 보정
   screen._shortsScrollHandler = function() {
     clearTimeout(screen._shortsScrollTimer);
     screen._shortsScrollTimer = setTimeout(() => {
-      const slides = document.querySelectorAll('.shorts-slide');
-      const scrTop = screen.scrollTop;
-      const scrH   = screen.clientHeight;
-      let bestSlide = null, bestRatio = 0;
-      slides.forEach(slide => {
-        const st = slide.offsetTop;
-        const sh = slide.offsetHeight;
-        const overlapTop = Math.max(st, scrTop);
-        const overlapBot = Math.min(st + sh, scrTop + scrH);
-        const overlapH   = Math.max(0, overlapBot - overlapTop);
-        const ratio      = sh > 0 ? overlapH / sh : 0;
-        if (ratio > bestRatio) { bestRatio = ratio; bestSlide = slide; }
+      const slides  = document.querySelectorAll('.shorts-slide');
+      const scrTop  = screen.scrollTop;
+      const scrH    = screen.clientHeight;
+      let best = null, bestR = 0;
+      slides.forEach(s => {
+        const oh = Math.max(0, Math.min(s.offsetTop + s.offsetHeight, scrTop + scrH) - Math.max(s.offsetTop, scrTop));
+        const r  = s.offsetHeight > 0 ? oh / s.offsetHeight : 0;
+        if (r > bestR) { bestR = r; best = s; }
       });
-      // 30% 이상 보이는 최우선 슬라이드 활성화
-      if (bestSlide && bestRatio >= 0.3) {
-        _shortsActivateSlide(bestSlide);
-        // 완전히 이탈한 슬라이드 숨김
-        slides.forEach(slide => {
-          if (slide === bestSlide) return;
-          const st = slide.offsetTop;
-          const sh = slide.offsetHeight;
-          const overlapBot = Math.min(st + sh, scrTop + scrH);
-          const overlapH   = Math.max(0, overlapBot - Math.max(st, scrTop));
-          const ratio      = sh > 0 ? overlapH / sh : 0;
-          if (ratio < 0.1) {
-            const w = slide.querySelector('.shorts-iframe-wrap');
-            if (w) _shortsHideWrap(w);
-          }
+      if (best && bestR >= 0.5) {
+        _shortsActivateSlide(best);
+        slides.forEach(s => {
+          if (s === best) return;
+          const oh = Math.max(0, Math.min(s.offsetTop + s.offsetHeight, scrTop + scrH) - Math.max(s.offsetTop, scrTop));
+          const r  = s.offsetHeight > 0 ? oh / s.offsetHeight : 0;
+          if (r < 0.2) _shortsDeactivateSlide(s);
         });
       }
-    }, 150); // 스크롤 멈춤 150ms 후 실행
+    }, 200);
   };
   screen.addEventListener('scroll', screen._shortsScrollHandler, { passive: true });
 
-  // 모바일 Safari: display:none→block 직후 Observer 미감지 버그 대응
-  // 모든 wrap: hidden + src=about:blank 완전 초기화
-  // Observer가 visible 전환 시 _shortsRestoreWrap이 wrap.dataset.ytSrc로 복원
-  document.querySelectorAll('.shorts-slide .shorts-iframe-wrap').forEach(w => {
-    w.style.visibility = 'hidden';
-    const f = w.querySelector('iframe');
-    if (f) f.src = 'about:blank';
-  });
+  // iOS Safari rAF 트릭: Observer 첫 감지 강제
   requestAnimationFrame(() => {
     const cur = screen.scrollTop;
     screen.scrollTop = cur + 1;
