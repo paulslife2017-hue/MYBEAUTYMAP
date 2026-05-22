@@ -263,15 +263,22 @@ async function runMigrations() {
     // 숏폼 전용 테이블
     try {
       await sql`CREATE TABLE IF NOT EXISTS shorts_items (
-        id           SERIAL PRIMARY KEY,
-        name         TEXT    NOT NULL DEFAULT '',
-        category     TEXT    NOT NULL DEFAULT '',
-        address      TEXT    NOT NULL DEFAULT '',
-        youtube_id   TEXT    NOT NULL DEFAULT '',
-        sort_order   INTEGER NOT NULL DEFAULT 0,
-        active       BOOLEAN NOT NULL DEFAULT true,
-        created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        id               SERIAL PRIMARY KEY,
+        name             TEXT    NOT NULL DEFAULT '',
+        category         TEXT    NOT NULL DEFAULT '',
+        address          TEXT    NOT NULL DEFAULT '',
+        youtube_id       TEXT    NOT NULL DEFAULT '',
+        smart_place_url  TEXT    NOT NULL DEFAULT '',
+        sort_order       INTEGER NOT NULL DEFAULT 0,
+        active           BOOLEAN NOT NULL DEFAULT true,
+        view_cnt         INTEGER NOT NULL DEFAULT 0,
+        sp_cnt           INTEGER NOT NULL DEFAULT 0,
+        created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`
+      // 기존 테이블에 없는 컬럼 추가
+      try { await sql`ALTER TABLE shorts_items ADD COLUMN IF NOT EXISTS smart_place_url TEXT NOT NULL DEFAULT ''` } catch(_){}
+      try { await sql`ALTER TABLE shorts_items ADD COLUMN IF NOT EXISTS view_cnt INTEGER NOT NULL DEFAULT 0` } catch(_){}
+      try { await sql`ALTER TABLE shorts_items ADD COLUMN IF NOT EXISTS sp_cnt INTEGER NOT NULL DEFAULT 0` } catch(_){}
     } catch (_) {}
     _migrationDone = true
   })()
@@ -1088,8 +1095,8 @@ app.get('/api/admin/shorts', async (c) => {
 app.post('/api/admin/shorts', async (c) => {
   const b = await c.req.json()
   const rows = await sql`
-    INSERT INTO shorts_items (name, category, address, youtube_id, sort_order, active)
-    VALUES (${b.name||''}, ${b.category||''}, ${b.address||''}, ${b.youtubeId||''}, ${b.sortOrder||0}, ${b.active!==false})
+    INSERT INTO shorts_items (name, category, address, youtube_id, smart_place_url, sort_order, active)
+    VALUES (${b.name||''}, ${b.category||''}, ${b.address||''}, ${b.youtubeId||''}, ${b.smartPlaceUrl||''}, ${b.sortOrder||0}, ${b.active!==false})
     RETURNING *
   `
   return c.json(rows[0])
@@ -1101,12 +1108,13 @@ app.put('/api/admin/shorts/:id', async (c) => {
   const b  = await c.req.json()
   const rows = await sql`
     UPDATE shorts_items SET
-      name       = ${b.name||''},
-      category   = ${b.category||''},
-      address    = ${b.address||''},
-      youtube_id = ${b.youtubeId||''},
-      sort_order = ${b.sortOrder||0},
-      active     = ${b.active!==false}
+      name            = ${b.name||''},
+      category        = ${b.category||''},
+      address         = ${b.address||''},
+      youtube_id      = ${b.youtubeId||''},
+      smart_place_url = ${b.smartPlaceUrl||''},
+      sort_order      = ${b.sortOrder||0},
+      active          = ${b.active!==false}
     WHERE id = ${id} RETURNING *
   `
   return c.json(rows[0])
@@ -1116,6 +1124,20 @@ app.put('/api/admin/shorts/:id', async (c) => {
 app.delete('/api/admin/shorts/:id', async (c) => {
   const id = +c.req.param('id')
   await sql`DELETE FROM shorts_items WHERE id = ${id}`
+  return c.json({ ok: true })
+})
+
+// 숏폼 조회수 트래킹
+app.post('/api/track/shorts/view/:id', async (c) => {
+  const id = +c.req.param('id')
+  await sql`UPDATE shorts_items SET view_cnt = view_cnt + 1 WHERE id = ${id}`
+  return c.json({ ok: true })
+})
+
+// 숏폼 예약클릭 트래킹
+app.post('/api/track/shorts/sp/:id', async (c) => {
+  const id = +c.req.param('id')
+  await sql`UPDATE shorts_items SET sp_cnt = sp_cnt + 1 WHERE id = ${id}`
   return c.json({ ok: true })
 })
 
@@ -2947,8 +2969,9 @@ function shortsSlide(shop) {
 }
 
 function shortsOpenBook(shop) {
-  // 영상탭과 동일: curShop 세팅 후 바로 인앱 모달 열기
   if (!shop.smart_place_url) { showToast('예약 링크가 없어요'); return; }
+  // 숏폼 예약클릭 통계
+  fetch('/api/track/shorts/sp/' + shop.id, { method: 'POST' }).catch(() => {});
   curShop = {
     name: shop.name || '',
     smartPlaceUrl: shop.smart_place_url || ''
@@ -2966,6 +2989,12 @@ function initShortsObserver(screen) {
       if (entry.isIntersecting) {
         if (!frame.src || frame.src === 'about:blank' || frame.src === window.location.href) {
           frame.src = frame.dataset.src || '';
+          // 숏폼 조회수 트래킹 (슬라이드당 1회)
+          const sid = slide.dataset.shopId;
+          if (sid && !slide.dataset.viewed) {
+            slide.dataset.viewed = '1';
+            fetch('/api/track/shorts/view/' + sid, { method: 'POST' }).catch(() => {});
+          }
         }
       } else {
         frame.src = 'about:blank';
@@ -5697,9 +5726,14 @@ function renderShortsAdmin() {
         '<div style="flex:1;min-width:0">' +
           '<div style="font-size:13px;font-weight:700;color:#f1f5f9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(item.name||'(업체명 없음)')+'</div>' +
           '<div style="font-size:11px;color:#64748b;margin-top:2px">'+(item.category||'')+(item.address ? ' · '+item.address : '')+'</div>' +
-          '<div style="margin-top:4px;display:flex;gap:4px">' +
+          '<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">' +
             (item.youtube_id ? '<span style="font-size:10px;background:rgba(255,0,0,.12);color:#f87171;padding:1px 6px;border-radius:6px">유튜브</span>' : '<span style="font-size:10px;background:rgba(255,255,255,.06);color:#64748b;padding:1px 6px;border-radius:6px">영상없음</span>') +
+            (item.smart_place_url ? '<span style="font-size:10px;background:rgba(3,199,90,.12);color:#34d399;padding:1px 6px;border-radius:6px">예약링크✓</span>' : '<span style="font-size:10px;background:rgba(255,255,255,.06);color:#64748b;padding:1px 6px;border-radius:6px">예약링크없음</span>') +
             '<span style="font-size:10px;background:'+(item.active?'rgba(3,199,90,.12)':'rgba(255,255,255,.06)')+';color:'+(item.active?'#34d399':'#64748b')+';padding:1px 6px;border-radius:6px">'+(item.active?'노출중':'숨김')+'</span>' +
+          '</div>' +
+          '<div style="margin-top:6px;display:flex;gap:10px">' +
+            '<span style="font-size:11px;color:#94a3b8"><i class="fas fa-eye" style="color:#6366f1;margin-right:3px"></i>'+(item.view_cnt||0)+'회</span>' +
+            '<span style="font-size:11px;color:#94a3b8"><i class="fas fa-calendar-check" style="color:#FF4D7D;margin-right:3px"></i>'+(item.sp_cnt||0)+'클릭</span>' +
           '</div>' +
         '</div>' +
         '<div style="display:flex;gap:6px;flex-shrink:0">' +
@@ -5741,6 +5775,12 @@ function renderShortsAdmin() {
           '<div>' +
             '<label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">주소</label>' +
             '<input id="s-addr" placeholder="예: 서울 강남구 역삼동" style="'+adminInputStyle()+'"/>' +
+          '</div>' +
+          // 네이버 예약 링크
+          '<div>' +
+            '<label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">네이버 예약링크 (스마트플레이스)</label>' +
+            '<input id="s-place" placeholder="https://naver.me/xxxxx 또는 스마트플레이스 URL" style="'+adminInputStyle()+'"/>' +
+            '<div style="font-size:10px;color:#475569;margin-top:4px">입력하면 예약하기 버튼이 활성화됩니다</div>' +
           '</div>' +
           // 유튜브
           '<div>' +
@@ -5784,10 +5824,11 @@ function openShortsModal(id) {
   _shortsAdminEditId = id;
   const item = id ? _shortsAdminItems.find(x=>x.id===id) : null;
   document.getElementById('shortsModalTitle').textContent = id ? '숏폼 수정' : '숏폼 추가';
-  document.getElementById('s-name').value   = item?.name       || '';
-  document.getElementById('s-cat').value    = item?.category   || '';
-  document.getElementById('s-addr').value   = item?.address    || '';
-  document.getElementById('s-ytid').value   = item?.youtube_id || '';
+  document.getElementById('s-name').value   = item?.name            || '';
+  document.getElementById('s-cat').value    = item?.category        || '';
+  document.getElementById('s-addr').value   = item?.address         || '';
+  document.getElementById('s-place').value  = item?.smart_place_url || '';
+  document.getElementById('s-ytid').value   = item?.youtube_id      || '';
   document.getElementById('s-order').value  = item?.sort_order ?? 0;
   document.getElementById('s-active').checked = item ? item.active : true;
   // 유튜브 미리보기
@@ -5832,11 +5873,12 @@ async function saveShorts() {
   if (!ytId) { toast('유튜브 링크를 입력하세요'); return; }
   const body = {
     name,
-    category:  document.getElementById('s-cat').value,
-    address:   document.getElementById('s-addr').value.trim(),
-    youtubeId: ytId,
-    sortOrder: parseInt(document.getElementById('s-order').value)||0,
-    active:    document.getElementById('s-active').checked,
+    category:       document.getElementById('s-cat').value,
+    address:        document.getElementById('s-addr').value.trim(),
+    smartPlaceUrl:  document.getElementById('s-place').value.trim(),
+    youtubeId:      ytId,
+    sortOrder:      parseInt(document.getElementById('s-order').value)||0,
+    active:         document.getElementById('s-active').checked,
   };
   const url    = _shortsAdminEditId ? '/api/admin/shorts/'+_shortsAdminEditId : '/api/admin/shorts';
   const method = _shortsAdminEditId ? 'PUT' : 'POST';
