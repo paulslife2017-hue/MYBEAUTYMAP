@@ -5751,8 +5751,6 @@ function renderShortsAdmin() {
     '</div>';
   }).join('');
 
-  const catOpts = CAT_OPTIONS.map(c => '<option value="'+c+'">'+c+'</option>').join('');
-
   p.innerHTML =
     '<div style="padding:16px">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">' +
@@ -5775,7 +5773,7 @@ function renderShortsAdmin() {
           '<div>' +
             '<label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">카테고리</label>' +
             '<select id="s-cat" style="'+adminInputStyle()+'background:rgba(255,255,255,.06)">' +
-              '<option value="">선택 안함</option>' + catOpts +
+              '<option value="">선택 안함</option>' +
             '</select>' +
           '</div>' +
           // 주소
@@ -5832,12 +5830,16 @@ function openShortsModal(id) {
   const item = id ? _shortsAdminItems.find(x=>x.id===id) : null;
   document.getElementById('shortsModalTitle').textContent = id ? '숏폼 수정' : '숏폼 추가';
   document.getElementById('s-name').value   = item?.name            || '';
-  document.getElementById('s-cat').value    = item?.category        || '';
   document.getElementById('s-addr').value   = item?.address         || '';
   document.getElementById('s-place').value  = item?.smart_place_url || '';
   document.getElementById('s-ytid').value   = item?.youtube_id      || '';
   document.getElementById('s-order').value  = item?.sort_order ?? 0;
   document.getElementById('s-active').checked = item ? item.active : true;
+  // 카테고리 select 옵션을 직접 채움 (innerHTML 연결 시 누락 방지)
+  const sCat = document.getElementById('s-cat');
+  sCat.innerHTML = '<option value="">선택 안함</option>' +
+    CAT_OPTIONS.map(c => '<option value="'+c+'"'+(item?.category===c?' selected':'')+'>'+c+'</option>').join('');
+  if (!id) sCat.value = '';
   // 유튜브 미리보기
   const ytId = item?.youtube_id || '';
   const preview = document.getElementById('s-yt-preview');
