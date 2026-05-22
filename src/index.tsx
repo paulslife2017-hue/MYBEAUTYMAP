@@ -2886,10 +2886,19 @@ function switchTab(tab) {
     const fi = _feedCurrentCard.querySelector('iframe.feed-iframe');
     if (fi) { fi.dataset.paused = '1'; fi.src = 'about:blank'; }
   }
-  // 영상탭 복귀 시 다시 재생
-  if (tab === 'feed' && _feedCurrentCard) {
-    const fi = _feedCurrentCard.querySelector('iframe.feed-iframe');
-    if (fi && fi.dataset.src) { delete fi.dataset.paused; fi.src = fi.dataset.src; }
+  // 영상탭 진입/복귀 시 재생
+  if (tab === 'feed') {
+    const scr = document.getElementById('feedScreen');
+    if (scr) {
+      // 현재 카드 복귀 재생, 없으면 첫 카드 활성화
+      if (_feedCurrentCard) {
+        const fi = _feedCurrentCard.querySelector('iframe.feed-iframe');
+        if (fi && fi.dataset.src) { delete fi.dataset.paused; fi.src = fi.dataset.src; }
+      } else {
+        const first = scr.querySelector('.yt-area[data-ytid]');
+        if (first) feedActivateCard(first);
+      }
+    }
   }
 }
 
@@ -3279,6 +3288,8 @@ function feedActivateCard(ytDiv) {
     }
   }
   _feedCurrentCard = ytDiv;
+  // 피드 탭이 아니면 재생하지 않음 (릴스 등 다른 탭에서 호출 방지)
+  if (!document.getElementById('feedScreen').classList.contains('active')) return;
   // 현재 카드 재생
   const iframe = ytDiv.querySelector('iframe.feed-iframe');
   if (iframe && iframe.dataset.src) {
@@ -3308,18 +3319,18 @@ function initFeedStopObserver() {
   _feedCurrentCard = null;
   const scr = document.getElementById('feedScreen');
 
-  // 첫 번째 카드 즉시 활성화
-  const first = scr.querySelector('.yt-area[data-ytid]');
-  if (first) feedActivateCard(first);
-
-  // 스크롤 시 debounce로 현재 카드 재생
-  scr.addEventListener('scroll', () => {
+  // 스크롤 리스너 중복 방지
+  if (scr._feedScrollHandler) scr.removeEventListener('scroll', scr._feedScrollHandler);
+  scr._feedScrollHandler = () => {
     clearTimeout(_feedScrollTimer);
     _feedScrollTimer = setTimeout(() => {
       const cur = feedFindCurrentCard(scr);
       if (cur) feedActivateCard(cur);
     }, 150);
-  }, { passive: true });
+  };
+  scr.addEventListener('scroll', scr._feedScrollHandler, { passive: true });
+
+  // 첫 번째 카드는 피드 탭 활성 시에만 재생 (switchTab('feed') 에서 처리)
 }
 
 function filterFeed(btn, cat) {
