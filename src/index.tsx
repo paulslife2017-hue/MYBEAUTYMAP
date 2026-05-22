@@ -1918,63 +1918,62 @@ html,body{height:100%;background:var(--bg);color:#fff;
   border:none;
   pointer-events:auto;
 }
-/* 하단 그라데이션 오버레이 */
+/* 숏폼 하단 오버레이 — 영상탭 shop-bar와 동일 구조 */
 .shorts-overlay{
   position:absolute;bottom:0;left:0;right:0;
-  background:linear-gradient(transparent 0%,rgba(0,0,0,.6) 40%,rgba(0,0,0,.92) 100%);
-  padding:100px 16px 24px;
+  background:linear-gradient(transparent 0%,rgba(0,0,0,.55) 35%,rgba(10,10,10,.97) 100%);
+  padding:60px 14px 16px;
   z-index:10;
   pointer-events:none;
 }
-/* 업체 카테고리 뱃지 */
+/* 업체정보 + 예약버튼 한줄 배치 */
+.shorts-info-row{
+  display:flex;align-items:center;gap:10px;
+  pointer-events:none;
+}
+.shorts-info-body{flex:1;min-width:0;}
+/* 카테고리 뱃지 */
 .shorts-cat{
-  display:inline-flex;align-items:center;gap:5px;
-  background:rgba(255,77,125,.2);
-  border:1px solid rgba(255,77,125,.5);
-  color:#FF4D7D;
-  font-size:11px;font-weight:800;
-  padding:4px 10px;border-radius:20px;
-  margin-bottom:8px;
-  letter-spacing:.3px;
-  backdrop-filter:blur(6px);
+  display:inline-block;
+  font-size:10px;font-weight:700;color:var(--pink);
+  background:rgba(255,77,125,.12);
+  border:1px solid rgba(255,77,125,.25);
+  padding:2px 7px;border-radius:6px;margin-bottom:5px;
   pointer-events:none;
 }
 /* 업체명 */
 .shorts-name{
-  font-size:20px;font-weight:900;color:#fff;
-  line-height:1.25;margin-bottom:6px;
-  text-shadow:0 2px 12px rgba(0,0,0,.8);
-  letter-spacing:-.4px;
+  font-size:17px;font-weight:800;color:#fff;
+  line-height:1.25;margin-bottom:3px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  text-shadow:0 2px 8px rgba(0,0,0,.7);
   pointer-events:none;
 }
 /* 주소 */
 .shorts-addr{
-  font-size:12px;color:rgba(255,255,255,.6);
-  margin-bottom:14px;
-  display:flex;align-items:center;gap:5px;
+  font-size:11px;color:rgba(255,255,255,.5);
+  display:flex;align-items:center;gap:4px;
   pointer-events:none;
 }
-.shorts-addr i{color:rgba(255,77,125,.7);font-size:11px;}
-/* 예약 버튼 */
+.shorts-addr i{color:var(--pink);font-size:10px;flex-shrink:0;}
+/* 예약 버튼 — 영상탭 btn-book과 동일 스타일 */
 .shorts-book-btn{
-  display:flex;align-items:center;justify-content:space-between;
-  width:100%;
-  padding:14px 18px;
-  border-radius:16px;
-  background:linear-gradient(135deg,#FF4D7D 0%,#ff6b9d 100%);
-  color:#fff;font-size:15px;font-weight:800;
-  border:none;cursor:pointer;
-  font-family:inherit;
-  box-shadow:0 4px 24px rgba(255,77,125,.5);
+  flex-shrink:0;
+  display:flex;flex-direction:column;align-items:center;gap:3px;
+  background:var(--pink);
+  color:#fff;border:none;border-radius:14px;
+  padding:10px 14px;
+  font-size:12px;font-weight:800;
+  font-family:inherit;cursor:pointer;
+  white-space:nowrap;
+  box-shadow:0 4px 16px rgba(255,77,125,.45);
+  min-width:64px;
   pointer-events:auto;
-  letter-spacing:-.2px;
-  transition:transform .12s,opacity .12s;
+  transition:transform .12s,background .12s;
 }
-.shorts-book-btn:active{transform:scale(.97);opacity:.88;}
-.shorts-book-btn-left{display:flex;align-items:center;gap:8px;}
-.shorts-book-btn-arrow{width:28px;height:28px;background:rgba(255,255,255,.22);border-radius:50%;
-  display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-.shorts-book-btn-arrow i{font-size:11px;margin:0;}
+.shorts-book-btn i{font-size:16px;}
+.shorts-book-btn span{font-size:10px;font-weight:700;}
+.shorts-book-btn:active{background:#e0365f;transform:scale(.96);}
 /* 영상 없는 슬라이드 배경 */
 .shorts-no-video{
   width:100%;height:100%;
@@ -2931,13 +2930,17 @@ function shortsSlide(shop) {
           ' allow="autoplay;encrypted-media;fullscreen" allowfullscreen playsinline></iframe>'
       : '<div class="shorts-no-video"></div>') +
     '<div class="shorts-overlay">' +
-      (cat ? '<span class="shorts-cat"><i class="fas fa-tag" style="font-size:9px"></i>' + cat + '</span>' : '') +
-      '<div class="shorts-name">' + name + '</div>' +
-      (addr ? '<div class="shorts-addr"><i class="fas fa-map-marker-alt"></i>' + addr + '</div>' : '') +
-      '<button class="shorts-book-btn" onclick="shortsOpenBook(' + JSON.stringify(shop).replace(/"/g,'&quot;') + ')">' +
-        '<span class="shorts-book-btn-left"><i class="fas fa-calendar-check"></i>예약하기</span>' +
-        '<span class="shorts-book-btn-arrow"><i class="fas fa-chevron-right"></i></span>' +
-      '</button>' +
+      '<div class="shorts-info-row">' +
+        '<div class="shorts-info-body">' +
+          (cat ? '<span class="shorts-cat">' + cat + '</span>' : '') +
+          '<div class="shorts-name">' + name + '</div>' +
+          (addr ? '<div class="shorts-addr"><i class="fas fa-map-pin"></i>' + addr + '</div>' : '') +
+        '</div>' +
+        '<button class="shorts-book-btn" onclick="shortsOpenBook(' + JSON.stringify(shop).replace(/"/g,'&quot;') + ')">' +
+          '<i class="fas fa-calendar-check"></i>' +
+          '<span>예약하기</span>' +
+        '</button>' +
+      '</div>' +
     '</div>' +
     '</div>'
   );
