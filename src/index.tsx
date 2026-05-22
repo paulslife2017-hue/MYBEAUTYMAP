@@ -1804,17 +1804,21 @@ html,body{height:100%;background:var(--bg);color:#fff;
   overflow-x:auto;padding:6px 12px;height:100%;scrollbar-width:none;
 }
 #shortsCatBar .cat-scroll::-webkit-scrollbar{display:none;}
-/* 숏폼 카탈로그 버튼 — 다크 배경 전용 색상 강제 */
-#shortsCatBar .cp{
+/* 숏폼 카탈로그 버튼 — 다크 강제 v3 */
+#shortsCatBar .cp,
+#shortsCatBar button.cp{
   color:#e2e8f0!important;
   background:#2a2a2a!important;
+  border:1.5px solid #444!important;
   border-color:#444!important;
 }
-#shortsCatBar .cp:hover{
+#shortsCatBar .cp:hover,
+#shortsCatBar button.cp:hover{
   background:#383838!important;
   border-color:#666!important;
 }
-#shortsCatBar .cp.active{
+#shortsCatBar .cp.active,
+#shortsCatBar button.cp.active{
   background:var(--pink)!important;
   border-color:var(--pink)!important;
   color:#fff!important;
