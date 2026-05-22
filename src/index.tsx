@@ -1777,7 +1777,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
   display:none;}
 #mapScreen.active{display:block;}
 /* 쇼츠 릴스 스타일 */
-/* 숏폼: 카탈로그바 아래 ~ 탭바 바로 위 풀스크린 */
+/* 숏폼: 카탈로그바(44px) 아래 ~ 탭바 바로 위 풀스크린 */
 #shortsScreen{position:fixed;
   top:44px;
   left:0;right:0;
@@ -1786,6 +1786,11 @@ html,body{height:100%;background:var(--bg);color:#fff;
   background:#000;-webkit-overflow-scrolling:touch;}
 #shortsScreen::-webkit-scrollbar{display:none;}
 #shortsScreen.active{display:block;}
+/* 숏폼 모드: 헤더·검색바·광고 숨김 */
+body.shorts-mode .hd,
+body.shorts-mode .search-bar,
+body.shorts-mode #coupang-ad{ display:none!important; }
+body.shorts-mode #shortsCatBar{ display:block!important; }
 /* 숏폼 전용 카탈로그 바 */
 #shortsCatBar{
   position:fixed;
@@ -1935,8 +1940,9 @@ html,body{height:100%;background:var(--bg);color:#fff;
 .shorts-slide{
   position:relative;
   width:100%;
-  /* 풀스크린: 카탈로그바(44px) ~ 탭바 위까지 */
+  /* 풀스크린: 카탈로그바(44px) ~ 탭바 위까지 (광고 없음) */
   height:calc(100dvh - 44px - var(--nav) - var(--safe));
+  min-height:calc(100dvh - 44px - var(--nav) - var(--safe));
   scroll-snap-align:start;
   scroll-snap-stop:always;
   flex-shrink:0;
@@ -2462,7 +2468,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
 }
 </style>
 </head>
-<body>
+<body class="shorts-mode">
 
 <header class="hd">
   <div class="logo" id="logoBtn">
@@ -2499,7 +2505,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
 </div>
 
 <!-- 숏폼 전용 카탈로그 바 -->
-<div id="shortsCatBar" class="show">
+<div id="shortsCatBar">
   <div class="cat-scroll">
     <button class="scp active" id="scat-all"    onclick="filterShorts(this,'all')">🏠 전체</button>
     <button class="scp"        id="scat-마사지"  onclick="filterShorts(this,'마사지')">💆 마사지</button>
@@ -2701,13 +2707,13 @@ html,body{height:100%;background:var(--bg);color:#fff;
 </div>
 
 <!-- 숏폼 스크린 -->
-<section id="shortsScreen" class="active">
+<section id="shortsScreen">
   <div id="shortsFeed" style="height:100%;display:flex;flex-direction:column"></div>
 </section>
 
 <!-- 하단 탭바: 릴스 → 영상 → 지도 → 입점 -->
 <nav class="tabbar">
-  <button class="tab active" id="tab-shorts" onclick="switchTab('shorts')">
+  <button class="tab" id="tab-shorts" onclick="switchTab('shorts')">
     <i class="fas fa-fire"></i>릴스
   </button>
   <button class="tab" id="tab-feed" onclick="switchTab('feed')">
@@ -2823,11 +2829,10 @@ function switchTab(tab) {
   }
   if (tab==='feed') closeMapPopup();
 
-  // ── 숏폼 카탈로그바 show/hide ────────────────────────────────────────────
+  // ── 숏폼 모드: body 클래스로 헤더·광고 통합 제어 ──────────────────────────
+  document.body.classList.toggle('shorts-mode', tab === 'shorts');
   const sCatBar = document.getElementById('shortsCatBar');
-  if (sCatBar) {
-    sCatBar.classList.toggle('show', tab === 'shorts');
-  }
+  if (sCatBar) sCatBar.classList.toggle('show', tab === 'shorts');
   document.documentElement.style.setProperty('--scat', tab === 'shorts' ? '44px' : '0px');
   // ────────────────────────────────────────────────────────────────────────
 
@@ -2884,9 +2889,9 @@ let _shortsObserver = null;
 let _shortsItems    = [];   // 전체 업체 캐시
 let _shortsCat      = 'all'; // 현재 선택된 카테고리
 
-// 앱 진입 시 릴스 탭 즉시 로드
+// 앱 진입 시 릴스 탭으로 시작 (switchTab이 body.shorts-mode + catBar + 로드 모두 처리)
 document.addEventListener('DOMContentLoaded', () => {
-  loadShorts('all');
+  switchTab('shorts');
 });
 
 // 숏폼 첫 슬라이드 재생
