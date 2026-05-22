@@ -2878,12 +2878,9 @@ function switchTab(tab) {
     if (_shortsLoaded && _shortsItems.length) {
       const sc = document.getElementById('shortsScreen');
       if (sc) {
-        _shortsActiveIdx = -1;
+        _shortsStopAll();
         sc.scrollTop = 0;
-        setTimeout(() => {
-          initShortsObserver(sc);
-          _shortsPlay(0);
-        }, 100);
+        setTimeout(() => { initShortsObserver(sc); }, 100);
       }
     } else {
       loadShorts(_shortsCat);
@@ -2988,11 +2985,8 @@ async function loadShorts(cat) {
   _shortsTotal = items.length;
   _shortsActiveIdx = -1;
   screen.scrollTop = 0;
-  // 레이아웃 완전히 그려진 후 Observer 등록 + 첫 슬라이드 재생
-  setTimeout(() => {
-    initShortsObserver(screen);
-    _shortsPlay(0);
-  }, 100);
+  // 레이아웃 그려진 후 Observer 등록 → 첫 슬라이드 자동 감지·재생
+  setTimeout(() => { initShortsObserver(screen); }, 100);
 }
 
 // 전체 음소거 상태 (기본: 음소거)
@@ -3059,52 +3053,27 @@ function shortsOpenBook(shop) {
   openInapp();
 }
 
-// ── 릴스 재생 엔진 ─────────────────────────────────────────────────────
+// ── 릴스 재생 엔진 (IntersectionObserver) ─────────────────────────────
 let _shortsActiveIdx = -1;
 let _shortsTotal     = 0;
 
-function _shortsPlay(idx) {
-  const slides = Array.from(document.querySelectorAll('.shorts-slide'));
-  if (idx < 0 || idx >= slides.length) return;
-
-  // 이전 슬라이드 iframe 제거
-  if (_shortsActiveIdx >= 0 && _shortsActiveIdx !== idx) {
-    const prevWrap = slides[_shortsActiveIdx]?.querySelector('.shorts-iframe-wrap');
-    if (prevWrap) prevWrap.innerHTML = '';
-  }
-  _shortsActiveIdx = idx;
-
-  const slide = slides[idx];
-  const src   = slide.dataset.ytSrc;
-  const wrap  = slide.querySelector('.shorts-iframe-wrap');
-  if (!src || !wrap) return;
-
-  // 이미 재생 중이면 스킵
-  if (wrap.querySelector('iframe')) return;
-
-  // iframe 새로 삽입 → autoplay=1 + mute=1 → 브라우저 자동재생 보장
+function _shortsInsertIframe(wrap, src) {
   wrap.innerHTML = '';
   const f = document.createElement('iframe');
   f.src = src;
   f.allow = 'autoplay; encrypted-media; fullscreen; picture-in-picture';
   f.allowFullscreen = true;
   f.setAttribute('playsinline', '');
-  f.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:none;';
+  f.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:none;pointer-events:none;';
   wrap.appendChild(f);
-
+  // 소리 켜진 상태면 로드 후 unMute
   if (!_shortsMuted) {
     f.onload = () => {
       try { f.contentWindow.postMessage(JSON.stringify({event:'command',func:'unMute',args:[]}), '*'); } catch(e) {}
       f.onload = null;
     };
   }
-
-  // 조회수 트래킹
-  const sid = slide.dataset.shopId;
-  if (sid && !slide.dataset.viewed) {
-    slide.dataset.viewed = '1';
-    fetch('/api/track/shorts/view/' + sid, { method: 'POST' }).catch(() => {});
-  }
+  return f;
 }
 
 function _shortsStopAll() {
@@ -3112,57 +3081,42 @@ function _shortsStopAll() {
   _shortsActiveIdx = -1;
 }
 
-// 외부에서 호출: 위/아래 이동
-function shortsGo(dir) {
-  const next = _shortsActiveIdx + dir;
-  if (next < 0 || next >= _shortsTotal) return;
-  const screen = document.getElementById('shortsScreen');
-  const slides = document.querySelectorAll('.shorts-slide');
-  if (!slides[next]) return;
-  // 스크롤 이동 (snap이 처리)
-  screen.scrollTo({ top: slides[next].offsetTop, behavior: 'smooth' });
-  // 즉시 재생 (스크롤 완료 안 기다림)
-  _shortsPlay(next);
-}
-
 function initShortsObserver(screen) {
-  // 기존 이벤트 정리
-  if (screen._touchStartH) screen.removeEventListener('touchstart', screen._touchStartH);
-  if (screen._touchEndH)   screen.removeEventListener('touchend',   screen._touchEndH);
-  if (screen._scrollEndH)  screen.removeEventListener('scrollend',  screen._scrollEndH);
-  if (screen._scrollH)     screen.removeEventListener('scroll',     screen._scrollH);
+  // 기존 observer 해제
+  if (_shortsObserver) { _shortsObserver.disconnect(); _shortsObserver = null; }
 
-  // ── 터치: #shortsScreen에 직접 등록 (iframe pointer-events:none 처리됨) ──
-  let _ty = 0;
-  const onTouchStart = (e) => { _ty = e.changedTouches[0].clientY; };
-  const onTouchEnd   = (e) => {
-    const dy = _ty - e.changedTouches[0].clientY;
-    if (Math.abs(dy) < 30) return;
-    shortsGo(dy > 0 ? 1 : -1);
-  };
-  screen._touchStartH = onTouchStart;
-  screen._touchEndH   = onTouchEnd;
-  screen.addEventListener('touchstart', onTouchStart, { passive: true });
-  screen.addEventListener('touchend',   onTouchEnd,   { passive: true });
+  _shortsObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      const slide = entry.target;
+      const wrap  = slide.querySelector('.shorts-iframe-wrap');
+      const src   = slide.dataset.ytSrc;
+      if (!wrap || !src) return;
 
-  // ── 데스크탑: scrollend / scroll 디바운스 ────────────────────────────────
-  const run = () => {
-    const slides = Array.from(document.querySelectorAll('.shorts-slide'));
-    if (!slides.length) return;
-    const mid = screen.scrollTop + screen.clientHeight * 0.5;
-    let best = 0, bestD = Infinity;
-    slides.forEach((s, i) => {
-      const d = Math.abs(s.offsetTop + s.offsetHeight * 0.5 - mid);
-      if (d < bestD) { bestD = d; best = i; }
+      if (entry.isIntersecting) {
+        // 화면에 들어옴 → iframe 삽입 (이미 있으면 스킵)
+        if (!wrap.querySelector('iframe')) {
+          const idx = parseInt(slide.dataset.idx || '0', 10);
+          _shortsActiveIdx = idx;
+          _shortsInsertIframe(wrap, src);
+          // 조회수 트래킹
+          const sid = slide.dataset.shopId;
+          if (sid && !slide.dataset.viewed) {
+            slide.dataset.viewed = '1';
+            fetch('/api/track/shorts/view/' + sid, { method: 'POST' }).catch(() => {});
+          }
+        }
+      } else {
+        // 화면에서 나감 → iframe 제거 (재생 즉시 중단)
+        wrap.innerHTML = '';
+      }
     });
-    _shortsPlay(best);
-  };
-  screen._scrollEndH = run;
-  screen.addEventListener('scrollend', run, { passive: true });
-  let _st = null;
-  const onScroll = () => { clearTimeout(_st); _st = setTimeout(run, 200); };
-  screen._scrollH = onScroll;
-  screen.addEventListener('scroll', onScroll, { passive: true });
+  }, {
+    root: screen,       // #shortsScreen 기준
+    threshold: 0.6      // 60% 이상 보이면 재생
+  });
+
+  // 모든 슬라이드 관찰 등록
+  document.querySelectorAll('.shorts-slide').forEach(s => _shortsObserver.observe(s));
 }
 
 function showAdminPicker() {
