@@ -1976,6 +1976,42 @@ body.shorts-mode #shorts-mute-btn{ display:flex; }
   border:none;
   pointer-events:none;
 }
+/* ── 릴스 중앙 탭 영역 (재생/정지) ── */
+.shorts-tap-area{
+  position:absolute;inset:0;
+  z-index:11;
+  /* 하단 overlay 높이만큼 제외 — 버튼 클릭 방해 안 하도록 */
+  bottom:150px;
+  pointer-events:auto;
+  -webkit-tap-highlight-color:transparent;
+  touch-action:manipulation;
+}
+/* 일시정지 아이콘 (중앙) */
+.shorts-pause-icon{
+  position:absolute;
+  top:50%;left:50%;
+  transform:translate(-50%,-50%) scale(0);
+  width:72px;height:72px;
+  background:rgba(0,0,0,.55);
+  border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  pointer-events:none;
+  transition:transform .15s cubic-bezier(.34,1.56,.64,1), opacity .2s;
+  opacity:0;
+}
+.shorts-pause-icon i{
+  font-size:28px;color:#fff;
+  pointer-events:none;
+}
+.shorts-pause-icon.show{
+  transform:translate(-50%,-50%) scale(1);
+  opacity:1;
+}
+.shorts-pause-icon.hide{
+  transform:translate(-50%,-50%) scale(0.7);
+  opacity:0;
+}
+
 /* 숏폼 하단 오버레이 — 영상탭 shop-bar와 동일 구조 */
 .shorts-overlay{
   position:absolute;bottom:0;left:0;right:0;
@@ -3020,10 +3056,13 @@ function shortsSlide(shop, idx) {
   const addr = shop.address || '';
 
   return (
-    '<div class="shorts-slide" data-shop-id="' + shop.id + '" data-yt-src="' + src + '" data-idx="' + idx + '">' +
+    '<div class="shorts-slide" data-shop-id="' + shop.id + '" data-yt-src="' + src + '" data-idx="' + idx + '" data-playing="1">' +
+    (ytId ? '<div class="shorts-iframe-wrap"></div>' : '<div class="shorts-no-video"></div>') +
     (ytId
-      ? '<div class="shorts-iframe-wrap"></div>'
-      : '<div class="shorts-no-video"></div>') +
+      ? '<div class="shorts-tap-area" onclick="shortsTogglePlay(this.closest(\'.shorts-slide\'))">' +
+          '<div class="shorts-pause-icon"><i class="fas fa-pause"></i></div>' +
+        '</div>'
+      : '') +
     '<div class="shorts-overlay">' +
       '<div class="shorts-info-row">' +
         '<div class="shorts-info-body">' +
@@ -3039,6 +3078,56 @@ function shortsSlide(shop, idx) {
     '</div>' +
     '</div>'
   );
+}
+
+// ── 릴스 재생/정지 토글 (중앙 탭) ───────────────────────────────────────
+function shortsTogglePlay(slide) {
+  if (!slide) return;
+  const wrap   = slide.querySelector('.shorts-iframe-wrap');
+  const icon   = slide.querySelector('.shorts-pause-icon');
+  const iframe = wrap ? wrap.querySelector('iframe') : null;
+  const isPlaying = slide.dataset.playing === '1';
+
+  if (isPlaying) {
+    // 재생 중 → 정지
+    slide.dataset.playing = '0';
+    if (iframe) {
+      try {
+        iframe.contentWindow.postMessage(
+          JSON.stringify({event:'command', func:'pauseVideo', args:[]}), '*'
+        );
+      } catch(e) {}
+    }
+    // 일시정지 아이콘 표시 (pause → play 아이콘으로 변경)
+    if (icon) {
+      const i = icon.querySelector('i');
+      if (i) { i.className = 'fas fa-play'; }
+      icon.classList.remove('hide');
+      icon.classList.add('show');
+    }
+  } else {
+    // 정지 중 → 재생
+    slide.dataset.playing = '1';
+    if (iframe) {
+      try {
+        iframe.contentWindow.postMessage(
+          JSON.stringify({event:'command', func:'playVideo', args:[]}), '*'
+        );
+      } catch(e) {}
+    }
+    // 아이콘 잠깐 보였다 사라짐
+    if (icon) {
+      const i = icon.querySelector('i');
+      if (i) { i.className = 'fas fa-play'; }
+      icon.classList.remove('hide');
+      icon.classList.add('show');
+      setTimeout(() => {
+        icon.classList.remove('show');
+        icon.classList.add('hide');
+        setTimeout(() => { icon.classList.remove('hide'); }, 200);
+      }, 600);
+    }
+  }
 }
 
 // 음소거 토글 버튼 클릭
@@ -3082,6 +3171,13 @@ function _shortsInsertIframe(wrap, src) {
   f.setAttribute('playsinline', '');
   f.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:none;pointer-events:none;';
   wrap.appendChild(f);
+  // 새 슬라이드 재생 시작: 재생 상태 리셋 + pause 아이콘 숨기기
+  const slide = wrap.closest('.shorts-slide');
+  if (slide) {
+    slide.dataset.playing = '1';
+    const icon = slide.querySelector('.shorts-pause-icon');
+    if (icon) { icon.classList.remove('show','hide'); }
+  }
   // 소리 켜진 상태면 로드 후 unMute
   if (!_shortsMuted) {
     f.onload = () => {
