@@ -3055,8 +3055,6 @@ function shortsOpenBook(shop) {
 function _shortsLoadFrame(frame) {
   const dataSrc = frame.dataset.src || '';
   if (!dataSrc) return;
-  // 이미 재생 중이면 스킵
-  if (frame.src && frame.src !== 'about:blank' && frame.src !== window.location.href) return;
   frame.src = dataSrc;
   // 소리가 켜진 상태면 로드 완료 후 즉시 unMute
   if (!_shortsMuted) {
@@ -3109,25 +3107,36 @@ function _shortsActivate(idx) {
   }
 }
 
+function _shortsFindCurrentIdx(screen) {
+  const slides = document.querySelectorAll('.shorts-slide');
+  if (!slides.length) return 0;
+  // scrollTop 기준으로 가장 가까운 슬라이드 찾기
+  const mid = screen.scrollTop + screen.clientHeight * 0.5;
+  let bestIdx = 0, bestDist = Infinity;
+  slides.forEach((s, i) => {
+    const dist = Math.abs((s.offsetTop + s.offsetHeight * 0.5) - mid);
+    if (dist < bestDist) { bestDist = dist; bestIdx = i; }
+  });
+  return bestIdx;
+}
+
 function initShortsObserver(screen) {
   if (_shortsObserver) _shortsObserver.disconnect();
   _shortsActiveIdx = -1;
 
-  // scroll 이벤트로 현재 슬라이드 인덱스 계산
   let _scrollTimer = null;
   function onShortsScroll() {
     clearTimeout(_scrollTimer);
     _scrollTimer = setTimeout(() => {
-      const slides = document.querySelectorAll('.shorts-slide');
-      if (!slides.length) return;
-      const slideH = slides[0].offsetHeight;
-      if (!slideH) return;
-      const idx = Math.round(screen.scrollTop / slideH);
-      _shortsActivate(Math.max(0, Math.min(idx, slides.length - 1)));
-    }, 80); // snap 완료 후 80ms 뒤 판정
+      const idx = _shortsFindCurrentIdx(screen);
+      _shortsActivate(idx);
+    }, 100);
   }
 
-  screen.removeEventListener('scroll', screen._shortsScrollHandler);
+  // 기존 리스너 제거 후 재등록
+  if (screen._shortsScrollHandler) {
+    screen.removeEventListener('scroll', screen._shortsScrollHandler);
+  }
   screen._shortsScrollHandler = onShortsScroll;
   screen.addEventListener('scroll', onShortsScroll, { passive: true });
 }
