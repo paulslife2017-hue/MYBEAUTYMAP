@@ -1935,8 +1935,8 @@ html,body{height:100%;background:var(--bg);color:#fff;
 .shorts-slide{
   position:relative;
   width:100%;
-  /* 뷰포트 전체 - 헤더 - 네비 = 한 슬라이드 */
-  height:calc(100dvh - var(--hd) - var(--scat,0px) - var(--ad) - var(--nav));
+  /* 풀스크린: 카탈로그바(44px) 제외한 전체 높이 */
+  height:calc(100dvh - 44px);
   scroll-snap-align:start;
   scroll-snap-stop:always;
   flex-shrink:0;
@@ -2705,8 +2705,11 @@ html,body{height:100%;background:var(--bg);color:#fff;
   <div id="shortsFeed" style="height:100%;display:flex;flex-direction:column"></div>
 </section>
 
-<!-- 하단 탭바: 영상 → 지도 → 입점 → 숏폼 -->
+<!-- 하단 탭바: 릴스 → 영상 → 지도 → 입점 -->
 <nav class="tabbar">
+  <button class="tab" id="tab-shorts" onclick="switchTab('shorts')">
+    <i class="fas fa-fire"></i>릴스
+  </button>
   <button class="tab active" id="tab-feed" onclick="switchTab('feed')">
     <i class="fas fa-play-circle"></i>영상
   </button>
@@ -2715,9 +2718,6 @@ html,body{height:100%;background:var(--bg);color:#fff;
   </button>
   <button class="tab" id="tab-inquiry" onclick="switchTab('inquiry')">
     <i class="fas fa-store"></i>입점문의
-  </button>
-  <button class="tab" id="tab-shorts" onclick="switchTab('shorts')">
-    <i class="fas fa-bolt"></i>숏폼
   </button>
 </nav>
 
@@ -2823,8 +2823,35 @@ function switchTab(tab) {
   }
   if (tab==='feed') closeMapPopup();
 
-  // 쿠팡 광고 배너: 모든 탭에서 표시 (숏폼 포함)
-  // → shortsScreen bottom이 이미 --ad 반영됨
+  // ── 숏폼 풀스크린 처리 ──────────────────────────────────────────────────
+  const header    = document.getElementById('header');
+  const adBanner  = document.getElementById('coupang-ad');
+  const tabbar    = document.querySelector('.tabbar');
+  const sCatBar   = document.getElementById('shortsCatBar');
+  const shortsScr = document.getElementById('shortsScreen');
+
+  if (tab === 'shorts') {
+    // 헤더·광고·탭바 숨김 → 숏폼이 진짜 전체화면
+    if (header)   header.style.display   = 'none';
+    if (adBanner) adBanner.style.display = 'none';
+    if (tabbar)   tabbar.style.display   = 'none';
+    // 숏폼 카탈로그바 표시
+    if (sCatBar)  { sCatBar.classList.add('show'); sCatBar.style.top = '0'; }
+    // shortsScreen: top=카탈로그바높이, bottom=0 (풀스크린)
+    if (shortsScr) { shortsScr.style.top = '44px'; shortsScr.style.bottom = '0'; }
+    document.documentElement.style.setProperty('--scat', '44px');
+  } else {
+    // 숏폼 이탈 → 헤더·광고·탭바 복원
+    if (header)   header.style.display   = '';
+    if (adBanner) adBanner.style.display = '';
+    if (tabbar)   tabbar.style.display   = '';
+    // 카탈로그바 숨김
+    if (sCatBar)  { sCatBar.classList.remove('show'); sCatBar.style.top = ''; }
+    // shortsScreen 원래 위치 복원
+    if (shortsScr) { shortsScr.style.top = ''; shortsScr.style.bottom = ''; }
+    document.documentElement.style.setProperty('--scat', '0px');
+  }
+  // ────────────────────────────────────────────────────────────────────────
 
   // 검색바 placeholder·힌트 탭에 따라 변경
   const si = document.getElementById('searchInput');
@@ -2834,21 +2861,12 @@ function switchTab(tab) {
     sh.textContent = '예) 강남 마사지  ·  눈썹문신  ·  리프팅';
   }
 
-  // 숏폼 카탈로그 바 show/hide + CSS 변수 --scat 세팅
-  const sCatBar = document.getElementById('shortsCatBar');
-  if (sCatBar) {
-    const show = tab === 'shorts';
-    sCatBar.classList.toggle('show', show);
-    document.documentElement.style.setProperty('--scat', show ? '44px' : '0px');
-  }
-
   if (tab==='shorts') {
     // 숏폼 탭 진입 → 영상탭 feed-iframe 정지
     if (_feedCurrentCard) {
       const fi = _feedCurrentCard.querySelector('iframe.feed-iframe');
       if (fi) { fi.dataset.paused = '1'; fi.src = 'about:blank'; }
     }
-    // 피드 sheet도 닫기
     closeFeedSheet && closeFeedSheet();
     // 숏폼 로드 & 재생
     if (_shortsLoaded && _shortsItems.length) {
@@ -2861,7 +2879,7 @@ function switchTab(tab) {
   if (tab !== 'shorts') {
     document.querySelectorAll('.shorts-slide iframe').forEach(f => { f.src = 'about:blank'; });
   }
-  // 영상탭 이탈 시 feed 정지 (숏폼 제외 다른 탭도 포함)
+  // 영상탭 이탈 시 feed 정지
   if (tab !== 'feed' && _feedCurrentCard) {
     const fi = _feedCurrentCard.querySelector('iframe.feed-iframe');
     if (fi) { fi.dataset.paused = '1'; fi.src = 'about:blank'; }
@@ -2931,9 +2949,18 @@ async function loadShorts(cat) {
     }
   }
 
-  const items = (cat === 'all')
-    ? _shortsItems
-    : _shortsItems.filter(s => s.category === cat);
+  // 랜덤 셔플 (Fisher-Yates)
+  function shuffle(arr) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+  const items = shuffle(
+    (cat === 'all') ? _shortsItems : _shortsItems.filter(s => s.category === cat)
+  );
 
   if (!items.length) {
     el.innerHTML = '<div class="shorts-empty">🎬 숏폼 영상을 준비 중입니다!</div>';
