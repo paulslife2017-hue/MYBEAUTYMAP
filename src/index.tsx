@@ -1806,14 +1806,21 @@ html,body{height:100%;background:var(--bg);color:#fff;
 #shortsCatBar .cat-scroll::-webkit-scrollbar{display:none;}
 /* 숏폼 카탈로그 버튼 — 다크 배경 전용 색상 강제 */
 #shortsCatBar .cp{
-  color:rgba(255,255,255,.7)!important;
-  background:rgba(255,255,255,.08)!important;
-  border-color:rgba(255,255,255,.18)!important;
+  color:#e2e8f0!important;
+  background:#2a2a2a!important;
+  border-color:#444!important;
+}
+#shortsCatBar .cp:hover{
+  background:#383838!important;
+  border-color:#666!important;
 }
 #shortsCatBar .cp.active{
   background:var(--pink)!important;
   border-color:var(--pink)!important;
   color:#fff!important;
+}
+#shortsCatBar{
+  background:#0a0a0a!important;
 }
 #inquiryScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:calc(var(--ad) + var(--nav));
   overflow-y:auto;display:none;background:var(--bg);}
