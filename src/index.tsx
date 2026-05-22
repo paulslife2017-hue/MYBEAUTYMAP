@@ -1974,7 +1974,7 @@ body.shorts-mode #shorts-mute-btn{ display:flex; }
   position:absolute;inset:0;
   width:100%;height:100%;
   border:none;
-  pointer-events:auto;
+  pointer-events:none;
 }
 /* 숏폼 하단 오버레이 — 영상탭 shop-bar와 동일 구조 */
 .shorts-overlay{
@@ -3127,25 +3127,25 @@ function shortsGo(dir) {
 
 function initShortsObserver(screen) {
   // 기존 이벤트 정리
-  if (window._shortsTouchStartH) document.removeEventListener('touchstart', window._shortsTouchStartH);
-  if (window._shortsTouchEndH)   document.removeEventListener('touchend',   window._shortsTouchEndH);
-  if (screen._scrollEndH)        screen.removeEventListener('scrollend', screen._scrollEndH);
-  if (screen._scrollH)           screen.removeEventListener('scroll',    screen._scrollH);
+  if (screen._touchStartH) screen.removeEventListener('touchstart', screen._touchStartH);
+  if (screen._touchEndH)   screen.removeEventListener('touchend',   screen._touchEndH);
+  if (screen._scrollEndH)  screen.removeEventListener('scrollend',  screen._scrollEndH);
+  if (screen._scrollH)     screen.removeEventListener('scroll',     screen._scrollH);
 
-  // 터치 스와이프 감지 (touchstart Y → touchend Y 비교)
+  // ── 터치: #shortsScreen에 직접 등록 (iframe pointer-events:none 처리됨) ──
   let _ty = 0;
   const onTouchStart = (e) => { _ty = e.changedTouches[0].clientY; };
   const onTouchEnd   = (e) => {
     const dy = _ty - e.changedTouches[0].clientY;
-    if (Math.abs(dy) < 30) return; // 30px 미만은 무시
+    if (Math.abs(dy) < 30) return;
     shortsGo(dy > 0 ? 1 : -1);
   };
-  window._shortsTouchStartH = onTouchStart;
-  window._shortsTouchEndH   = onTouchEnd;
-  document.addEventListener('touchstart', onTouchStart, { passive: true });
-  document.addEventListener('touchend',   onTouchEnd,   { passive: true });
+  screen._touchStartH = onTouchStart;
+  screen._touchEndH   = onTouchEnd;
+  screen.addEventListener('touchstart', onTouchStart, { passive: true });
+  screen.addEventListener('touchend',   onTouchEnd,   { passive: true });
 
-  // 데스크탑: scrollend / scroll 디바운스
+  // ── 데스크탑: scrollend / scroll 디바운스 ────────────────────────────────
   const run = () => {
     const slides = Array.from(document.querySelectorAll('.shorts-slide'));
     if (!slides.length) return;
