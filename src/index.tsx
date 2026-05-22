@@ -3178,12 +3178,40 @@ function _shortsInsertIframe(wrap, src) {
 function _shortsStopAll() {
   document.querySelectorAll('.shorts-slide .shorts-iframe-wrap').forEach(w => { w.innerHTML = ''; });
   _shortsActiveIdx = -1;
+  // scroll fallback 타이머 정리
+  const sc = document.getElementById('shortsScreen');
+  if (sc && sc._shortsScrollTimer) { clearTimeout(sc._shortsScrollTimer); sc._shortsScrollTimer = null; }
+}
+
+// ── 슬라이드 활성화 공통 로직 (Observer + scroll fallback 공유) ───────────
+function _shortsActivateSlide(slide) {
+  const wrap = slide.querySelector('.shorts-iframe-wrap');
+  const src  = slide.dataset.ytSrc;
+  if (!wrap || !src) return;
+  if (!wrap.querySelector('iframe')) {
+    _shortsActiveIdx = parseInt(slide.dataset.idx || '0', 10);
+    _shortsInsertIframe(wrap, src);
+    const sid = slide.dataset.shopId;
+    if (sid && !slide.dataset.viewed) {
+      slide.dataset.viewed = '1';
+      fetch('/api/track/shorts/view/' + sid, { method: 'POST' }).catch(() => {});
+    }
+  }
 }
 
 function initShortsObserver(screen) {
-  // 기존 observer 해제
+  // 기존 observer + scroll 리스너 해제
   if (_shortsObserver) { _shortsObserver.disconnect(); _shortsObserver = null; }
+  if (screen._shortsScrollHandler) {
+    screen.removeEventListener('scroll', screen._shortsScrollHandler);
+    screen._shortsScrollHandler = null;
+  }
+  if (screen._shortsScrollTimer) {
+    clearTimeout(screen._shortsScrollTimer);
+    screen._shortsScrollTimer = null;
+  }
 
+  // ── IntersectionObserver: threshold를 낮춰서 snap 오차에 강하게
   _shortsObserver = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
       const slide = entry.target;
@@ -3191,17 +3219,9 @@ function initShortsObserver(screen) {
       const src   = slide.dataset.ytSrc;
       if (!wrap || !src) return;
 
-      if (entry.intersectionRatio >= 0.5) {
-        // 50% 이상 보임 → 재생 (이미 있으면 스킵)
-        if (!wrap.querySelector('iframe')) {
-          _shortsActiveIdx = parseInt(slide.dataset.idx || '0', 10);
-          _shortsInsertIframe(wrap, src);
-          const sid = slide.dataset.shopId;
-          if (sid && !slide.dataset.viewed) {
-            slide.dataset.viewed = '1';
-            fetch('/api/track/shorts/view/' + sid, { method: 'POST' }).catch(() => {});
-          }
-        }
+      if (entry.intersectionRatio >= 0.3) {
+        // 30% 이상 보임 → 재생
+        _shortsActivateSlide(slide);
       } else if (entry.intersectionRatio < 0.1) {
         // 10% 미만 → 완전히 이탈 → iframe 제거
         wrap.innerHTML = '';
@@ -3209,13 +3229,51 @@ function initShortsObserver(screen) {
     });
   }, {
     root: screen,
-    threshold: [0.1, 0.5]
+    threshold: [0.1, 0.3, 0.5]
   });
 
   document.querySelectorAll('.shorts-slide').forEach(s => _shortsObserver.observe(s));
 
+  // ── scroll 이벤트 fallback: Observer가 놓친 경우를 대비
+  // 스크롤이 멈춘 뒤 가장 많이 보이는 슬라이드를 찾아 iframe 삽입
+  screen._shortsScrollHandler = function() {
+    clearTimeout(screen._shortsScrollTimer);
+    screen._shortsScrollTimer = setTimeout(() => {
+      const slides = document.querySelectorAll('.shorts-slide');
+      const scrTop = screen.scrollTop;
+      const scrH   = screen.clientHeight;
+      let bestSlide = null, bestRatio = 0;
+      slides.forEach(slide => {
+        const st = slide.offsetTop;
+        const sh = slide.offsetHeight;
+        const overlapTop = Math.max(st, scrTop);
+        const overlapBot = Math.min(st + sh, scrTop + scrH);
+        const overlapH   = Math.max(0, overlapBot - overlapTop);
+        const ratio      = sh > 0 ? overlapH / sh : 0;
+        if (ratio > bestRatio) { bestRatio = ratio; bestSlide = slide; }
+      });
+      // 30% 이상 보이는 최우선 슬라이드 활성화
+      if (bestSlide && bestRatio >= 0.3) {
+        _shortsActivateSlide(bestSlide);
+        // 완전히 이탈한 슬라이드 iframe 제거
+        slides.forEach(slide => {
+          if (slide === bestSlide) return;
+          const st = slide.offsetTop;
+          const sh = slide.offsetHeight;
+          const overlapBot = Math.min(st + sh, scrTop + scrH);
+          const overlapH   = Math.max(0, overlapBot - Math.max(st, scrTop));
+          const ratio      = sh > 0 ? overlapH / sh : 0;
+          if (ratio < 0.1) {
+            const w = slide.querySelector('.shorts-iframe-wrap');
+            if (w) w.innerHTML = '';
+          }
+        });
+      }
+    }, 150); // 스크롤 멈춤 150ms 후 실행
+  };
+  screen.addEventListener('scroll', screen._shortsScrollHandler, { passive: true });
+
   // 모바일 Safari: display:none→block 직후 Observer가 첫 슬라이드를 감지 못하는 버그 대응
-  // scrollTop을 1px 바꿨다 원복해서 IntersectionObserver를 강제로 재계산시킴
   requestAnimationFrame(() => {
     const cur = screen.scrollTop;
     screen.scrollTop = cur + 1;
