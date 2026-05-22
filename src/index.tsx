@@ -1777,11 +1777,11 @@ html,body{height:100%;background:var(--bg);color:#fff;
   display:none;}
 #mapScreen.active{display:block;}
 /* 쇼츠 릴스 스타일 */
-/* 숏폼: 카탈로그바 아래 ~ 탭바 바로 위 (헤더·광고 없이 풀스크린) */
+/* 숏폼: 카탈로그바 아래 ~ 탭바 바로 위 풀스크린 */
 #shortsScreen{position:fixed;
-  top:var(--scat,0px);
+  top:44px;
   left:0;right:0;
-  bottom:calc(var(--nav) + env(safe-area-inset-bottom,0px));
+  bottom:calc(var(--nav) + var(--safe));
   display:none;overflow-y:scroll;scroll-snap-type:y mandatory;
   background:#000;-webkit-overflow-scrolling:touch;}
 #shortsScreen::-webkit-scrollbar{display:none;}
@@ -1935,8 +1935,8 @@ html,body{height:100%;background:var(--bg);color:#fff;
 .shorts-slide{
   position:relative;
   width:100%;
-  /* 풀스크린: shortsScreen 전체 높이 = 화면 - 카탈로그바 - 탭바 */
-  height:calc(100dvh - var(--scat,44px) - var(--nav));
+  /* 풀스크린: 카탈로그바(44px) ~ 탭바 위까지 */
+  height:calc(100dvh - 44px - var(--nav) - var(--safe));
   scroll-snap-align:start;
   scroll-snap-stop:always;
   flex-shrink:0;
@@ -2492,14 +2492,14 @@ html,body{height:100%;background:var(--bg);color:#fff;
 </div>
 
 <!-- 카탈로그 탭바 (피드 전용) -->
-<div class="cat-bar show" id="catBar">
+<div class="cat-bar" id="catBar">
   <div class="cat-scroll">
     ${CATEGORIES.map((c, i) => `<button class="cp${i === 0 ? ' active' : ''}" onclick="filterFeed(this,'${c === '전체' ? 'all' : c}')">${CAT_EMOJI[c]} ${c}</button>${i === 0 ? REC_BTN : ''}`).join('')}
   </div>
 </div>
 
 <!-- 숏폼 전용 카탈로그 바 -->
-<div id="shortsCatBar">
+<div id="shortsCatBar" class="show">
   <div class="cat-scroll">
     <button class="scp active" id="scat-all"    onclick="filterShorts(this,'all')">🏠 전체</button>
     <button class="scp"        id="scat-마사지"  onclick="filterShorts(this,'마사지')">💆 마사지</button>
@@ -2515,7 +2515,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
 </div>
 
 <!-- 피드 화면 -->
-<main id="feedScreen" class="active">
+<main id="feedScreen">
   <div class="feed-spin"><div class="spinner"></div></div>
 </main>
 
@@ -2701,16 +2701,16 @@ html,body{height:100%;background:var(--bg);color:#fff;
 </div>
 
 <!-- 숏폼 스크린 -->
-<section id="shortsScreen">
+<section id="shortsScreen" class="active">
   <div id="shortsFeed" style="height:100%;display:flex;flex-direction:column"></div>
 </section>
 
 <!-- 하단 탭바: 릴스 → 영상 → 지도 → 입점 -->
 <nav class="tabbar">
-  <button class="tab" id="tab-shorts" onclick="switchTab('shorts')">
+  <button class="tab active" id="tab-shorts" onclick="switchTab('shorts')">
     <i class="fas fa-fire"></i>릴스
   </button>
-  <button class="tab active" id="tab-feed" onclick="switchTab('feed')">
+  <button class="tab" id="tab-feed" onclick="switchTab('feed')">
     <i class="fas fa-play-circle"></i>영상
   </button>
   <button class="tab" id="tab-map" onclick="switchTab('map')">
@@ -2853,10 +2853,7 @@ function switchTab(tab) {
       loadShorts(_shortsCat);
     }
   }
-  // 숏폼 탭 이탈 시 모든 숏폼 영상 정지
-  if (tab !== 'shorts') {
-    document.querySelectorAll('.shorts-slide iframe').forEach(f => { f.src = 'about:blank'; });
-  }
+  // 숏폼 탭 이탈 시에도 영상 유지 (복귀 시 즉시 재생)
   // 영상탭 이탈 시 feed 정지
   if (tab !== 'feed' && _feedCurrentCard) {
     const fi = _feedCurrentCard.querySelector('iframe.feed-iframe');
@@ -2886,6 +2883,11 @@ let _shortsLoaded   = false;
 let _shortsObserver = null;
 let _shortsItems    = [];   // 전체 업체 캐시
 let _shortsCat      = 'all'; // 현재 선택된 카테고리
+
+// 앱 진입 시 릴스 탭 즉시 로드
+document.addEventListener('DOMContentLoaded', () => {
+  loadShorts('all');
+});
 
 // 숏폼 첫 슬라이드 재생
 function shortsPlayFirst() {
@@ -3004,20 +3006,20 @@ function initShortsObserver(screen) {
       const frame = slide.querySelector('iframe');
       if (!frame) return;
       if (entry.isIntersecting) {
+        // 진입 시: src 한번만 로드 (이미 로드됐으면 유지)
         if (!frame.src || frame.src === 'about:blank' || frame.src === window.location.href) {
           frame.src = frame.dataset.src || '';
-          // 숏폼 조회수 트래킹 (슬라이드당 1회)
-          const sid = slide.dataset.shopId;
-          if (sid && !slide.dataset.viewed) {
-            slide.dataset.viewed = '1';
-            fetch('/api/track/shorts/view/' + sid, { method: 'POST' }).catch(() => {});
-          }
         }
-      } else {
-        frame.src = 'about:blank';
+        // 조회수 트래킹 (슬라이드당 1회)
+        const sid = slide.dataset.shopId;
+        if (sid && !slide.dataset.viewed) {
+          slide.dataset.viewed = '1';
+          fetch('/api/track/shorts/view/' + sid, { method: 'POST' }).catch(() => {});
+        }
       }
+      // 이탈해도 정지 안 함 → 계속 재생 유지
     });
-  }, { root: screen, threshold: 0.6 });
+  }, { root: screen, threshold: 0.5 });
 
   document.querySelectorAll('.shorts-slide').forEach(s => _shortsObserver.observe(s));
 }
