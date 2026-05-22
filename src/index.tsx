@@ -2876,8 +2876,15 @@ function switchTab(tab) {
     closeFeedSheet && closeFeedSheet();
     // 숏폼 로드 & 재생
     if (_shortsLoaded && _shortsItems.length) {
-      _shortsActiveIdx = -1; // 인덱스 리셋 → 첫 슬라이드 강제 재생
-      requestAnimationFrame(() => requestAnimationFrame(() => shortsPlayFirst()));
+      const sc = document.getElementById('shortsScreen');
+      if (sc) {
+        _shortsActiveIdx = -1;
+        sc.scrollTop = 0;
+        setTimeout(() => {
+          initShortsObserver(sc);
+          _shortsActivateIdx(sc, 0);
+        }, 150);
+      }
     } else {
       loadShorts(_shortsCat);
     }
@@ -2929,14 +2936,6 @@ document.addEventListener('DOMContentLoaded', () => {
   switchTab('shorts');
 });
 
-// 숏폼 첫 슬라이드 재생
-function shortsPlayFirst() {
-  const screen = document.getElementById('shortsScreen');
-  if (!screen) return;
-  screen.scrollTop = 0;
-  _shortsActiveIdx = -1;
-  setTimeout(() => _shortsActivateIdx(screen, 0), 50);
-}
 
 function filterShorts(btn, cat) {
   // 버튼 active 토글
@@ -2987,11 +2986,12 @@ async function loadShorts(cat) {
   el.style.cssText = 'height:100%;display:flex;flex-direction:column;';
   el.innerHTML = items.map(shop => shortsSlide(shop)).join('');
   screen.scrollTop = 0;
-  // screen이 active(display:block)로 전환된 뒤 레이아웃 계산 완료 후 Observer 등록
+  _shortsActiveIdx = -1;
+  // 레이아웃 완전히 그려진 후 Observer 등록 + 첫 슬라이드 재생
   setTimeout(() => {
     initShortsObserver(screen);
-    shortsPlayFirst();
-  }, 50);
+    _shortsActivateIdx(screen, 0);
+  }, 150);
 }
 
 // 전체 음소거 상태 (기본: 음소거)
@@ -3104,11 +3104,16 @@ function _shortsStopAll() {
 }
 
 function _shortsGetIdx(screen) {
-  const slides = document.querySelectorAll('.shorts-slide');
+  const slides = Array.from(document.querySelectorAll('.shorts-slide'));
   if (!slides.length) return 0;
-  const h = screen.clientHeight;
-  if (!h) return 0;
-  return Math.min(Math.round(screen.scrollTop / h), slides.length - 1);
+  // 각 슬라이드의 offsetTop과 scrollTop 비교 → 가장 가까운 슬라이드 반환
+  const scrollMid = screen.scrollTop + screen.clientHeight * 0.5;
+  let bestIdx = 0, bestDist = Infinity;
+  slides.forEach((s, i) => {
+    const dist = Math.abs((s.offsetTop + s.offsetHeight * 0.5) - scrollMid);
+    if (dist < bestDist) { bestDist = dist; bestIdx = i; }
+  });
+  return bestIdx;
 }
 
 function _shortsActivateIdx(screen, newIdx) {
