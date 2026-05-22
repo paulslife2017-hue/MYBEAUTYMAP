@@ -2925,18 +2925,13 @@ document.addEventListener('DOMContentLoaded', () => {
   switchTab('shorts');
 });
 
-// 숏폼 첫 슬라이드 재생 (Observer가 감지 못할 경우 보조)
+// 숏폼 첫 슬라이드 재생
 function shortsPlayFirst() {
   const screen = document.getElementById('shortsScreen');
   if (!screen) return;
   screen.scrollTop = 0;
-  const first = document.querySelector('.shorts-slide');
-  if (!first) return;
-  const frame = first.querySelector('iframe');
-  if (frame && (!frame.src || frame.src === 'about:blank' || frame.src === location.href)) {
-    _shortsActiveIdx = 0;
-    _shortsPlay(frame);
-  }
+  _shortsActiveIdx = -1; // 강제 리셋 → 동일 인덱스 스킵 방지
+  _shortsSnapToIdx(screen);
 }
 
 function filterShorts(btn, cat) {
@@ -3095,6 +3090,42 @@ function _shortsStopAll() {
   _shortsActiveIdx = -1;
 }
 
+function _shortsSnapToIdx(screen) {
+  // scroll-snap 완료 후 현재 슬라이드 인덱스 계산 → 재생/정지 처리
+  const slides = Array.from(document.querySelectorAll('.shorts-slide'));
+  if (!slides.length) return;
+  const screenH = screen.clientHeight || screen.offsetHeight;
+  if (!screenH) return;
+
+  // 화면 중앙과 가장 가까운 슬라이드
+  const mid = screen.scrollTop + screenH * 0.5;
+  let newIdx = 0, bestDist = Infinity;
+  slides.forEach((s, i) => {
+    const center = s.offsetTop + s.offsetHeight * 0.5;
+    const d = Math.abs(center - mid);
+    if (d < bestDist) { bestDist = d; newIdx = i; }
+  });
+
+  if (_shortsActiveIdx === newIdx) return; // 같은 슬라이드면 스킵
+
+  // 이전 정지
+  if (_shortsActiveIdx >= 0 && slides[_shortsActiveIdx]) {
+    _shortsStop(slides[_shortsActiveIdx].querySelector('iframe'));
+  }
+  _shortsActiveIdx = newIdx;
+
+  // 현재 재생
+  const frame = slides[newIdx].querySelector('iframe');
+  if (frame) {
+    _shortsPlay(frame);
+    const sid = slides[newIdx].dataset.shopId;
+    if (sid && !slides[newIdx].dataset.viewed) {
+      slides[newIdx].dataset.viewed = '1';
+      fetch('/api/track/shorts/view/' + sid, { method: 'POST' }).catch(() => {});
+    }
+  }
+}
+
 function initShortsObserver(screen) {
   if (_shortsObserver) { _shortsObserver.disconnect(); _shortsObserver = null; }
   _shortsActiveIdx = -1;
@@ -3102,40 +3133,40 @@ function initShortsObserver(screen) {
   const slides = Array.from(document.querySelectorAll('.shorts-slide'));
   if (!slides.length) return;
 
-  _shortsObserver = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      const slide = entry.target;
-      const frame = slide.querySelector('iframe');
-      if (!frame) return;
-      const idx = slides.indexOf(slide);
+  // ── 방법 1: scroll 이벤트 디바운스 (데스크탑 + 일부 모바일) ──
+  let _scrollT = null;
+  const onScroll = () => {
+    clearTimeout(_scrollT);
+    _scrollT = setTimeout(() => _shortsSnapToIdx(screen), 120);
+  };
+  if (screen._scrollH) screen.removeEventListener('scroll', screen._scrollH);
+  screen._scrollH = onScroll;
+  screen.addEventListener('scroll', onScroll, { passive: true });
 
-      if (entry.intersectionRatio >= 0.5) {
-        // ── 진입: 이전 슬라이드 정지 → 현재 재생 ──
-        if (_shortsActiveIdx !== -1 && _shortsActiveIdx !== idx) {
-          const prevFrame = slides[_shortsActiveIdx] && slides[_shortsActiveIdx].querySelector('iframe');
-          if (prevFrame) _shortsStop(prevFrame);
-        }
-        _shortsActiveIdx = idx;
-        _shortsPlay(frame);
-        // 조회수 트래킹
-        const sid = slide.dataset.shopId;
-        if (sid && !slide.dataset.viewed) {
-          slide.dataset.viewed = '1';
-          fetch('/api/track/shorts/view/' + sid, { method: 'POST' }).catch(() => {});
-        }
-      } else if (entry.intersectionRatio < 0.1) {
-        // ── 이탈: 거의 안 보이면 즉시 정지 ──
-        _shortsStop(frame);
-        if (_shortsActiveIdx === idx) _shortsActiveIdx = -1;
+  // ── 방법 2: touchend → snap 완료 대기 후 감지 (모바일 핵심) ──
+  const onTouchEnd = () => {
+    // snap 애니메이션 완료까지 최대 600ms 대기 (100ms 간격으로 체크)
+    let tries = 0;
+    let lastTop = screen.scrollTop;
+    const check = setInterval(() => {
+      const cur = screen.scrollTop;
+      tries++;
+      if (cur === lastTop || tries >= 6) {
+        clearInterval(check);
+        _shortsSnapToIdx(screen);
       }
-    });
-  }, {
-    root: null,                       // 뷰포트 기준 (display:none 영향 없음)
-    rootMargin: '0px',
-    threshold: [0, 0.1, 0.5, 1.0],   // 여러 구간 감지로 이탈/진입 모두 포착
-  });
+      lastTop = cur;
+    }, 100);
+  };
+  if (screen._touchH) screen.removeEventListener('touchend', screen._touchH);
+  screen._touchH = onTouchEnd;
+  screen.addEventListener('touchend', onTouchEnd, { passive: true });
 
-  slides.forEach(s => _shortsObserver.observe(s));
+  // ── 방법 3: scrollend (Chrome 114+, iOS 17.4+) ──
+  const onScrollEnd = () => _shortsSnapToIdx(screen);
+  if (screen._scrollEndH) screen.removeEventListener('scrollend', screen._scrollEndH);
+  screen._scrollEndH = onScrollEnd;
+  screen.addEventListener('scrollend', onScrollEnd, { passive: true });
 }
 
 function showAdminPicker() {
