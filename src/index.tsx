@@ -1777,24 +1777,22 @@ html,body{height:100%;background:var(--bg);color:#fff;
   display:none;}
 #mapScreen.active{display:block;}
 /* 쇼츠 릴스 스타일 */
-/* 숏폼: 카탈로그바(44px) 아래 ~ 탭바 바로 위 풀스크린 */
+/* 숏폼: 헤더+카탈로그바 아래 ~ 탭바 바로 위 */
 #shortsScreen{position:fixed;
-  top:44px;
+  top:calc(var(--hd) + 44px);
   left:0;right:0;
   bottom:calc(var(--nav) + var(--safe));
   display:none;overflow-y:scroll;scroll-snap-type:y mandatory;
   background:#000;-webkit-overflow-scrolling:touch;}
 #shortsScreen::-webkit-scrollbar{display:none;}
 #shortsScreen.active{display:block;}
-/* 숏폼 모드: 헤더·검색바·광고 숨김 */
-body.shorts-mode .hd,
-body.shorts-mode .search-bar,
+/* 숏폼 모드: 광고만 숨김 (헤더·검색바는 유지) */
 body.shorts-mode #coupang-ad{ display:none!important; }
 body.shorts-mode #shortsCatBar{ display:block!important; }
 /* 숏폼 전용 카탈로그 바 */
 #shortsCatBar{
   position:fixed;
-  top:0;
+  top:var(--hd);
   left:0;right:0;
   z-index:399;
   height:44px;
@@ -1940,9 +1938,9 @@ body.shorts-mode #shortsCatBar{ display:block!important; }
 .shorts-slide{
   position:relative;
   width:100%;
-  /* 풀스크린: 카탈로그바(44px) ~ 탭바 위까지 (광고 없음) */
-  height:calc(100dvh - 44px - var(--nav) - var(--safe));
-  min-height:calc(100dvh - 44px - var(--nav) - var(--safe));
+  /* 높이: 헤더 + 카탈로그바 ~ 탭바 위까지 */
+  height:calc(100dvh - var(--hd) - 44px - var(--nav) - var(--safe));
+  min-height:calc(100dvh - var(--hd) - 44px - var(--nav) - var(--safe));
   scroll-snap-align:start;
   scroll-snap-stop:always;
   flex-shrink:0;
@@ -3011,9 +3009,10 @@ function initShortsObserver(screen) {
       const frame = slide.querySelector('iframe');
       if (!frame) return;
       if (entry.isIntersecting) {
-        // 진입 시: src 한번만 로드 (이미 로드됐으면 유지)
-        if (!frame.src || frame.src === 'about:blank' || frame.src === window.location.href) {
-          frame.src = frame.dataset.src || '';
+        // 진입: src 로드 (autoplay=1 포함된 URL로 재생)
+        const dataSrc = frame.dataset.src || '';
+        if (dataSrc && (!frame.src || frame.src === 'about:blank' || frame.src === window.location.href)) {
+          frame.src = dataSrc;
         }
         // 조회수 트래킹 (슬라이드당 1회)
         const sid = slide.dataset.shopId;
@@ -3021,10 +3020,14 @@ function initShortsObserver(screen) {
           slide.dataset.viewed = '1';
           fetch('/api/track/shorts/view/' + sid, { method: 'POST' }).catch(() => {});
         }
+      } else {
+        // 이탈: 영상 정지 (src 초기화 → 다음 진입 시 처음부터 재생)
+        if (frame.dataset.src) {
+          frame.src = 'about:blank';
+        }
       }
-      // 이탈해도 정지 안 함 → 계속 재생 유지
     });
-  }, { root: screen, threshold: 0.5 });
+  }, { root: screen, threshold: 0.8 });
 
   document.querySelectorAll('.shorts-slide').forEach(s => _shortsObserver.observe(s));
 }
