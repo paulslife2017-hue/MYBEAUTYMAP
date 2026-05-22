@@ -2930,8 +2930,8 @@ function shortsPlayFirst() {
   const screen = document.getElementById('shortsScreen');
   if (!screen) return;
   screen.scrollTop = 0;
-  _shortsActiveIdx = -1; // 강제 리셋 → 동일 인덱스 스킵 방지
-  _shortsSnapToIdx(screen);
+  _shortsActiveIdx = -1;
+  _shortsActivateIdx(screen, 0);
 }
 
 function filterShorts(btn, cat) {
@@ -3064,19 +3064,22 @@ let _shortsActiveIdx = -1;
 
 function _shortsPlay(frame) {
   if (!frame || !frame.dataset.src) return;
-  frame.onload = null; // 이전 핸들러 초기화
-  frame.src = frame.dataset.src;
-  // 소리가 켜진 상태면 로드 완료 후 즉시 unMute
-  if (!_shortsMuted) {
-    frame.onload = () => {
-      try {
-        frame.contentWindow.postMessage(
-          JSON.stringify({ event: 'command', func: 'unMute', args: [] }), '*'
-        );
-      } catch(e) {}
-      frame.onload = null;
-    };
-  }
+  frame.onload = null;
+  // 반드시 about:blank → src 순서로 (브라우저 캐시 재로드 보장)
+  frame.src = 'about:blank';
+  requestAnimationFrame(() => {
+    frame.src = frame.dataset.src;
+    if (!_shortsMuted) {
+      frame.onload = () => {
+        try {
+          frame.contentWindow.postMessage(
+            JSON.stringify({ event: 'command', func: 'unMute', args: [] }), '*'
+          );
+        } catch(e) {}
+        frame.onload = null;
+      };
+    }
+  });
 }
 
 function _shortsStop(frame) {
@@ -3090,31 +3093,27 @@ function _shortsStopAll() {
   _shortsActiveIdx = -1;
 }
 
-function _shortsSnapToIdx(screen) {
-  // scroll-snap 완료 후 현재 슬라이드 인덱스 계산 → 재생/정지 처리
+function _shortsGetIdx(screen) {
   const slides = Array.from(document.querySelectorAll('.shorts-slide'));
-  if (!slides.length) return;
-  const screenH = screen.clientHeight || screen.offsetHeight;
-  if (!screenH) return;
+  if (!slides.length) return 0;
+  // scrollTop 기준: 각 슬라이드 높이로 나눈 인덱스 (가장 단순하고 정확)
+  const h = screen.clientHeight;
+  if (!h) return 0;
+  return Math.min(Math.round(screen.scrollTop / h), slides.length - 1);
+}
 
-  // 화면 중앙과 가장 가까운 슬라이드
-  const mid = screen.scrollTop + screenH * 0.5;
-  let newIdx = 0, bestDist = Infinity;
-  slides.forEach((s, i) => {
-    const center = s.offsetTop + s.offsetHeight * 0.5;
-    const d = Math.abs(center - mid);
-    if (d < bestDist) { bestDist = d; newIdx = i; }
-  });
+function _shortsActivateIdx(screen, newIdx) {
+  const slides = Array.from(document.querySelectorAll('.shorts-slide'));
+  if (newIdx < 0 || newIdx >= slides.length) return;
+  if (_shortsActiveIdx === newIdx) return;
 
-  if (_shortsActiveIdx === newIdx) return; // 같은 슬라이드면 스킵
-
-  // 이전 정지
+  // 이전 슬라이드 정지
   if (_shortsActiveIdx >= 0 && slides[_shortsActiveIdx]) {
     _shortsStop(slides[_shortsActiveIdx].querySelector('iframe'));
   }
   _shortsActiveIdx = newIdx;
 
-  // 현재 재생
+  // 새 슬라이드 재생
   const frame = slides[newIdx].querySelector('iframe');
   if (frame) {
     _shortsPlay(frame);
@@ -3130,43 +3129,42 @@ function initShortsObserver(screen) {
   if (_shortsObserver) { _shortsObserver.disconnect(); _shortsObserver = null; }
   _shortsActiveIdx = -1;
 
-  const slides = Array.from(document.querySelectorAll('.shorts-slide'));
-  if (!slides.length) return;
+  if (!document.querySelectorAll('.shorts-slide').length) return;
 
-  // ── 방법 1: scroll 이벤트 디바운스 (데스크탑 + 일부 모바일) ──
+  // ── scroll 디바운스 (데스크탑 + Android Chrome) ──
   let _scrollT = null;
   const onScroll = () => {
     clearTimeout(_scrollT);
-    _scrollT = setTimeout(() => _shortsSnapToIdx(screen), 120);
+    _scrollT = setTimeout(() => {
+      _shortsActivateIdx(screen, _shortsGetIdx(screen));
+    }, 150);
   };
   if (screen._scrollH) screen.removeEventListener('scroll', screen._scrollH);
   screen._scrollH = onScroll;
   screen.addEventListener('scroll', onScroll, { passive: true });
 
-  // ── 방법 2: touchend → snap 완료 대기 후 감지 (모바일 핵심) ──
+  // ── scrollend (Chrome 114+, iOS 17.4+) ──
+  const onScrollEnd = () => _shortsActivateIdx(screen, _shortsGetIdx(screen));
+  if (screen._scrollEndH) screen.removeEventListener('scrollend', screen._scrollEndH);
+  screen._scrollEndH = onScrollEnd;
+  screen.addEventListener('scrollend', onScrollEnd, { passive: true });
+
+  // ── touchend 폴링 (구형 iOS/Android 핵심) ──
   const onTouchEnd = () => {
-    // snap 애니메이션 완료까지 최대 600ms 대기 (100ms 간격으로 체크)
-    let tries = 0;
-    let lastTop = screen.scrollTop;
-    const check = setInterval(() => {
+    let prev = -1, tries = 0;
+    const poll = setInterval(() => {
       const cur = screen.scrollTop;
       tries++;
-      if (cur === lastTop || tries >= 6) {
-        clearInterval(check);
-        _shortsSnapToIdx(screen);
+      if (cur === prev || tries >= 8) {
+        clearInterval(poll);
+        _shortsActivateIdx(screen, _shortsGetIdx(screen));
       }
-      lastTop = cur;
-    }, 100);
+      prev = cur;
+    }, 80);
   };
   if (screen._touchH) screen.removeEventListener('touchend', screen._touchH);
   screen._touchH = onTouchEnd;
   screen.addEventListener('touchend', onTouchEnd, { passive: true });
-
-  // ── 방법 3: scrollend (Chrome 114+, iOS 17.4+) ──
-  const onScrollEnd = () => _shortsSnapToIdx(screen);
-  if (screen._scrollEndH) screen.removeEventListener('scrollend', screen._scrollEndH);
-  screen._scrollEndH = onScrollEnd;
-  screen.addEventListener('scrollend', onScrollEnd, { passive: true });
 }
 
 function showAdminPicker() {
