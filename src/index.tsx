@@ -3138,31 +3138,65 @@ function initShortsObserver(screen) {
 
   const run = () => _shortsActivateIdx(screen, _shortsGetIdx(screen));
 
-  // scroll 디바운스
+  // ── rAF 루프: scrollTop 변화 감지 (모든 기기 공통) ──────────────────
+  // iOS Safari 모멘텀 스크롤 중에도 scrollTop은 변함 → rAF로 감시
+  let _rafId = null;
+  let _lastTop = -1;
+  let _stableCount = 0;
+  let _isTracking = false;
+
+  function _rafLoop() {
+    const cur = screen.scrollTop;
+    if (cur !== _lastTop) {
+      _lastTop = cur;
+      _stableCount = 0;
+    } else {
+      _stableCount++;
+      if (_stableCount === 4) {
+        // 4프레임(약 67ms) 동안 멈추면 snap 완료로 판단 → 재생
+        run();
+      }
+    }
+    if (_isTracking) _rafId = requestAnimationFrame(_rafLoop);
+  }
+
+  // 터치 시작 → rAF 루프 시작
+  const onTouchStart = () => {
+    if (_isTracking) return;
+    _isTracking = true;
+    _lastTop = screen.scrollTop;
+    _stableCount = 0;
+    _rafId = requestAnimationFrame(_rafLoop);
+  };
+
+  // 터치 끝 → 최대 1.5초 더 감시 후 종료
+  const onTouchEnd = () => {
+    setTimeout(() => {
+      _isTracking = false;
+      cancelAnimationFrame(_rafId);
+      run(); // 최종 확인
+    }, 1500);
+  };
+
+  // document 레벨에서 터치 감지 (iframe/overlay가 소비해도 작동)
+  if (window._shortsTouchStartH) document.removeEventListener('touchstart', window._shortsTouchStartH);
+  if (window._shortsTouchEndH) document.removeEventListener('touchend', window._shortsTouchEndH);
+  window._shortsTouchStartH = onTouchStart;
+  window._shortsTouchEndH = onTouchEnd;
+  document.addEventListener('touchstart', onTouchStart, { passive: true });
+  document.addEventListener('touchend', onTouchEnd, { passive: true });
+
+  // scroll 이벤트 (데스크탑 + Android Chrome)
   let _st = null;
   const onScroll = () => { clearTimeout(_st); _st = setTimeout(run, 150); };
   if (screen._scrollH) screen.removeEventListener('scroll', screen._scrollH);
   screen._scrollH = onScroll;
   screen.addEventListener('scroll', onScroll, { passive: true });
 
-  // scrollend (최신 브라우저)
+  // scrollend (Chrome 114+, iOS 17.4+)
   if (screen._scrollEndH) screen.removeEventListener('scrollend', screen._scrollEndH);
   screen._scrollEndH = run;
   screen.addEventListener('scrollend', run, { passive: true });
-
-  // touchend 폴링 (구형 iOS/Android)
-  const onTouchEnd = () => {
-    let prev = screen.scrollTop, tries = 0;
-    const poll = setInterval(() => {
-      const cur = screen.scrollTop;
-      tries++;
-      if (cur === prev || tries >= 10) { clearInterval(poll); run(); }
-      prev = cur;
-    }, 80);
-  };
-  if (screen._touchH) screen.removeEventListener('touchend', screen._touchH);
-  screen._touchH = onTouchEnd;
-  screen.addEventListener('touchend', onTouchEnd, { passive: true });
 }
 
 function showAdminPicker() {
