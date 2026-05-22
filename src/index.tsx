@@ -1921,51 +1921,57 @@ html,body{height:100%;background:var(--bg);color:#fff;
 /* 하단 그라데이션 오버레이 */
 .shorts-overlay{
   position:absolute;bottom:0;left:0;right:0;
-  background:linear-gradient(transparent,rgba(0,0,0,.82) 35%);
-  padding:80px 16px 20px;
+  background:linear-gradient(transparent 0%,rgba(0,0,0,.6) 40%,rgba(0,0,0,.92) 100%);
+  padding:100px 16px 24px;
   z-index:10;
   pointer-events:none;
 }
 /* 업체 카테고리 뱃지 */
 .shorts-cat{
-  display:inline-block;
-  background:rgba(255,77,125,.25);
-  border:1px solid rgba(255,77,125,.45);
+  display:inline-flex;align-items:center;gap:5px;
+  background:rgba(255,77,125,.2);
+  border:1px solid rgba(255,77,125,.5);
   color:#FF4D7D;
   font-size:11px;font-weight:800;
-  padding:3px 10px;border-radius:20px;
-  margin-bottom:7px;
+  padding:4px 10px;border-radius:20px;
+  margin-bottom:8px;
+  letter-spacing:.3px;
+  backdrop-filter:blur(6px);
   pointer-events:none;
 }
 /* 업체명 */
 .shorts-name{
-  font-size:18px;font-weight:900;color:#fff;
-  line-height:1.25;margin-bottom:5px;
-  text-shadow:0 2px 8px rgba(0,0,0,.7);
+  font-size:20px;font-weight:900;color:#fff;
+  line-height:1.25;margin-bottom:6px;
+  text-shadow:0 2px 12px rgba(0,0,0,.8);
+  letter-spacing:-.4px;
   pointer-events:none;
 }
 /* 주소 */
 .shorts-addr{
-  font-size:12px;color:rgba(255,255,255,.65);
-  margin-bottom:16px;
+  font-size:12px;color:rgba(255,255,255,.6);
+  margin-bottom:14px;
   display:flex;align-items:center;gap:5px;
   pointer-events:none;
 }
+.shorts-addr i{color:rgba(255,77,125,.7);font-size:11px;}
 /* 예약 버튼 */
 .shorts-book-btn{
-  display:flex;align-items:center;justify-content:center;gap:8px;
+  display:flex;align-items:center;justify-content:center;gap:10px;
   width:100%;
-  padding:15px 0;
-  border-radius:14px;
-  background:linear-gradient(135deg,#FF4D7D,#FF8FA3);
-  color:#fff;font-size:16px;font-weight:900;
+  padding:14px 0;
+  border-radius:16px;
+  background:linear-gradient(135deg,#FF4D7D 0%,#ff6b9d 100%);
+  color:#fff;font-size:15px;font-weight:800;
   border:none;cursor:pointer;
   font-family:inherit;
-  box-shadow:0 4px 20px rgba(255,77,125,.45);
+  box-shadow:0 4px 24px rgba(255,77,125,.55),inset 0 1px 0 rgba(255,255,255,.2);
   pointer-events:auto;
-  letter-spacing:-.3px;
+  letter-spacing:-.2px;
+  transition:transform .1s,box-shadow .1s;
 }
-.shorts-book-btn i{font-size:16px}
+.shorts-book-btn:active{transform:scale(.97);box-shadow:0 2px 12px rgba(255,77,125,.4);}
+.shorts-book-btn i{font-size:15px;}
 /* 영상 없는 슬라이드 배경 */
 .shorts-no-video{
   width:100%;height:100%;
@@ -2801,16 +2807,33 @@ function switchTab(tab) {
   }
 
   if (tab==='shorts') {
-    // 숏폼 탭 진입 → 로드 & 재생
+    // 숏폼 탭 진입 → 영상탭 feed-iframe 정지
+    if (_feedCurrentCard) {
+      const fi = _feedCurrentCard.querySelector('iframe.feed-iframe');
+      if (fi) { fi.dataset.paused = '1'; fi.src = 'about:blank'; }
+    }
+    // 피드 sheet도 닫기
+    closeFeedSheet && closeFeedSheet();
+    // 숏폼 로드 & 재생
     if (_shortsLoaded && _shortsItems.length) {
       requestAnimationFrame(() => requestAnimationFrame(() => shortsPlayFirst()));
     } else {
       loadShorts(_shortsCat);
     }
   }
-  // 숏폼 탭 이탈 시 모든 영상 정지
+  // 숏폼 탭 이탈 시 모든 숏폼 영상 정지
   if (tab !== 'shorts') {
     document.querySelectorAll('.shorts-slide iframe').forEach(f => { f.src = 'about:blank'; });
+  }
+  // 영상탭 이탈 시 feed 정지 (숏폼 제외 다른 탭도 포함)
+  if (tab !== 'feed' && _feedCurrentCard) {
+    const fi = _feedCurrentCard.querySelector('iframe.feed-iframe');
+    if (fi) { fi.dataset.paused = '1'; fi.src = 'about:blank'; }
+  }
+  // 영상탭 복귀 시 다시 재생
+  if (tab === 'feed' && _feedCurrentCard) {
+    const fi = _feedCurrentCard.querySelector('iframe.feed-iframe');
+    if (fi && fi.dataset.src) { delete fi.dataset.paused; fi.src = fi.dataset.src; }
   }
 }
 
@@ -2905,11 +2928,11 @@ function shortsSlide(shop) {
           ' allow="autoplay;encrypted-media;fullscreen" allowfullscreen playsinline></iframe>'
       : '<div class="shorts-no-video"></div>') +
     '<div class="shorts-overlay">' +
-      (cat ? '<span class="shorts-cat">' + cat + '</span>' : '') +
+      (cat ? '<span class="shorts-cat"><i class="fas fa-tag" style="font-size:9px"></i>' + cat + '</span>' : '') +
       '<div class="shorts-name">' + name + '</div>' +
-      (addr ? '<div class="shorts-addr"><i class="fas fa-map-marker-alt"></i> ' + addr + '</div>' : '') +
+      (addr ? '<div class="shorts-addr"><i class="fas fa-map-marker-alt"></i>' + addr + '</div>' : '') +
       '<button class="shorts-book-btn" onclick="shortsOpenBook(' + JSON.stringify(shop).replace(/"/g,'&quot;') + ')">' +
-        '<i class="fas fa-calendar-check"></i>예약하기' +
+        '<i class="fas fa-calendar-check"></i>예약하기<i class="fas fa-chevron-right" style="font-size:11px;margin-left:auto;opacity:.8"></i>' +
       '</button>' +
     '</div>' +
     '</div>'
