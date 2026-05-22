@@ -2005,7 +2005,7 @@ function _ytLoadApi() {
 }
 
 // YouTube API 준비 완료 콜백 (전역 함수 — YT API가 호출)
-(window as any).onYouTubeIframeAPIReady = function() {
+window.onYouTubeIframeAPIReady = function() {
   _ytApiReady = true;
   // 대기 중인 슬라이드 초기화
   _ytPendingInits.forEach(fn => fn());
@@ -2023,7 +2023,7 @@ function _ytCreatePlayer(slide) {
 
   const create = () => {
     // placeholder div를 대상으로 YT.Player 생성
-    const player = new (window as any).YT.Player(ph, {
+    const player = new window.YT.Player(ph, {
       videoId: ytId,
       playerVars: {
         autoplay: 1,
