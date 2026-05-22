@@ -2923,6 +2923,16 @@ function shortsPlayFirst() {
   if (!frame) return;
   if (!frame.src || frame.src === 'about:blank' || frame.src === window.location.href) {
     frame.src = frame.dataset.src || '';
+    if (!_shortsMuted) {
+      frame.onload = () => {
+        try {
+          frame.contentWindow.postMessage(
+            JSON.stringify({ event: 'command', func: 'unMute', args: [] }), '*'
+          );
+        } catch(e) {}
+        frame.onload = null;
+      };
+    }
   }
 }
 
@@ -3048,6 +3058,25 @@ function shortsOpenBook(shop) {
   openInapp();
 }
 
+function _shortsLoadFrame(frame) {
+  const dataSrc = frame.dataset.src || '';
+  if (!dataSrc) return;
+  // 이미 재생 중이면 스킵
+  if (frame.src && frame.src !== 'about:blank' && frame.src !== window.location.href) return;
+  frame.src = dataSrc;
+  // 소리가 켜진 상태면 로드 완료 후 즉시 unMute
+  if (!_shortsMuted) {
+    frame.onload = () => {
+      try {
+        frame.contentWindow.postMessage(
+          JSON.stringify({ event: 'command', func: 'unMute', args: [] }), '*'
+        );
+      } catch(e) {}
+      frame.onload = null;
+    };
+  }
+}
+
 function initShortsObserver(screen) {
   if (_shortsObserver) _shortsObserver.disconnect();
   _shortsObserver = new IntersectionObserver(entries => {
@@ -3055,23 +3084,10 @@ function initShortsObserver(screen) {
       const slide = entry.target;
       const frame = slide.querySelector('iframe');
       if (!frame) return;
-      if (entry.isIntersecting) {
-        // 진입: src 로드 (autoplay=1 포함된 URL로 재생)
-        const dataSrc = frame.dataset.src || '';
-        if (dataSrc && (!frame.src || frame.src === 'about:blank' || frame.src === window.location.href)) {
-          frame.src = dataSrc;
-          // 소리가 켜진 상태(_shortsMuted===false)면 로드 완료 후 unMute 전송
-          if (!_shortsMuted) {
-            frame.onload = () => {
-              try {
-                frame.contentWindow.postMessage(
-                  JSON.stringify({ event: 'command', func: 'unMute', args: [] }), '*'
-                );
-              } catch(e) {}
-              frame.onload = null;
-            };
-          }
-        }
+
+      if (entry.intersectionRatio >= 0.5) {
+        // 진입: 50% 이상 보이면 재생
+        _shortsLoadFrame(frame);
         // 조회수 트래킹 (슬라이드당 1회)
         const sid = slide.dataset.shopId;
         if (sid && !slide.dataset.viewed) {
@@ -3079,13 +3095,14 @@ function initShortsObserver(screen) {
           fetch('/api/track/shorts/view/' + sid, { method: 'POST' }).catch(() => {});
         }
       } else {
-        // 이탈: 영상 정지 (src 초기화 → 다음 진입 시 처음부터 재생)
+        // 이탈: 50% 미만이면 즉시 정지
         if (frame.dataset.src) {
+          frame.onload = null;
           frame.src = 'about:blank';
         }
       }
     });
-  }, { root: screen, threshold: 0.8 });
+  }, { root: screen, threshold: [0, 0.5] });
 
   document.querySelectorAll('.shorts-slide').forEach(s => _shortsObserver.observe(s));
 }
