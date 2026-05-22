@@ -2872,12 +2872,15 @@ function switchTab(tab) {
     closeFeedSheet && closeFeedSheet();
     // 숏폼 로드 & 재생
     if (_shortsLoaded && _shortsItems.length) {
+      _shortsActiveIdx = -1; // 인덱스 리셋 → 첫 슬라이드 강제 재생
       requestAnimationFrame(() => requestAnimationFrame(() => shortsPlayFirst()));
     } else {
       loadShorts(_shortsCat);
     }
+  } else {
+    // 릴스 탭 이탈 → 모든 영상 즉시 정지
+    _shortsStopAll();
   }
-  // 숏폼 탭 이탈 시에도 영상 유지 (복귀 시 즉시 재생)
   // 영상탭 이탈 시 feed 정지
   if (tab !== 'feed' && _feedCurrentCard) {
     const fi = _feedCurrentCard.querySelector('iframe.feed-iframe');
@@ -2915,25 +2918,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // 숏폼 첫 슬라이드 재생
 function shortsPlayFirst() {
-  const screen = document.getElementById('shortsScreen');
-  if (!screen) return;
-  const first = screen.querySelector('.shorts-slide');
-  if (!first) return;
-  const frame = first.querySelector('iframe');
-  if (!frame) return;
-  if (!frame.src || frame.src === 'about:blank' || frame.src === window.location.href) {
-    frame.src = frame.dataset.src || '';
-    if (!_shortsMuted) {
-      frame.onload = () => {
-        try {
-          frame.contentWindow.postMessage(
-            JSON.stringify({ event: 'command', func: 'unMute', args: [] }), '*'
-          );
-        } catch(e) {}
-        frame.onload = null;
-      };
-    }
-  }
+  _shortsActivate(0);
 }
 
 function filterShorts(btn, cat) {
@@ -3077,34 +3062,65 @@ function _shortsLoadFrame(frame) {
   }
 }
 
+let _shortsActiveIdx = -1;
+
+function _shortsStopAll() {
+  document.querySelectorAll('.shorts-slide iframe').forEach(f => {
+    if (f.dataset.src) {
+      f.onload = null;
+      f.src = 'about:blank';
+    }
+  });
+}
+
+function _shortsActivate(idx) {
+  const slides = document.querySelectorAll('.shorts-slide');
+  if (idx < 0 || idx >= slides.length) return;
+  if (_shortsActiveIdx === idx) return; // 동일 슬라이드면 스킵
+
+  // 이전 슬라이드 즉시 정지
+  if (_shortsActiveIdx >= 0 && _shortsActiveIdx < slides.length) {
+    const prevFrame = slides[_shortsActiveIdx].querySelector('iframe');
+    if (prevFrame && prevFrame.dataset.src) {
+      prevFrame.onload = null;
+      prevFrame.src = 'about:blank';
+    }
+  }
+
+  _shortsActiveIdx = idx;
+  const frame = slides[idx].querySelector('iframe');
+  if (frame) {
+    _shortsLoadFrame(frame);
+    // 조회수 트래킹 (슬라이드당 1회)
+    const sid = slides[idx].dataset.shopId;
+    if (sid && !slides[idx].dataset.viewed) {
+      slides[idx].dataset.viewed = '1';
+      fetch('/api/track/shorts/view/' + sid, { method: 'POST' }).catch(() => {});
+    }
+  }
+}
+
 function initShortsObserver(screen) {
   if (_shortsObserver) _shortsObserver.disconnect();
-  _shortsObserver = new IntersectionObserver(entries => {
-    entries.forEach(entry => {
-      const slide = entry.target;
-      const frame = slide.querySelector('iframe');
-      if (!frame) return;
+  _shortsActiveIdx = -1;
 
-      if (entry.intersectionRatio >= 0.5) {
-        // 진입: 50% 이상 보이면 재생
-        _shortsLoadFrame(frame);
-        // 조회수 트래킹 (슬라이드당 1회)
-        const sid = slide.dataset.shopId;
-        if (sid && !slide.dataset.viewed) {
-          slide.dataset.viewed = '1';
-          fetch('/api/track/shorts/view/' + sid, { method: 'POST' }).catch(() => {});
-        }
-      } else {
-        // 이탈: 50% 미만이면 즉시 정지
-        if (frame.dataset.src) {
-          frame.onload = null;
-          frame.src = 'about:blank';
-        }
-      }
-    });
-  }, { root: screen, threshold: [0, 0.5] });
+  // scroll 이벤트로 현재 슬라이드 인덱스 계산
+  let _scrollTimer = null;
+  function onShortsScroll() {
+    clearTimeout(_scrollTimer);
+    _scrollTimer = setTimeout(() => {
+      const slides = document.querySelectorAll('.shorts-slide');
+      if (!slides.length) return;
+      const slideH = slides[0].offsetHeight;
+      if (!slideH) return;
+      const idx = Math.round(screen.scrollTop / slideH);
+      _shortsActivate(Math.max(0, Math.min(idx, slides.length - 1)));
+    }, 80); // snap 완료 후 80ms 뒤 판정
+  }
 
-  document.querySelectorAll('.shorts-slide').forEach(s => _shortsObserver.observe(s));
+  screen.removeEventListener('scroll', screen._shortsScrollHandler);
+  screen._shortsScrollHandler = onShortsScroll;
+  screen.addEventListener('scroll', onShortsScroll, { passive: true });
 }
 
 function showAdminPicker() {
