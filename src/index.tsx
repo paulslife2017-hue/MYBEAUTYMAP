@@ -2925,9 +2925,18 @@ document.addEventListener('DOMContentLoaded', () => {
   switchTab('shorts');
 });
 
-// 숏폼 첫 슬라이드 재생
+// 숏폼 첫 슬라이드 재생 (Observer가 감지 못할 경우 보조)
 function shortsPlayFirst() {
-  _shortsActivate(0);
+  const screen = document.getElementById('shortsScreen');
+  if (!screen) return;
+  screen.scrollTop = 0;
+  const first = document.querySelector('.shorts-slide');
+  if (!first) return;
+  const frame = first.querySelector('iframe');
+  if (frame && (!frame.src || frame.src === 'about:blank' || frame.src === location.href)) {
+    _shortsActiveIdx = 0;
+    _shortsPlay(frame);
+  }
 }
 
 function filterShorts(btn, cat) {
@@ -2979,8 +2988,11 @@ async function loadShorts(cat) {
   el.style.cssText = 'height:100%;display:flex;flex-direction:column;';
   el.innerHTML = items.map(shop => shortsSlide(shop)).join('');
   screen.scrollTop = 0;
-  initShortsObserver(screen);
-  requestAnimationFrame(() => requestAnimationFrame(() => shortsPlayFirst()));
+  // screen이 active(display:block)로 전환된 뒤 레이아웃 계산 완료 후 Observer 등록
+  setTimeout(() => {
+    initShortsObserver(screen);
+    shortsPlayFirst();
+  }, 50);
 }
 
 // 전체 음소거 상태 (기본: 음소거)
@@ -3052,10 +3064,13 @@ function shortsOpenBook(shop) {
   openInapp();
 }
 
-function _shortsLoadFrame(frame) {
-  const dataSrc = frame.dataset.src || '';
-  if (!dataSrc) return;
-  frame.src = dataSrc;
+// ── 릴스 재생 엔진 ──────────────────────────────────────────────────────
+let _shortsActiveIdx = -1;
+
+function _shortsPlay(frame) {
+  if (!frame || !frame.dataset.src) return;
+  frame.onload = null; // 이전 핸들러 초기화
+  frame.src = frame.dataset.src;
   // 소리가 켜진 상태면 로드 완료 후 즉시 unMute
   if (!_shortsMuted) {
     frame.onload = () => {
@@ -3069,76 +3084,58 @@ function _shortsLoadFrame(frame) {
   }
 }
 
-let _shortsActiveIdx = -1;
+function _shortsStop(frame) {
+  if (!frame || !frame.dataset.src) return;
+  frame.onload = null;
+  frame.src = 'about:blank';
+}
 
 function _shortsStopAll() {
-  document.querySelectorAll('.shorts-slide iframe').forEach(f => {
-    if (f.dataset.src) {
-      f.onload = null;
-      f.src = 'about:blank';
-    }
-  });
-}
-
-function _shortsActivate(idx) {
-  const slides = document.querySelectorAll('.shorts-slide');
-  if (idx < 0 || idx >= slides.length) return;
-  if (_shortsActiveIdx === idx) return; // 동일 슬라이드면 스킵
-
-  // 이전 슬라이드 즉시 정지
-  if (_shortsActiveIdx >= 0 && _shortsActiveIdx < slides.length) {
-    const prevFrame = slides[_shortsActiveIdx].querySelector('iframe');
-    if (prevFrame && prevFrame.dataset.src) {
-      prevFrame.onload = null;
-      prevFrame.src = 'about:blank';
-    }
-  }
-
-  _shortsActiveIdx = idx;
-  const frame = slides[idx].querySelector('iframe');
-  if (frame) {
-    _shortsLoadFrame(frame);
-    // 조회수 트래킹 (슬라이드당 1회)
-    const sid = slides[idx].dataset.shopId;
-    if (sid && !slides[idx].dataset.viewed) {
-      slides[idx].dataset.viewed = '1';
-      fetch('/api/track/shorts/view/' + sid, { method: 'POST' }).catch(() => {});
-    }
-  }
-}
-
-function _shortsFindCurrentIdx(screen) {
-  const slides = document.querySelectorAll('.shorts-slide');
-  if (!slides.length) return 0;
-  // scrollTop 기준으로 가장 가까운 슬라이드 찾기
-  const mid = screen.scrollTop + screen.clientHeight * 0.5;
-  let bestIdx = 0, bestDist = Infinity;
-  slides.forEach((s, i) => {
-    const dist = Math.abs((s.offsetTop + s.offsetHeight * 0.5) - mid);
-    if (dist < bestDist) { bestDist = dist; bestIdx = i; }
-  });
-  return bestIdx;
+  document.querySelectorAll('.shorts-slide iframe').forEach(f => _shortsStop(f));
+  _shortsActiveIdx = -1;
 }
 
 function initShortsObserver(screen) {
-  if (_shortsObserver) _shortsObserver.disconnect();
+  if (_shortsObserver) { _shortsObserver.disconnect(); _shortsObserver = null; }
   _shortsActiveIdx = -1;
 
-  let _scrollTimer = null;
-  function onShortsScroll() {
-    clearTimeout(_scrollTimer);
-    _scrollTimer = setTimeout(() => {
-      const idx = _shortsFindCurrentIdx(screen);
-      _shortsActivate(idx);
-    }, 100);
-  }
+  const slides = Array.from(document.querySelectorAll('.shorts-slide'));
+  if (!slides.length) return;
 
-  // 기존 리스너 제거 후 재등록
-  if (screen._shortsScrollHandler) {
-    screen.removeEventListener('scroll', screen._shortsScrollHandler);
-  }
-  screen._shortsScrollHandler = onShortsScroll;
-  screen.addEventListener('scroll', onShortsScroll, { passive: true });
+  _shortsObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      const slide = entry.target;
+      const frame = slide.querySelector('iframe');
+      if (!frame) return;
+      const idx = slides.indexOf(slide);
+
+      if (entry.intersectionRatio >= 0.5) {
+        // ── 진입: 이전 슬라이드 정지 → 현재 재생 ──
+        if (_shortsActiveIdx !== -1 && _shortsActiveIdx !== idx) {
+          const prevFrame = slides[_shortsActiveIdx] && slides[_shortsActiveIdx].querySelector('iframe');
+          if (prevFrame) _shortsStop(prevFrame);
+        }
+        _shortsActiveIdx = idx;
+        _shortsPlay(frame);
+        // 조회수 트래킹
+        const sid = slide.dataset.shopId;
+        if (sid && !slide.dataset.viewed) {
+          slide.dataset.viewed = '1';
+          fetch('/api/track/shorts/view/' + sid, { method: 'POST' }).catch(() => {});
+        }
+      } else if (entry.intersectionRatio < 0.1) {
+        // ── 이탈: 거의 안 보이면 즉시 정지 ──
+        _shortsStop(frame);
+        if (_shortsActiveIdx === idx) _shortsActiveIdx = -1;
+      }
+    });
+  }, {
+    root: null,                       // 뷰포트 기준 (display:none 영향 없음)
+    rootMargin: '0px',
+    threshold: [0, 0.1, 0.5, 1.0],   // 여러 구간 감지로 이탈/진입 모두 포착
+  });
+
+  slides.forEach(s => _shortsObserver.observe(s));
 }
 
 function showAdminPicker() {
