@@ -1789,6 +1789,22 @@ html,body{height:100%;background:var(--bg);color:#fff;
 /* 숏폼 모드: 광고만 숨김 (헤더·검색바는 유지) */
 body.shorts-mode #coupang-ad{ display:none!important; }
 body.shorts-mode #shortsCatBar{ display:block!important; }
+/* 음소거 버튼 */
+#shorts-mute-btn{
+  position:fixed;
+  top:calc(var(--hd) + 44px + 12px);
+  right:14px;
+  z-index:500;
+  width:38px;height:38px;
+  background:rgba(0,0,0,.55);
+  border:1.5px solid rgba(255,255,255,.25);
+  border-radius:50%;
+  color:#fff;font-size:16px;
+  display:none;align-items:center;justify-content:center;
+  cursor:pointer;backdrop-filter:blur(6px);
+  transition:background .2s;
+}
+body.shorts-mode #shorts-mute-btn{ display:flex; }
 /* 숏폼 전용 카탈로그 바 */
 #shortsCatBar{
   position:fixed;
@@ -2704,6 +2720,11 @@ body.shorts-mode #shortsCatBar{ display:block!important; }
   <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
 </div>
 
+<!-- 음소거 버튼 (릴스 전용) -->
+<button id="shorts-mute-btn" onclick="toggleShortsMute()">
+  <i class="fas fa-volume-mute"></i>
+</button>
+
 <!-- 숏폼 스크린 -->
 <section id="shortsScreen">
   <div id="shortsFeed" style="height:100%;display:flex;flex-direction:column"></div>
@@ -2958,10 +2979,16 @@ async function loadShorts(cat) {
   requestAnimationFrame(() => requestAnimationFrame(() => shortsPlayFirst()));
 }
 
+// 전체 음소거 상태 (기본: 음소거)
+let _shortsMuted = true;
+
 function shortsSlide(shop) {
   const ytId = shop.youtube_id || '';
+  // mute=1 → 브라우저 자동재생 정책 통과, enablejsapi=1 → postMessage 제어
   const src  = ytId
-    ? 'https://www.youtube.com/embed/' + ytId + '?autoplay=1&mute=0&loop=1&playlist=' + ytId + '&rel=0&playsinline=1&controls=1'
+    ? 'https://www.youtube.com/embed/' + ytId
+      + '?autoplay=1&mute=1&loop=1&playlist=' + ytId
+      + '&rel=0&playsinline=1&controls=0&enablejsapi=1&modestbranding=1'
     : '';
   const cat  = shop.category || '';
   const name = shop.name || '';
@@ -2970,8 +2997,8 @@ function shortsSlide(shop) {
   return (
     '<div class="shorts-slide" data-shop-id="' + shop.id + '">' +
     (ytId
-      ? '<iframe src="about:blank" data-src="' + src + '"' +
-          ' allow="autoplay;encrypted-media;fullscreen" allowfullscreen playsinline></iframe>'
+      ? '<iframe src="about:blank" data-src="' + src + '" data-ytid="' + ytId + '"' +
+          ' allow="autoplay;encrypted-media;fullscreen" allowfullscreen></iframe>'
       : '<div class="shorts-no-video"></div>') +
     '<div class="shorts-overlay">' +
       '<div class="shorts-info-row">' +
@@ -2988,6 +3015,26 @@ function shortsSlide(shop) {
     '</div>' +
     '</div>'
   );
+}
+
+// 음소거 토글 버튼 클릭
+function toggleShortsMute() {
+  _shortsMuted = !_shortsMuted;
+  // 현재 보이는 모든 iframe에 postMessage
+  document.querySelectorAll('.shorts-slide iframe').forEach(f => {
+    if (!f.src || f.src === 'about:blank') return;
+    try {
+      f.contentWindow.postMessage(
+        JSON.stringify({ event: 'command', func: _shortsMuted ? 'mute' : 'unMute', args: [] }),
+        '*'
+      );
+    } catch(e) {}
+  });
+  // 버튼 아이콘 업데이트
+  const btn = document.getElementById('shorts-mute-btn');
+  if (btn) btn.innerHTML = _shortsMuted
+    ? '<i class="fas fa-volume-mute"></i>'
+    : '<i class="fas fa-volume-up"></i>';
 }
 
 function shortsOpenBook(shop) {
@@ -3013,6 +3060,17 @@ function initShortsObserver(screen) {
         const dataSrc = frame.dataset.src || '';
         if (dataSrc && (!frame.src || frame.src === 'about:blank' || frame.src === window.location.href)) {
           frame.src = dataSrc;
+          // 소리가 켜진 상태(_shortsMuted===false)면 로드 완료 후 unMute 전송
+          if (!_shortsMuted) {
+            frame.onload = () => {
+              try {
+                frame.contentWindow.postMessage(
+                  JSON.stringify({ event: 'command', func: 'unMute', args: [] }), '*'
+                );
+              } catch(e) {}
+              frame.onload = null;
+            };
+          }
         }
         // 조회수 트래킹 (슬라이드당 1회)
         const sid = slide.dataset.shopId;
