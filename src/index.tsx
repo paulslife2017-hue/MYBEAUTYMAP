@@ -1980,7 +1980,9 @@ body.shorts-mode #shorts-mute-btn{ display:flex; }
 .shorts-overlay{
   position:absolute;bottom:0;left:0;right:0;
   background:linear-gradient(transparent 0%,rgba(0,0,0,.55) 35%,rgba(10,10,10,.97) 100%);
-  padding:60px 14px 16px;
+  padding:60px 14px 20px;
+  /* iOS safe area 확보 — 홈바 영역 위로 버튼 끌어올림 */
+  padding-bottom:max(20px, calc(20px + env(safe-area-inset-bottom)));
   z-index:10;
   pointer-events:auto;
 }
@@ -2020,14 +2022,18 @@ body.shorts-mode #shorts-mute-btn{ display:flex; }
   display:flex;flex-direction:column;align-items:center;gap:3px;
   background:var(--pink);
   color:#fff;border:none;border-radius:14px;
-  padding:10px 14px;
+  padding:12px 16px;
   font-size:12px;font-weight:800;
   font-family:inherit;cursor:pointer;
   white-space:nowrap;
   box-shadow:0 4px 16px rgba(255,77,125,.45);
-  min-width:64px;
+  min-width:68px;
+  min-height:48px; /* 모바일 최소 터치 영역 */
   pointer-events:auto;
+  touch-action:manipulation; /* 300ms 딜레이 제거 */
+  -webkit-tap-highlight-color:rgba(255,77,125,.2);
   transition:transform .12s,background .12s;
+  position:relative;z-index:20; /* overlay z-index 10보다 위 */
 }
 .shorts-book-btn i{font-size:16px;}
 .shorts-book-btn span{font-size:10px;font-weight:700;}
@@ -2888,7 +2894,8 @@ function switchTab(tab) {
       if (sc) {
         _shortsStopAll();
         sc.scrollTop = 0;
-        setTimeout(() => { initShortsObserver(sc); }, 100);
+        // display:block 전환 후 레이아웃 확정까지 대기 (모바일 Safari 대응)
+        setTimeout(() => { initShortsObserver(sc); }, 200);
       }
     } else {
       loadShorts(_shortsCat);
@@ -2994,7 +3001,8 @@ async function loadShorts(cat) {
   _shortsActiveIdx = -1;
   screen.scrollTop = 0;
   // 레이아웃 그려진 후 Observer 등록 → 첫 슬라이드 자동 감지·재생
-  setTimeout(() => { initShortsObserver(screen); }, 100);
+  // 모바일 Safari: display:block 전환 후 layout 확정까지 200ms 대기
+  setTimeout(() => { initShortsObserver(screen); }, 200);
 }
 
 // 전체 음소거 상태 (기본: 음소거)
@@ -3118,10 +3126,18 @@ function initShortsObserver(screen) {
     });
   }, {
     root: screen,
-    threshold: [0.1, 0.5]   // 두 단계 감지: 0.5=재생, 0.1=정지
+    threshold: [0.1, 0.5]
   });
 
   document.querySelectorAll('.shorts-slide').forEach(s => _shortsObserver.observe(s));
+
+  // 모바일 Safari: display:none→block 직후 Observer가 첫 슬라이드를 감지 못하는 버그 대응
+  // scrollTop을 1px 바꿨다 원복해서 IntersectionObserver를 강제로 재계산시킴
+  requestAnimationFrame(() => {
+    const cur = screen.scrollTop;
+    screen.scrollTop = cur + 1;
+    requestAnimationFrame(() => { screen.scrollTop = cur; });
+  });
 }
 
 function showAdminPicker() {
