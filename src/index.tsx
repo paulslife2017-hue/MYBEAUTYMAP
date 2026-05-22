@@ -2408,16 +2408,24 @@ body.shorts-mode #shorts-mute-btn{ display:flex; }
   padding-top:4px;
 }
 .rsv-topbar-close{
-  flex-shrink:0;width:34px;height:34px;
+  flex-shrink:0;width:44px;height:44px;
   background:#fff0f4;border:none;border-radius:10px;
   cursor:pointer;
   display:flex;align-items:center;justify-content:center;
+  -webkit-tap-highlight-color:transparent;
+  touch-action:manipulation;
+}
+.rsv-topbar-close svg,.rsv-topbar-ext svg{
+  pointer-events:none;  /* SVG가 클릭 이벤트 가로채지 않도록 */
+  display:block;
 }
 .rsv-topbar-ext{
-  flex-shrink:0;width:34px;height:34px;
+  flex-shrink:0;width:44px;height:44px;
   background:#f4f4f4;border:none;border-radius:10px;
   cursor:pointer;
   display:flex;align-items:center;justify-content:center;
+  -webkit-tap-highlight-color:transparent;
+  touch-action:manipulation;
 }
 .rsv-loading{
   flex-shrink:0;height:3px;background:#f0f0f0;overflow:hidden;
@@ -2778,11 +2786,11 @@ body.shorts-mode #shorts-mute-btn{ display:flex; }
   <div class="rsv-topbar">
     <div class="rsv-topbar-handle"></div>
     <span class="rsv-topbar-title" id="rsvTitle"></span>
-    <button class="rsv-topbar-ext" id="rsvExtBtn" title="브라우저로 열기">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2.2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+    <button class="rsv-topbar-ext" id="rsvExtBtn" title="브라우저로 열기" type="button">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2.2" style="pointer-events:none"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
     </button>
-    <button class="rsv-topbar-close" onclick="closeReserve()" title="닫기">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FF4D7D" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    <button class="rsv-topbar-close" onclick="closeReserve()" title="닫기" type="button">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FF4D7D" stroke-width="2.5" style="pointer-events:none"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>
   </div>
   <div class="rsv-loading" id="rsvLoading"><div class="rsv-loading-bar"></div></div>
@@ -3876,18 +3884,21 @@ function closeReserve() {
   document.getElementById('rsvDim').classList.remove('show');
   document.getElementById('rsvModal').classList.remove('show');
   document.body.style.overflow = '';
-  setTimeout(() => { document.getElementById('rsvFrame').src = ''; }, 400);
+  setTimeout(() => {
+    const f = document.getElementById('rsvFrame');
+    if (f) f.src = '';
+  }, 400);
 }
-// 스와이프 다운으로 닫기
+// 스와이프 다운으로 닫기 (topbar 영역만)
 (function(){
-  const modal = document.getElementById('rsvModal');
+  const topbar = document.querySelector('.rsv-topbar');
+  if (!topbar) return;
   let sy = 0;
-  modal.addEventListener('touchstart', e => {
-    if (e.target.closest('iframe')) return;
+  topbar.addEventListener('touchstart', e => {
     sy = e.touches[0].clientY;
   }, {passive:true});
-  modal.addEventListener('touchend', e => {
-    if (e.changedTouches[0].clientY - sy > 80) closeReserve();
+  topbar.addEventListener('touchend', e => {
+    if (e.changedTouches[0].clientY - sy > 50) closeReserve();
   }, {passive:true});
 })();
 
