@@ -1777,11 +1777,11 @@ html,body{height:100%;background:var(--bg);color:#fff;
   display:none;}
 #mapScreen.active{display:block;}
 /* 쇼츠 릴스 스타일 */
-/* 숏폼: 헤더 아래 catBar + 배너광고 위까지 */
+/* 숏폼: 카탈로그바 아래 ~ 탭바 바로 위 (헤더·광고 없이 풀스크린) */
 #shortsScreen{position:fixed;
-  top:calc(var(--hd) + var(--scat,0px));
+  top:var(--scat,0px);
   left:0;right:0;
-  bottom:calc(var(--ad) + var(--nav));
+  bottom:calc(var(--nav) + env(safe-area-inset-bottom,0px));
   display:none;overflow-y:scroll;scroll-snap-type:y mandatory;
   background:#000;-webkit-overflow-scrolling:touch;}
 #shortsScreen::-webkit-scrollbar{display:none;}
@@ -1789,9 +1789,9 @@ html,body{height:100%;background:var(--bg);color:#fff;
 /* 숏폼 전용 카탈로그 바 */
 #shortsCatBar{
   position:fixed;
-  top:var(--hd);
+  top:0;
   left:0;right:0;
-  z-index:299;
+  z-index:399;
   height:44px;
   background:rgba(10,10,10,.96);
   backdrop-filter:blur(12px);
@@ -1935,8 +1935,8 @@ html,body{height:100%;background:var(--bg);color:#fff;
 .shorts-slide{
   position:relative;
   width:100%;
-  /* 풀스크린: 카탈로그바(44px) 제외한 전체 높이 */
-  height:calc(100dvh - 44px);
+  /* 풀스크린: shortsScreen 전체 높이 = 화면 - 카탈로그바 - 탭바 */
+  height:calc(100dvh - var(--scat,44px) - var(--nav));
   scroll-snap-align:start;
   scroll-snap-stop:always;
   flex-shrink:0;
@@ -2823,34 +2823,12 @@ function switchTab(tab) {
   }
   if (tab==='feed') closeMapPopup();
 
-  // ── 숏폼 풀스크린 처리 ──────────────────────────────────────────────────
-  const header    = document.getElementById('header');
-  const adBanner  = document.getElementById('coupang-ad');
-  const tabbar    = document.querySelector('.tabbar');
-  const sCatBar   = document.getElementById('shortsCatBar');
-  const shortsScr = document.getElementById('shortsScreen');
-
-  if (tab === 'shorts') {
-    // 헤더·광고·탭바 숨김 → 숏폼이 진짜 전체화면
-    if (header)   header.style.display   = 'none';
-    if (adBanner) adBanner.style.display = 'none';
-    if (tabbar)   tabbar.style.display   = 'none';
-    // 숏폼 카탈로그바 표시
-    if (sCatBar)  { sCatBar.classList.add('show'); sCatBar.style.top = '0'; }
-    // shortsScreen: top=카탈로그바높이, bottom=0 (풀스크린)
-    if (shortsScr) { shortsScr.style.top = '44px'; shortsScr.style.bottom = '0'; }
-    document.documentElement.style.setProperty('--scat', '44px');
-  } else {
-    // 숏폼 이탈 → 헤더·광고·탭바 복원
-    if (header)   header.style.display   = '';
-    if (adBanner) adBanner.style.display = '';
-    if (tabbar)   tabbar.style.display   = '';
-    // 카탈로그바 숨김
-    if (sCatBar)  { sCatBar.classList.remove('show'); sCatBar.style.top = ''; }
-    // shortsScreen 원래 위치 복원
-    if (shortsScr) { shortsScr.style.top = ''; shortsScr.style.bottom = ''; }
-    document.documentElement.style.setProperty('--scat', '0px');
+  // ── 숏폼 카탈로그바 show/hide ────────────────────────────────────────────
+  const sCatBar = document.getElementById('shortsCatBar');
+  if (sCatBar) {
+    sCatBar.classList.toggle('show', tab === 'shorts');
   }
+  document.documentElement.style.setProperty('--scat', tab === 'shorts' ? '44px' : '0px');
   // ────────────────────────────────────────────────────────────────────────
 
   // 검색바 placeholder·힌트 탭에 따라 변경
