@@ -1957,21 +1957,24 @@ html,body{height:100%;background:var(--bg);color:#fff;
 .shorts-addr i{color:rgba(255,77,125,.7);font-size:11px;}
 /* 예약 버튼 */
 .shorts-book-btn{
-  display:flex;align-items:center;justify-content:center;gap:10px;
+  display:flex;align-items:center;justify-content:space-between;
   width:100%;
-  padding:14px 0;
+  padding:14px 18px;
   border-radius:16px;
   background:linear-gradient(135deg,#FF4D7D 0%,#ff6b9d 100%);
   color:#fff;font-size:15px;font-weight:800;
   border:none;cursor:pointer;
   font-family:inherit;
-  box-shadow:0 4px 24px rgba(255,77,125,.55),inset 0 1px 0 rgba(255,255,255,.2);
+  box-shadow:0 4px 24px rgba(255,77,125,.5);
   pointer-events:auto;
   letter-spacing:-.2px;
-  transition:transform .1s,box-shadow .1s;
+  transition:transform .12s,opacity .12s;
 }
-.shorts-book-btn:active{transform:scale(.97);box-shadow:0 2px 12px rgba(255,77,125,.4);}
-.shorts-book-btn i{font-size:15px;}
+.shorts-book-btn:active{transform:scale(.97);opacity:.88;}
+.shorts-book-btn-left{display:flex;align-items:center;gap:8px;}
+.shorts-book-btn-arrow{width:28px;height:28px;background:rgba(255,255,255,.22);border-radius:50%;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.shorts-book-btn-arrow i{font-size:11px;margin:0;}
 /* 영상 없는 슬라이드 배경 */
 .shorts-no-video{
   width:100%;height:100%;
@@ -2932,7 +2935,8 @@ function shortsSlide(shop) {
       '<div class="shorts-name">' + name + '</div>' +
       (addr ? '<div class="shorts-addr"><i class="fas fa-map-marker-alt"></i>' + addr + '</div>' : '') +
       '<button class="shorts-book-btn" onclick="shortsOpenBook(' + JSON.stringify(shop).replace(/"/g,'&quot;') + ')">' +
-        '<i class="fas fa-calendar-check"></i>예약하기<i class="fas fa-chevron-right" style="font-size:11px;margin-left:auto;opacity:.8"></i>' +
+        '<span class="shorts-book-btn-left"><i class="fas fa-calendar-check"></i>예약하기</span>' +
+        '<span class="shorts-book-btn-arrow"><i class="fas fa-chevron-right"></i></span>' +
       '</button>' +
     '</div>' +
     '</div>'
