@@ -1804,28 +1804,29 @@ html,body{height:100%;background:var(--bg);color:#fff;
   overflow-x:auto;padding:6px 12px;height:100%;scrollbar-width:none;
 }
 #shortsCatBar .cat-scroll::-webkit-scrollbar{display:none;}
-/* 숏폼 카탈로그 버튼 — 다크 강제 v3 */
-#shortsCatBar .cp,
-#shortsCatBar button.cp{
-  color:#e2e8f0!important;
-  background:#2a2a2a!important;
-  border:1.5px solid #444!important;
-  border-color:#444!important;
+/* 숏폼 전용 카탈로그 버튼 — .scp 독립 클래스 */
+.scp{
+  flex-shrink:0;
+  border:1.5px solid #555;
+  border-radius:20px;
+  padding:5px 14px;
+  font-size:12px;
+  font-weight:600;
+  background:#2a2a2a;
+  color:#e2e8f0;
+  cursor:pointer;
+  font-family:inherit;
+  transition:all .2s;
+  white-space:nowrap;
 }
-#shortsCatBar .cp:hover,
-#shortsCatBar button.cp:hover{
-  background:#383838!important;
-  border-color:#666!important;
+.scp:hover{background:#383838;border-color:#777;}
+.scp.active{
+  background:var(--pink);
+  border-color:var(--pink);
+  color:#fff;
+  box-shadow:0 2px 10px rgba(255,77,125,.35);
 }
-#shortsCatBar .cp.active,
-#shortsCatBar button.cp.active{
-  background:var(--pink)!important;
-  border-color:var(--pink)!important;
-  color:#fff!important;
-}
-#shortsCatBar{
-  background:#0a0a0a!important;
-}
+#shortsCatBar{background:#0a0a0a;}
 #inquiryScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:calc(var(--ad) + var(--nav));
   overflow-y:auto;display:none;background:var(--bg);}
 #inquiryScreen.active{display:block;}
@@ -2500,16 +2501,16 @@ html,body{height:100%;background:var(--bg);color:#fff;
 <!-- 숏폼 전용 카탈로그 바 -->
 <div id="shortsCatBar">
   <div class="cat-scroll">
-    <button class="cp active" id="scat-all"   onclick="filterShorts(this,'all')">🏠 전체</button>
-    <button class="cp"        id="scat-마사지" onclick="filterShorts(this,'마사지')">💆 마사지</button>
-    <button class="cp"        id="scat-헤드스파" onclick="filterShorts(this,'헤드스파')">🧖 헤드스파</button>
-    <button class="cp"        id="scat-피부관리" onclick="filterShorts(this,'피부관리')">✨ 피부관리</button>
-    <button class="cp"        id="scat-헤어" onclick="filterShorts(this,'헤어')">💇 헤어</button>
-    <button class="cp"        id="scat-메이크업" onclick="filterShorts(this,'메이크업')">💄 메이크업</button>
-    <button class="cp"        id="scat-왁싱" onclick="filterShorts(this,'왁싱')">🪒 왁싱</button>
-    <button class="cp"        id="scat-반영구" onclick="filterShorts(this,'반영구')">🖊️ 반영구</button>
-    <button class="cp"        id="scat-병원" onclick="filterShorts(this,'병원')">🏥 병원</button>
-    <button class="cp"        id="scat-그외" onclick="filterShorts(this,'그외')">🌸 그외</button>
+    <button class="scp active" id="scat-all"    onclick="filterShorts(this,'all')">🏠 전체</button>
+    <button class="scp"        id="scat-마사지"  onclick="filterShorts(this,'마사지')">💆 마사지</button>
+    <button class="scp"        id="scat-헤드스파" onclick="filterShorts(this,'헤드스파')">🧖 헤드스파</button>
+    <button class="scp"        id="scat-피부관리" onclick="filterShorts(this,'피부관리')">✨ 피부관리</button>
+    <button class="scp"        id="scat-헤어"    onclick="filterShorts(this,'헤어')">💇 헤어</button>
+    <button class="scp"        id="scat-메이크업" onclick="filterShorts(this,'메이크업')">💄 메이크업</button>
+    <button class="scp"        id="scat-왁싱"    onclick="filterShorts(this,'왁싱')">🪒 왁싱</button>
+    <button class="scp"        id="scat-반영구"  onclick="filterShorts(this,'반영구')">🖊️ 반영구</button>
+    <button class="scp"        id="scat-병원"    onclick="filterShorts(this,'병원')">🏥 병원</button>
+    <button class="scp"        id="scat-그외"    onclick="filterShorts(this,'그외')">🌸 그외</button>
   </div>
 </div>
 
@@ -2905,7 +2906,7 @@ function shortsPlayFirst() {
 
 function filterShorts(btn, cat) {
   // 버튼 active 토글
-  document.querySelectorAll('#shortsCatBar .cp').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('#shortsCatBar .scp').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   // 캐시 유지하면서 필터만 변경 (재fetch 없음)
   loadShorts(cat);
