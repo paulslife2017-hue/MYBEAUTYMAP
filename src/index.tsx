@@ -1966,7 +1966,11 @@ body.shorts-mode #shorts-mute-btn{ display:flex; }
   justify-content:center;
   overflow:hidden;
 }
-.shorts-slide iframe{
+.shorts-iframe-wrap{
+  position:absolute;inset:0;
+  width:100%;height:100%;
+}
+.shorts-iframe-wrap iframe{
   position:absolute;inset:0;
   width:100%;height:100%;
   border:none;
@@ -2931,7 +2935,7 @@ function shortsPlayFirst() {
   if (!screen) return;
   screen.scrollTop = 0;
   _shortsActiveIdx = -1;
-  _shortsActivateIdx(screen, 0);
+  setTimeout(() => _shortsActivateIdx(screen, 0), 50);
 }
 
 function filterShorts(btn, cat) {
@@ -3006,10 +3010,9 @@ function shortsSlide(shop) {
   const addr = shop.address || '';
 
   return (
-    '<div class="shorts-slide" data-shop-id="' + shop.id + '">' +
+    '<div class="shorts-slide" data-shop-id="' + shop.id + '" data-yt-src="' + src + '">' +
     (ytId
-      ? '<iframe src="about:blank" data-src="' + src + '" data-ytid="' + ytId + '"' +
-          ' allow="autoplay;encrypted-media;fullscreen" allowfullscreen></iframe>'
+      ? '<div class="shorts-iframe-wrap"></div>'  // iframe은 진입 시 동적 삽입
       : '<div class="shorts-no-video"></div>') +
     '<div class="shorts-overlay">' +
       '<div class="shorts-info-row">' +
@@ -3031,17 +3034,14 @@ function shortsSlide(shop) {
 // 음소거 토글 버튼 클릭
 function toggleShortsMute() {
   _shortsMuted = !_shortsMuted;
-  // 현재 보이는 모든 iframe에 postMessage
-  document.querySelectorAll('.shorts-slide iframe').forEach(f => {
-    if (!f.src || f.src === 'about:blank') return;
+  // 현재 활성 iframe에 postMessage
+  document.querySelectorAll('.shorts-iframe-wrap iframe').forEach(f => {
     try {
       f.contentWindow.postMessage(
-        JSON.stringify({ event: 'command', func: _shortsMuted ? 'mute' : 'unMute', args: [] }),
-        '*'
+        JSON.stringify({ event: 'command', func: _shortsMuted ? 'mute' : 'unMute', args: [] }), '*'
       );
     } catch(e) {}
   });
-  // 버튼 아이콘 업데이트
   const btn = document.getElementById('shorts-mute-btn');
   if (btn) btn.innerHTML = _shortsMuted
     ? '<i class="fas fa-volume-mute"></i>'
@@ -3059,44 +3059,53 @@ function shortsOpenBook(shop) {
   openInapp();
 }
 
-// ── 릴스 재생 엔진 ──────────────────────────────────────────────────────
+// ── 릴스 재생 엔진 (iframe DOM 삽입/제거 방식) ─────────────────────────
 let _shortsActiveIdx = -1;
 
-function _shortsPlay(frame) {
-  if (!frame || !frame.dataset.src) return;
-  frame.onload = null;
-  // 반드시 about:blank → src 순서로 (브라우저 캐시 재로드 보장)
-  frame.src = 'about:blank';
-  requestAnimationFrame(() => {
-    frame.src = frame.dataset.src;
-    if (!_shortsMuted) {
-      frame.onload = () => {
-        try {
-          frame.contentWindow.postMessage(
-            JSON.stringify({ event: 'command', func: 'unMute', args: [] }), '*'
-          );
-        } catch(e) {}
-        frame.onload = null;
-      };
-    }
-  });
+function _shortsPlaySlide(slide) {
+  if (!slide) return;
+  const src = slide.dataset.ytSrc;
+  if (!src) return;
+  const wrap = slide.querySelector('.shorts-iframe-wrap');
+  if (!wrap) return;
+
+  // 기존 iframe 제거 후 새로 생성 (autoplay 확실히 보장)
+  wrap.innerHTML = '';
+  const f = document.createElement('iframe');
+  f.src = src;
+  f.allow = 'autoplay; encrypted-media; fullscreen; picture-in-picture';
+  f.allowFullscreen = true;
+  f.setAttribute('playsinline', '');
+  f.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:none;';
+  wrap.appendChild(f);
+
+  // unMute (소리 켜진 상태면)
+  if (!_shortsMuted) {
+    f.onload = () => {
+      try {
+        f.contentWindow.postMessage(
+          JSON.stringify({ event: 'command', func: 'unMute', args: [] }), '*'
+        );
+      } catch(e) {}
+      f.onload = null;
+    };
+  }
 }
 
-function _shortsStop(frame) {
-  if (!frame || !frame.dataset.src) return;
-  frame.onload = null;
-  frame.src = 'about:blank';
+function _shortsStopSlide(slide) {
+  if (!slide) return;
+  const wrap = slide.querySelector('.shorts-iframe-wrap');
+  if (wrap) wrap.innerHTML = ''; // iframe 완전 제거 → 재생 즉시 중단
 }
 
 function _shortsStopAll() {
-  document.querySelectorAll('.shorts-slide iframe').forEach(f => _shortsStop(f));
+  document.querySelectorAll('.shorts-slide').forEach(s => _shortsStopSlide(s));
   _shortsActiveIdx = -1;
 }
 
 function _shortsGetIdx(screen) {
-  const slides = Array.from(document.querySelectorAll('.shorts-slide'));
+  const slides = document.querySelectorAll('.shorts-slide');
   if (!slides.length) return 0;
-  // scrollTop 기준: 각 슬라이드 높이로 나눈 인덱스 (가장 단순하고 정확)
   const h = screen.clientHeight;
   if (!h) return 0;
   return Math.min(Math.round(screen.scrollTop / h), slides.length - 1);
@@ -3108,57 +3117,46 @@ function _shortsActivateIdx(screen, newIdx) {
   if (_shortsActiveIdx === newIdx) return;
 
   // 이전 슬라이드 정지
-  if (_shortsActiveIdx >= 0 && slides[_shortsActiveIdx]) {
-    _shortsStop(slides[_shortsActiveIdx].querySelector('iframe'));
-  }
+  if (_shortsActiveIdx >= 0) _shortsStopSlide(slides[_shortsActiveIdx]);
   _shortsActiveIdx = newIdx;
 
   // 새 슬라이드 재생
-  const frame = slides[newIdx].querySelector('iframe');
-  if (frame) {
-    _shortsPlay(frame);
-    const sid = slides[newIdx].dataset.shopId;
-    if (sid && !slides[newIdx].dataset.viewed) {
-      slides[newIdx].dataset.viewed = '1';
-      fetch('/api/track/shorts/view/' + sid, { method: 'POST' }).catch(() => {});
-    }
+  _shortsPlaySlide(slides[newIdx]);
+
+  // 조회수 트래킹
+  const sid = slides[newIdx].dataset.shopId;
+  if (sid && !slides[newIdx].dataset.viewed) {
+    slides[newIdx].dataset.viewed = '1';
+    fetch('/api/track/shorts/view/' + sid, { method: 'POST' }).catch(() => {});
   }
 }
 
 function initShortsObserver(screen) {
   if (_shortsObserver) { _shortsObserver.disconnect(); _shortsObserver = null; }
   _shortsActiveIdx = -1;
-
   if (!document.querySelectorAll('.shorts-slide').length) return;
 
-  // ── scroll 디바운스 (데스크탑 + Android Chrome) ──
-  let _scrollT = null;
-  const onScroll = () => {
-    clearTimeout(_scrollT);
-    _scrollT = setTimeout(() => {
-      _shortsActivateIdx(screen, _shortsGetIdx(screen));
-    }, 150);
-  };
+  const run = () => _shortsActivateIdx(screen, _shortsGetIdx(screen));
+
+  // scroll 디바운스
+  let _st = null;
+  const onScroll = () => { clearTimeout(_st); _st = setTimeout(run, 150); };
   if (screen._scrollH) screen.removeEventListener('scroll', screen._scrollH);
   screen._scrollH = onScroll;
   screen.addEventListener('scroll', onScroll, { passive: true });
 
-  // ── scrollend (Chrome 114+, iOS 17.4+) ──
-  const onScrollEnd = () => _shortsActivateIdx(screen, _shortsGetIdx(screen));
+  // scrollend (최신 브라우저)
   if (screen._scrollEndH) screen.removeEventListener('scrollend', screen._scrollEndH);
-  screen._scrollEndH = onScrollEnd;
-  screen.addEventListener('scrollend', onScrollEnd, { passive: true });
+  screen._scrollEndH = run;
+  screen.addEventListener('scrollend', run, { passive: true });
 
-  // ── touchend 폴링 (구형 iOS/Android 핵심) ──
+  // touchend 폴링 (구형 iOS/Android)
   const onTouchEnd = () => {
-    let prev = -1, tries = 0;
+    let prev = screen.scrollTop, tries = 0;
     const poll = setInterval(() => {
       const cur = screen.scrollTop;
       tries++;
-      if (cur === prev || tries >= 8) {
-        clearInterval(poll);
-        _shortsActivateIdx(screen, _shortsGetIdx(screen));
-      }
+      if (cur === prev || tries >= 10) { clearInterval(poll); run(); }
       prev = cur;
     }, 80);
   };
