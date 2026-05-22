@@ -3019,10 +3019,21 @@ function shortsSlide(shop, idx) {
   const name = shop.name || '';
   const addr = shop.address || '';
 
+  // ── iOS autoplay 핵심: iframe을 처음부터 DOM에 넣되 visibility:hidden으로 숨김
+  // 나중에 visibility:visible로만 전환 → iOS가 autoplay 허용
+  const iframeHtml = ytId
+    ? '<div class="shorts-iframe-wrap" style="visibility:hidden">' +
+        '<iframe src="' + src + '"' +
+        ' allow="autoplay;encrypted-media;fullscreen;picture-in-picture"' +
+        ' allowfullscreen playsinline' +
+        ' style="position:absolute;inset:0;width:100%;height:100%;border:none;pointer-events:none">' +
+        '</iframe></div>'
+    : '<div class="shorts-no-video"></div>';
+
   return (
     '<div class="shorts-slide" data-shop-id="' + shop.id + '" data-yt-src="' + src + '" data-idx="' + idx + '" data-playing="1"' +
     ' onclick="shortsSlideClick(event,this)">' +
-    (ytId ? '<div class="shorts-iframe-wrap"></div>' : '<div class="shorts-no-video"></div>') +
+    iframeHtml +
     '<div class="shorts-overlay">' +
       '<div class="shorts-info-row">' +
         '<div class="shorts-info-body">' +
@@ -3041,33 +3052,38 @@ function shortsSlide(shop, idx) {
 }
 
 // ── 릴스 슬라이드 클릭 (재생/정지 토글) ─────────────────────────────────
-// overlay 영역(.shorts-overlay) 클릭은 무시 — 예약하기 버튼 등 하위 요소 전담
 function shortsSlideClick(e, slide) {
   if (!slide) return;
-  // overlay 또는 그 자식 클릭이면 무시
   if (e.target.closest('.shorts-overlay')) return;
 
-  const wrap    = slide.querySelector('.shorts-iframe-wrap');
-  const iframe  = wrap ? wrap.querySelector('iframe') : null;
+  const wrap      = slide.querySelector('.shorts-iframe-wrap');
+  const iframe    = wrap ? wrap.querySelector('iframe') : null;
   const isPlaying = slide.dataset.playing === '1';
 
   if (isPlaying) {
+    // ── 재생 중 → 정지
     slide.dataset.playing = '0';
     if (iframe) {
       try { iframe.contentWindow.postMessage(
         JSON.stringify({event:'command',func:'pauseVideo',args:[]}), '*');
       } catch(e2) {}
     }
-    // ⏸ 아이콘 잠깐 표시
     _shortsShowIcon(slide, 'pause');
   } else {
+    // ── 정지 중 → 재생
+    // iOS: postMessage playVideo는 차단됨 → src를 다시 세팅해서 재로드
     slide.dataset.playing = '1';
     if (iframe) {
-      try { iframe.contentWindow.postMessage(
-        JSON.stringify({event:'command',func:'playVideo',args:[]}), '*');
-      } catch(e2) {}
+      const src = slide.dataset.ytSrc;
+      if (src) {
+        // src 재세팅으로 autoplay 재트리거 (iOS 포함)
+        iframe.src = src;
+      } else {
+        try { iframe.contentWindow.postMessage(
+          JSON.stringify({event:'command',func:'playVideo',args:[]}), '*');
+        } catch(e2) {}
+      }
     }
-    // ▶ 아이콘 잠깐 표시 후 사라짐
     _shortsShowIcon(slide, 'play');
   }
 }
@@ -3145,57 +3161,82 @@ function shortsOpenBook(shop) {
   openInapp();
 }
 
-// ── 릴스 재생 엔진 (IntersectionObserver) ─────────────────────────────
+// ── 릴스 재생 엔진 ────────────────────────────────────────────────────────
 let _shortsActiveIdx = -1;
 let _shortsTotal     = 0;
 
-function _shortsInsertIframe(wrap, src) {
-  wrap.innerHTML = '';
-  const f = document.createElement('iframe');
-  f.src = src;
-  f.allow = 'autoplay; encrypted-media; fullscreen; picture-in-picture';
-  f.allowFullscreen = true;
-  f.setAttribute('playsinline', '');
-  f.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:none;pointer-events:none;';
-  wrap.appendChild(f);
-  // 새 슬라이드 재생 시작: 재생 상태 리셋 + 아이콘 초기화
+// visibility:hidden → visible 전환 (iOS autoplay 핵심)
+function _shortsShowWrap(wrap) {
+  wrap.style.visibility = 'visible';
+  // 재생 상태 리셋 + 아이콘 초기화
   const slide = wrap.closest('.shorts-slide');
   if (slide) {
     slide.dataset.playing = '1';
     const icon = slide.querySelector('.shorts-pi');
     if (icon) { icon.style.opacity = '0'; icon.style.transform = 'translate(-50%,-50%) scale(0)'; }
   }
-  // 소리 켜진 상태면 로드 후 unMute
+  // 소리 켜진 상태면 unMute
   if (!_shortsMuted) {
-    f.onload = () => {
-      try { f.contentWindow.postMessage(JSON.stringify({event:'command',func:'unMute',args:[]}), '*'); } catch(e) {}
-      f.onload = null;
-    };
+    const f = wrap.querySelector('iframe');
+    if (f) {
+      // iframe이 로드된 후 unMute (onload 타이밍 보정)
+      const tryUnmute = () => {
+        try { f.contentWindow.postMessage(JSON.stringify({event:'command',func:'unMute',args:[]}), '*'); } catch(e) {}
+      };
+      // 이미 로드됐을 수도 있으니 즉시 + onload 두 번 시도
+      tryUnmute();
+      f.onload = () => { tryUnmute(); f.onload = null; };
+    }
   }
-  return f;
+}
+
+// 슬라이드를 화면 밖으로 → visibility:hidden + src 초기화(메모리 절약)
+function _shortsHideWrap(wrap) {
+  wrap.style.visibility = 'hidden';
+  // iframe src를 비워서 메모리/네트워크 절약, 다음 진입 시 재로드
+  const f = wrap.querySelector('iframe');
+  if (f) {
+    const slide = wrap.closest('.shorts-slide');
+    const src   = slide ? slide.dataset.ytSrc : '';
+    if (src) f.dataset.origSrc = src; // 원본 src 보존
+    f.src = 'about:blank';
+  }
+}
+
+// visibility:hidden인 슬라이드를 다시 활성화할 때 src 복원
+function _shortsRestoreWrap(wrap) {
+  const f = wrap.querySelector('iframe');
+  if (!f) return;
+  const src = (f.dataset.origSrc) || (wrap.closest('.shorts-slide') || {}).dataset?.ytSrc || '';
+  if (src && f.src !== src) {
+    f.src = src; // autoplay=1이 다시 트리거됨
+  }
+  _shortsShowWrap(wrap);
 }
 
 function _shortsStopAll() {
-  document.querySelectorAll('.shorts-slide .shorts-iframe-wrap').forEach(w => { w.innerHTML = ''; });
+  document.querySelectorAll('.shorts-slide .shorts-iframe-wrap').forEach(w => {
+    _shortsHideWrap(w);
+  });
   _shortsActiveIdx = -1;
-  // scroll fallback 타이머 정리
   const sc = document.getElementById('shortsScreen');
   if (sc && sc._shortsScrollTimer) { clearTimeout(sc._shortsScrollTimer); sc._shortsScrollTimer = null; }
 }
 
-// ── 슬라이드 활성화 공통 로직 (Observer + scroll fallback 공유) ───────────
+// ── 슬라이드 활성화 공통 로직 ──────────────────────────────────────────────
 function _shortsActivateSlide(slide) {
   const wrap = slide.querySelector('.shorts-iframe-wrap');
-  const src  = slide.dataset.ytSrc;
-  if (!wrap || !src) return;
-  if (!wrap.querySelector('iframe')) {
-    _shortsActiveIdx = parseInt(slide.dataset.idx || '0', 10);
-    _shortsInsertIframe(wrap, src);
-    const sid = slide.dataset.shopId;
-    if (sid && !slide.dataset.viewed) {
-      slide.dataset.viewed = '1';
-      fetch('/api/track/shorts/view/' + sid, { method: 'POST' }).catch(() => {});
-    }
+  if (!wrap) return;
+  // 이미 보이는 중이면 스킵
+  if (wrap.style.visibility === 'visible') return;
+
+  _shortsActiveIdx = parseInt(slide.dataset.idx || '0', 10);
+  _shortsRestoreWrap(wrap); // src 복원 + visible 전환
+
+  const sid = slide.dataset.shopId;
+  if (sid && !slide.dataset.viewed) {
+    slide.dataset.viewed = '1';
+    fetch('/api/track/shorts/view/' + sid, { method: 'POST' }).catch(() => {});
   }
 }
 
@@ -3211,20 +3252,19 @@ function initShortsObserver(screen) {
     screen._shortsScrollTimer = null;
   }
 
-  // ── IntersectionObserver: threshold를 낮춰서 snap 오차에 강하게
+  // ── IntersectionObserver
   _shortsObserver = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
       const slide = entry.target;
       const wrap  = slide.querySelector('.shorts-iframe-wrap');
-      const src   = slide.dataset.ytSrc;
-      if (!wrap || !src) return;
+      if (!wrap) return;
 
       if (entry.intersectionRatio >= 0.3) {
-        // 30% 이상 보임 → 재생
+        // 30% 이상 보임 → 활성화(visible + src 복원)
         _shortsActivateSlide(slide);
       } else if (entry.intersectionRatio < 0.1) {
-        // 10% 미만 → 완전히 이탈 → iframe 제거
-        wrap.innerHTML = '';
+        // 10% 미만 → 이탈 → hidden + src 비움
+        _shortsHideWrap(wrap);
       }
     });
   }, {
@@ -3255,7 +3295,7 @@ function initShortsObserver(screen) {
       // 30% 이상 보이는 최우선 슬라이드 활성화
       if (bestSlide && bestRatio >= 0.3) {
         _shortsActivateSlide(bestSlide);
-        // 완전히 이탈한 슬라이드 iframe 제거
+        // 완전히 이탈한 슬라이드 숨김
         slides.forEach(slide => {
           if (slide === bestSlide) return;
           const st = slide.offsetTop;
@@ -3265,7 +3305,7 @@ function initShortsObserver(screen) {
           const ratio      = sh > 0 ? overlapH / sh : 0;
           if (ratio < 0.1) {
             const w = slide.querySelector('.shorts-iframe-wrap');
-            if (w) w.innerHTML = '';
+            if (w) _shortsHideWrap(w);
           }
         });
       }
@@ -3273,7 +3313,18 @@ function initShortsObserver(screen) {
   };
   screen.addEventListener('scroll', screen._shortsScrollHandler, { passive: true });
 
-  // 모바일 Safari: display:none→block 직후 Observer가 첫 슬라이드를 감지 못하는 버그 대응
+  // 모바일 Safari: display:none→block 직후 Observer 미감지 버그 대응
+  // + 이미 DOM에 있는 모든 iframe wrap을 초기 상태(hidden)로 확실히 세팅
+  document.querySelectorAll('.shorts-slide .shorts-iframe-wrap').forEach(w => {
+    w.style.visibility = 'hidden';
+    // src가 about:blank면 원본으로 복원 (이전 탭 이탈로 비워진 경우)
+    const f = w.querySelector('iframe');
+    if (f && (f.src === 'about:blank' || f.src === '' || f.src === window.location.href)) {
+      const slide = w.closest('.shorts-slide');
+      const src   = (f.dataset.origSrc) || (slide ? slide.dataset.ytSrc : '');
+      if (src) f.src = src;
+    }
+  });
   requestAnimationFrame(() => {
     const cur = screen.scrollTop;
     screen.scrollTop = cur + 1;
