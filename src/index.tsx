@@ -1982,12 +1982,12 @@ body.shorts-mode #shorts-mute-btn{ display:flex; }
   background:linear-gradient(transparent 0%,rgba(0,0,0,.55) 35%,rgba(10,10,10,.97) 100%);
   padding:60px 14px 16px;
   z-index:10;
-  pointer-events:none;
+  pointer-events:auto;
 }
 /* 업체정보 + 예약버튼 한줄 배치 */
 .shorts-info-row{
   display:flex;align-items:center;gap:10px;
-  pointer-events:none;
+  pointer-events:auto;
 }
 .shorts-info-body{flex:1;min-width:0;}
 /* 카테고리 뱃지 */
@@ -3092,30 +3092,27 @@ function initShortsObserver(screen) {
       const src   = slide.dataset.ytSrc;
       if (!wrap || !src) return;
 
-      if (entry.isIntersecting) {
-        // 화면에 들어옴 → iframe 삽입 (이미 있으면 스킵)
+      if (entry.intersectionRatio >= 0.5) {
+        // 50% 이상 보임 → 재생 (이미 있으면 스킵)
         if (!wrap.querySelector('iframe')) {
-          const idx = parseInt(slide.dataset.idx || '0', 10);
-          _shortsActiveIdx = idx;
+          _shortsActiveIdx = parseInt(slide.dataset.idx || '0', 10);
           _shortsInsertIframe(wrap, src);
-          // 조회수 트래킹
           const sid = slide.dataset.shopId;
           if (sid && !slide.dataset.viewed) {
             slide.dataset.viewed = '1';
             fetch('/api/track/shorts/view/' + sid, { method: 'POST' }).catch(() => {});
           }
         }
-      } else {
-        // 화면에서 나감 → iframe 제거 (재생 즉시 중단)
+      } else if (entry.intersectionRatio < 0.1) {
+        // 10% 미만 → 완전히 이탈 → iframe 제거
         wrap.innerHTML = '';
       }
     });
   }, {
-    root: screen,       // #shortsScreen 기준
-    threshold: 0.6      // 60% 이상 보이면 재생
+    root: screen,
+    threshold: [0.1, 0.5]   // 두 단계 감지: 0.5=재생, 0.1=정지
   });
 
-  // 모든 슬라이드 관찰 등록
   document.querySelectorAll('.shorts-slide').forEach(s => _shortsObserver.observe(s));
 }
 
