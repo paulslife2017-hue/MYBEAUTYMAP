@@ -2882,8 +2882,8 @@ function switchTab(tab) {
         sc.scrollTop = 0;
         setTimeout(() => {
           initShortsObserver(sc);
-          _shortsActivateIdx(sc, 0);
-        }, 150);
+          _shortsPlay(0);
+        }, 100);
       }
     } else {
       loadShorts(_shortsCat);
@@ -2984,22 +2984,22 @@ async function loadShorts(cat) {
   }
 
   el.style.cssText = 'height:100%;display:flex;flex-direction:column;';
-  el.innerHTML = items.map(shop => shortsSlide(shop)).join('');
-  screen.scrollTop = 0;
+  el.innerHTML = items.map((shop, i) => shortsSlide(shop, i)).join('');
+  _shortsTotal = items.length;
   _shortsActiveIdx = -1;
+  screen.scrollTop = 0;
   // 레이아웃 완전히 그려진 후 Observer 등록 + 첫 슬라이드 재생
   setTimeout(() => {
     initShortsObserver(screen);
-    _shortsActivateIdx(screen, 0);
-  }, 150);
+    _shortsPlay(0);
+  }, 100);
 }
 
 // 전체 음소거 상태 (기본: 음소거)
 let _shortsMuted = true;
 
-function shortsSlide(shop) {
+function shortsSlide(shop, idx) {
   const ytId = shop.youtube_id || '';
-  // mute=1 → 브라우저 자동재생 정책 통과, enablejsapi=1 → postMessage 제어
   const src  = ytId
     ? 'https://www.youtube.com/embed/' + ytId
       + '?autoplay=1&mute=1&loop=1&playlist=' + ytId
@@ -3010,9 +3010,9 @@ function shortsSlide(shop) {
   const addr = shop.address || '';
 
   return (
-    '<div class="shorts-slide" data-shop-id="' + shop.id + '" data-yt-src="' + src + '">' +
+    '<div class="shorts-slide" data-shop-id="' + shop.id + '" data-yt-src="' + src + '" data-idx="' + idx + '">' +
     (ytId
-      ? '<div class="shorts-iframe-wrap"></div>'  // iframe은 진입 시 동적 삽입
+      ? '<div class="shorts-iframe-wrap"></div>'
       : '<div class="shorts-no-video"></div>') +
     '<div class="shorts-overlay">' +
       '<div class="shorts-info-row">' +
@@ -3059,17 +3059,30 @@ function shortsOpenBook(shop) {
   openInapp();
 }
 
-// ── 릴스 재생 엔진 (iframe DOM 삽입/제거 방식) ─────────────────────────
+// ── 릴스 재생 엔진 ─────────────────────────────────────────────────────
 let _shortsActiveIdx = -1;
+let _shortsTotal     = 0;
 
-function _shortsPlaySlide(slide) {
-  if (!slide) return;
-  const src = slide.dataset.ytSrc;
-  if (!src) return;
-  const wrap = slide.querySelector('.shorts-iframe-wrap');
-  if (!wrap) return;
+function _shortsPlay(idx) {
+  const slides = Array.from(document.querySelectorAll('.shorts-slide'));
+  if (idx < 0 || idx >= slides.length) return;
 
-  // 기존 iframe 제거 후 새로 생성 (autoplay 확실히 보장)
+  // 이전 슬라이드 iframe 제거
+  if (_shortsActiveIdx >= 0 && _shortsActiveIdx !== idx) {
+    const prevWrap = slides[_shortsActiveIdx]?.querySelector('.shorts-iframe-wrap');
+    if (prevWrap) prevWrap.innerHTML = '';
+  }
+  _shortsActiveIdx = idx;
+
+  const slide = slides[idx];
+  const src   = slide.dataset.ytSrc;
+  const wrap  = slide.querySelector('.shorts-iframe-wrap');
+  if (!src || !wrap) return;
+
+  // 이미 재생 중이면 스킵
+  if (wrap.querySelector('iframe')) return;
+
+  // iframe 새로 삽입 → autoplay=1 + mute=1 → 브라우저 자동재생 보장
   wrap.innerHTML = '';
   const f = document.createElement('iframe');
   f.src = src;
@@ -3079,129 +3092,77 @@ function _shortsPlaySlide(slide) {
   f.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:none;';
   wrap.appendChild(f);
 
-  // unMute (소리 켜진 상태면)
   if (!_shortsMuted) {
     f.onload = () => {
-      try {
-        f.contentWindow.postMessage(
-          JSON.stringify({ event: 'command', func: 'unMute', args: [] }), '*'
-        );
-      } catch(e) {}
+      try { f.contentWindow.postMessage(JSON.stringify({event:'command',func:'unMute',args:[]}), '*'); } catch(e) {}
       f.onload = null;
     };
   }
-}
-
-function _shortsStopSlide(slide) {
-  if (!slide) return;
-  const wrap = slide.querySelector('.shorts-iframe-wrap');
-  if (wrap) wrap.innerHTML = ''; // iframe 완전 제거 → 재생 즉시 중단
-}
-
-function _shortsStopAll() {
-  document.querySelectorAll('.shorts-slide').forEach(s => _shortsStopSlide(s));
-  _shortsActiveIdx = -1;
-}
-
-function _shortsGetIdx(screen) {
-  const slides = Array.from(document.querySelectorAll('.shorts-slide'));
-  if (!slides.length) return 0;
-  // 각 슬라이드의 offsetTop과 scrollTop 비교 → 가장 가까운 슬라이드 반환
-  const scrollMid = screen.scrollTop + screen.clientHeight * 0.5;
-  let bestIdx = 0, bestDist = Infinity;
-  slides.forEach((s, i) => {
-    const dist = Math.abs((s.offsetTop + s.offsetHeight * 0.5) - scrollMid);
-    if (dist < bestDist) { bestDist = dist; bestIdx = i; }
-  });
-  return bestIdx;
-}
-
-function _shortsActivateIdx(screen, newIdx) {
-  const slides = Array.from(document.querySelectorAll('.shorts-slide'));
-  if (newIdx < 0 || newIdx >= slides.length) return;
-  if (_shortsActiveIdx === newIdx) return;
-
-  // 이전 슬라이드 정지
-  if (_shortsActiveIdx >= 0) _shortsStopSlide(slides[_shortsActiveIdx]);
-  _shortsActiveIdx = newIdx;
-
-  // 새 슬라이드 재생
-  _shortsPlaySlide(slides[newIdx]);
 
   // 조회수 트래킹
-  const sid = slides[newIdx].dataset.shopId;
-  if (sid && !slides[newIdx].dataset.viewed) {
-    slides[newIdx].dataset.viewed = '1';
+  const sid = slide.dataset.shopId;
+  if (sid && !slide.dataset.viewed) {
+    slide.dataset.viewed = '1';
     fetch('/api/track/shorts/view/' + sid, { method: 'POST' }).catch(() => {});
   }
 }
 
-function initShortsObserver(screen) {
-  if (_shortsObserver) { _shortsObserver.disconnect(); _shortsObserver = null; }
+function _shortsStopAll() {
+  document.querySelectorAll('.shorts-slide .shorts-iframe-wrap').forEach(w => { w.innerHTML = ''; });
   _shortsActiveIdx = -1;
-  if (!document.querySelectorAll('.shorts-slide').length) return;
+}
 
-  const run = () => _shortsActivateIdx(screen, _shortsGetIdx(screen));
+// 외부에서 호출: 위/아래 이동
+function shortsGo(dir) {
+  const next = _shortsActiveIdx + dir;
+  if (next < 0 || next >= _shortsTotal) return;
+  const screen = document.getElementById('shortsScreen');
+  const slides = document.querySelectorAll('.shorts-slide');
+  if (!slides[next]) return;
+  // 스크롤 이동 (snap이 처리)
+  screen.scrollTo({ top: slides[next].offsetTop, behavior: 'smooth' });
+  // 즉시 재생 (스크롤 완료 안 기다림)
+  _shortsPlay(next);
+}
 
-  // ── rAF 루프: scrollTop 변화 감지 (모든 기기 공통) ──────────────────
-  // iOS Safari 모멘텀 스크롤 중에도 scrollTop은 변함 → rAF로 감시
-  let _rafId = null;
-  let _lastTop = -1;
-  let _stableCount = 0;
-  let _isTracking = false;
-
-  function _rafLoop() {
-    const cur = screen.scrollTop;
-    if (cur !== _lastTop) {
-      _lastTop = cur;
-      _stableCount = 0;
-    } else {
-      _stableCount++;
-      if (_stableCount === 4) {
-        // 4프레임(약 67ms) 동안 멈추면 snap 완료로 판단 → 재생
-        run();
-      }
-    }
-    if (_isTracking) _rafId = requestAnimationFrame(_rafLoop);
-  }
-
-  // 터치 시작 → rAF 루프 시작
-  const onTouchStart = () => {
-    if (_isTracking) return;
-    _isTracking = true;
-    _lastTop = screen.scrollTop;
-    _stableCount = 0;
-    _rafId = requestAnimationFrame(_rafLoop);
-  };
-
-  // 터치 끝 → 최대 1.5초 더 감시 후 종료
-  const onTouchEnd = () => {
-    setTimeout(() => {
-      _isTracking = false;
-      cancelAnimationFrame(_rafId);
-      run(); // 최종 확인
-    }, 1500);
-  };
-
-  // document 레벨에서 터치 감지 (iframe/overlay가 소비해도 작동)
+function initShortsObserver(screen) {
+  // 기존 이벤트 정리
   if (window._shortsTouchStartH) document.removeEventListener('touchstart', window._shortsTouchStartH);
-  if (window._shortsTouchEndH) document.removeEventListener('touchend', window._shortsTouchEndH);
+  if (window._shortsTouchEndH)   document.removeEventListener('touchend',   window._shortsTouchEndH);
+  if (screen._scrollEndH)        screen.removeEventListener('scrollend', screen._scrollEndH);
+  if (screen._scrollH)           screen.removeEventListener('scroll',    screen._scrollH);
+
+  // 터치 스와이프 감지 (touchstart Y → touchend Y 비교)
+  let _ty = 0;
+  const onTouchStart = (e) => { _ty = e.changedTouches[0].clientY; };
+  const onTouchEnd   = (e) => {
+    const dy = _ty - e.changedTouches[0].clientY;
+    if (Math.abs(dy) < 30) return; // 30px 미만은 무시
+    shortsGo(dy > 0 ? 1 : -1);
+  };
   window._shortsTouchStartH = onTouchStart;
-  window._shortsTouchEndH = onTouchEnd;
+  window._shortsTouchEndH   = onTouchEnd;
   document.addEventListener('touchstart', onTouchStart, { passive: true });
-  document.addEventListener('touchend', onTouchEnd, { passive: true });
+  document.addEventListener('touchend',   onTouchEnd,   { passive: true });
 
-  // scroll 이벤트 (데스크탑 + Android Chrome)
-  let _st = null;
-  const onScroll = () => { clearTimeout(_st); _st = setTimeout(run, 150); };
-  if (screen._scrollH) screen.removeEventListener('scroll', screen._scrollH);
-  screen._scrollH = onScroll;
-  screen.addEventListener('scroll', onScroll, { passive: true });
-
-  // scrollend (Chrome 114+, iOS 17.4+)
-  if (screen._scrollEndH) screen.removeEventListener('scrollend', screen._scrollEndH);
+  // 데스크탑: scrollend / scroll 디바운스
+  const run = () => {
+    const slides = Array.from(document.querySelectorAll('.shorts-slide'));
+    if (!slides.length) return;
+    const mid = screen.scrollTop + screen.clientHeight * 0.5;
+    let best = 0, bestD = Infinity;
+    slides.forEach((s, i) => {
+      const d = Math.abs(s.offsetTop + s.offsetHeight * 0.5 - mid);
+      if (d < bestD) { bestD = d; best = i; }
+    });
+    _shortsPlay(best);
+  };
   screen._scrollEndH = run;
   screen.addEventListener('scrollend', run, { passive: true });
+  let _st = null;
+  const onScroll = () => { clearTimeout(_st); _st = setTimeout(run, 200); };
+  screen._scrollH = onScroll;
+  screen.addEventListener('scroll', onScroll, { passive: true });
 }
 
 function showAdminPicker() {
