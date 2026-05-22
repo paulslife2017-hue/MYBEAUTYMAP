@@ -3157,13 +3157,13 @@ function shortsOpenBook(shop) {
 let _shortsActiveIdx = -1;
 let _shortsTotal     = 0;
 
-// visibility:hidden → visible 전환 (iOS autoplay 핵심)
+// visible 전환 + 재생 상태 세팅
 function _shortsShowWrap(wrap) {
   wrap.style.visibility = 'visible';
-  // 재생 상태 리셋 + 아이콘 초기화
   const slide = wrap.closest('.shorts-slide');
   if (slide) {
-    slide.dataset.playing = '1';
+    // playing 상태는 외부(shortsSlideClick, _shortsActivateSlide)에서 관리
+    // 여기선 아이콘만 초기화
     const icon = slide.querySelector('.shorts-pi');
     if (icon) { icon.style.opacity = '0'; icon.style.transform = 'translate(-50%,-50%) scale(0)'; }
   }
@@ -3171,11 +3171,9 @@ function _shortsShowWrap(wrap) {
   if (!_shortsMuted) {
     const f = wrap.querySelector('iframe');
     if (f) {
-      // iframe이 로드된 후 unMute (onload 타이밍 보정)
       const tryUnmute = () => {
         try { f.contentWindow.postMessage(JSON.stringify({event:'command',func:'unMute',args:[]}), '*'); } catch(e) {}
       };
-      // 이미 로드됐을 수도 있으니 즉시 + onload 두 번 시도
       tryUnmute();
       f.onload = () => { tryUnmute(); f.onload = null; };
     }
@@ -3190,16 +3188,22 @@ function _shortsHideWrap(wrap) {
   if (f) f.src = 'about:blank'; // 리소스 해제 — 복귀 시 _shortsRestoreWrap이 wrap.dataset.ytSrc로 복원
 }
 
-// 슬라이드 활성화: src 세팅(항상) + visible 전환
-// - 정지→재생, 화면 복귀 모두 이 함수로 처리
+// 슬라이드 활성화: src 세팅 + visible 전환
+// src가 about:blank일 때만 YouTube URL로 세팅 (이미 로드된 경우 playVideo로 재생)
 function _shortsRestoreWrap(wrap) {
   const f = wrap.querySelector('iframe');
   if (!f) return;
-  // wrap의 data-yt-src(슬라이드 생성 시 세팅) 우선, 없으면 slide의 data-yt-src
   const src = wrap.dataset.ytSrc ||
               (wrap.closest('.shorts-slide') || {}).dataset?.ytSrc || '';
-  if (src) {
-    f.src = src; // about:blank → YouTube URL → autoplay=1 재트리거 (항상)
+  const isBlank = !f.src || f.src === 'about:blank' || f.src === window.location.href;
+  if (src && isBlank) {
+    // about:blank → YouTube URL 세팅 → autoplay=1 트리거
+    f.src = src;
+  } else if (!isBlank) {
+    // 이미 YouTube URL 로드된 상태 → postMessage로 재생
+    try { f.contentWindow.postMessage(
+      JSON.stringify({event:'command', func:'playVideo', args:[]}), '*');
+    } catch(e) {}
   }
   _shortsShowWrap(wrap);
 }
@@ -3213,7 +3217,7 @@ function _shortsStopAll() {
   if (sc && sc._shortsScrollTimer) { clearTimeout(sc._shortsScrollTimer); sc._shortsScrollTimer = null; }
 }
 
-// ── 슬라이드 활성화 공통 로직 ──────────────────────────────────────────────
+// ── 슬라이드 활성화 공통 로직 (Observer / scroll fallback 호출) ─────────────
 function _shortsActivateSlide(slide) {
   const wrap = slide.querySelector('.shorts-iframe-wrap');
   if (!wrap) return;
@@ -3221,7 +3225,8 @@ function _shortsActivateSlide(slide) {
   if (wrap.style.visibility === 'visible') return;
 
   _shortsActiveIdx = parseInt(slide.dataset.idx || '0', 10);
-  _shortsRestoreWrap(wrap); // src 복원 + visible 전환
+  slide.dataset.playing = '1'; // 새 슬라이드 진입 시 재생 상태로
+  _shortsRestoreWrap(wrap);    // src 세팅 + visible 전환
 
   const sid = slide.dataset.shopId;
   if (sid && !slide.dataset.viewed) {
