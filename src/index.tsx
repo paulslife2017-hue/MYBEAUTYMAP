@@ -5777,8 +5777,8 @@ function renderShortsAdmin() {
           // 카테고리
           '<div>' +
             '<label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">카테고리</label>' +
-            '<select id="s-cat" style="'+adminInputStyle()+'background:rgba(255,255,255,.06)">' +
-              '<option value="">선택 안함</option>' +
+            '<select id="s-cat" style="'+adminInputStyle()+'background:#1b1b1b;color:#fff;appearance:auto">' +
+              '<option value="" style="background:#1b1b1b;color:#fff">선택 안함</option>' +
             '</select>' +
           '</div>' +
           // 주소
@@ -5840,10 +5840,10 @@ function openShortsModal(id) {
   document.getElementById('s-ytid').value   = item?.youtube_id      || '';
   document.getElementById('s-order').value  = item?.sort_order ?? 0;
   document.getElementById('s-active').checked = item ? item.active : true;
-  // 카테고리 select 옵션을 직접 채움 (innerHTML 연결 시 누락 방지)
+  // 카테고리 select 옵션을 직접 채움 (option 배경색 포함)
   const sCat = document.getElementById('s-cat');
-  sCat.innerHTML = '<option value="">선택 안함</option>' +
-    CAT_OPTIONS.map(c => '<option value="'+c+'"'+(item?.category===c?' selected':'')+'>'+c+'</option>').join('');
+  sCat.innerHTML = '<option value="" style="background:#1b1b1b;color:#fff">선택 안함</option>' +
+    CAT_OPTIONS.map(c => '<option value="'+c+'" style="background:#1b1b1b;color:#fff"'+(item?.category===c?' selected':'')+'>'+c+'</option>').join('');
   if (!id) sCat.value = '';
   // 유튜브 미리보기
   const ytId = item?.youtube_id || '';
