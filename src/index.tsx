@@ -3071,18 +3071,10 @@ function shortsSlideClick(e, slide) {
     _shortsShowIcon(slide, 'pause');
   } else {
     // ── 정지 중 → 재생
-    // iOS: postMessage playVideo는 차단됨 → src를 다시 세팅해서 재로드
+    // iOS: postMessage playVideo는 차단됨 → wrap src 복원으로 재로드
     slide.dataset.playing = '1';
-    if (iframe) {
-      const src = slide.dataset.ytSrc;
-      if (src) {
-        // src 재세팅으로 autoplay 재트리거 (iOS 포함)
-        iframe.src = src;
-      } else {
-        try { iframe.contentWindow.postMessage(
-          JSON.stringify({event:'command',func:'playVideo',args:[]}), '*');
-        } catch(e2) {}
-      }
+    if (wrap) {
+      _shortsRestoreWrap(wrap); // src 복원 + visible (이미 visible이어도 src만 재세팅)
     }
     _shortsShowIcon(slide, 'play');
   }
@@ -3190,26 +3182,24 @@ function _shortsShowWrap(wrap) {
   }
 }
 
-// 슬라이드를 화면 밖으로 → visibility:hidden + src 초기화(메모리 절약)
+// 슬라이드 비활성화: hidden + src=about:blank (네트워크/메모리 해제)
 function _shortsHideWrap(wrap) {
+  if (wrap.style.visibility === 'hidden') return; // 이미 숨겨진 경우 스킵
   wrap.style.visibility = 'hidden';
-  // iframe src를 비워서 메모리/네트워크 절약, 다음 진입 시 재로드
   const f = wrap.querySelector('iframe');
-  if (f) {
-    const slide = wrap.closest('.shorts-slide');
-    const src   = slide ? slide.dataset.ytSrc : '';
-    if (src) f.dataset.origSrc = src; // 원본 src 보존
-    f.src = 'about:blank';
-  }
+  if (f) f.src = 'about:blank'; // 리소스 해제 — 복귀 시 _shortsRestoreWrap이 wrap.dataset.ytSrc로 복원
 }
 
-// visibility:hidden인 슬라이드를 다시 활성화할 때 src 복원
+// 슬라이드 활성화: src 세팅(항상) + visible 전환
+// - 정지→재생, 화면 복귀 모두 이 함수로 처리
 function _shortsRestoreWrap(wrap) {
   const f = wrap.querySelector('iframe');
   if (!f) return;
-  const src = (f.dataset.origSrc) || (wrap.closest('.shorts-slide') || {}).dataset?.ytSrc || '';
-  if (src && f.src !== src) {
-    f.src = src; // autoplay=1이 다시 트리거됨
+  // wrap의 data-yt-src(슬라이드 생성 시 세팅) 우선, 없으면 slide의 data-yt-src
+  const src = wrap.dataset.ytSrc ||
+              (wrap.closest('.shorts-slide') || {}).dataset?.ytSrc || '';
+  if (src) {
+    f.src = src; // about:blank → YouTube URL → autoplay=1 재트리거 (항상)
   }
   _shortsShowWrap(wrap);
 }
@@ -3314,16 +3304,12 @@ function initShortsObserver(screen) {
   screen.addEventListener('scroll', screen._shortsScrollHandler, { passive: true });
 
   // 모바일 Safari: display:none→block 직후 Observer 미감지 버그 대응
-  // + 이미 DOM에 있는 모든 iframe wrap을 초기 상태(hidden)로 확실히 세팅
+  // 모든 wrap: hidden + src=about:blank 완전 초기화
+  // Observer가 visible 전환 시 _shortsRestoreWrap이 wrap.dataset.ytSrc로 복원
   document.querySelectorAll('.shorts-slide .shorts-iframe-wrap').forEach(w => {
     w.style.visibility = 'hidden';
-    // src가 about:blank면 원본으로 복원 (이전 탭 이탈로 비워진 경우)
     const f = w.querySelector('iframe');
-    if (f && (f.src === 'about:blank' || f.src === '' || f.src === window.location.href)) {
-      const slide = w.closest('.shorts-slide');
-      const src   = (f.dataset.origSrc) || (slide ? slide.dataset.ytSrc : '');
-      if (src) f.src = src;
-    }
+    if (f) f.src = 'about:blank';
   });
   requestAnimationFrame(() => {
     const cur = screen.scrollTop;
