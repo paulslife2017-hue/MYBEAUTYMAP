@@ -1,5 +1,5 @@
 # prod
-dist/
+# dist/ — Vercel Deploy Hook이 GitHub clone 후 dist를 참조하므로 포함
 .vercel/
 
 # dev
