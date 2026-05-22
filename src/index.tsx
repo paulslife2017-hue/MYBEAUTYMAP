@@ -1720,7 +1720,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
 .search-btn:active{color:#fff}
 
 /* 검색바 */
-.search-bar{position:fixed;top:var(--hd);left:0;right:0;z-index:302;
+.search-bar{position:fixed;top:var(--hd);left:0;right:0;z-index:410;
   background:rgba(10,10,10,.98);backdrop-filter:blur(20px);
   border-bottom:1px solid rgba(255,77,125,.2);
   padding:10px 12px;
@@ -3538,10 +3538,13 @@ function toggleSearch() {
   const bar  = document.getElementById('searchBar');
   const icon = document.getElementById('searchBtnIcon');
   const catBar = document.getElementById('catBar');
+  const sCatBar = document.getElementById('shortsCatBar');
   bar.classList.toggle('open', searchOpen);
   icon.className = searchOpen ? 'fas fa-times' : 'fas fa-search';
   // 검색바 높이(62px)만큼 catBar 아래로
   document.documentElement.style.setProperty('--sb', searchOpen ? '62px' : '0px');
+  // 릴스 탭 카탈로그바: 검색 열릴 때 숨기고, 닫힐 때 복원
+  if (sCatBar) sCatBar.style.visibility = searchOpen ? 'hidden' : '';
   if (searchOpen) {
     setTimeout(()=>document.getElementById('searchInput').focus(), 320);
   } else {
