@@ -2046,15 +2046,15 @@ function mainPage(baseUrl = 'https://www.mybeautymap.co.kr') { return `<!DOCTYPE
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
-<title>마이뷰티맵 – 내 주변 뷰티샵 한눈에</title>
+<title>마이뷰티맵 – 뷰티 숏폼 보고 바로 예약</title>
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6943282483618134" crossorigin="anonymous"></script>
-<meta name="description" content="마사지·헤드스파·피부관리·헤어·메이크업·왁싱·반영구 – 내 주변 뷰티샵을 지도와 피드로 한눈에! 위치 기반으로 가까운 샵을 찾고, 리뷰·가격·예약까지 바로 확인하세요."/>
+<meta name="description" content="마사지·헤드스파·피부관리·헤어·메이크업·왁싱·반영구 – 뷰티 숏폼 영상 보고 네이버 예약까지 한번에! 마음에 드는 샵을 발견하면 바로 예약하세요."/>
 
 <!-- Open Graph -->
 <meta property="og:type"        content="website"/>
 <meta property="og:site_name"   content="마이뷰티맵"/>
-<meta property="og:title"       content="마이뷰티맵 – 내 주변 뷰티샵 한눈에"/>
-<meta property="og:description" content="마사지·헤드스파·피부관리·헤어·메이크업·왁싱·반영구 – 내 주변 뷰티샵을 지도와 피드로 한눈에! 위치 기반으로 가까운 샵을 찾고, 리뷰·가격·예약까지 바로 확인하세요."/>
+<meta property="og:title"       content="마이뷰티맵 – 뷰티 숏폼 보고 바로 예약"/>
+<meta property="og:description" content="마사지·헤드스파·피부관리·헤어·메이크업·왁싱·반영구 – 뷰티 숏폼 영상 보고 네이버 예약까지 한번에! 마음에 드는 샵을 발견하면 바로 예약하세요."/>
 <meta property="og:image"       content="${baseUrl}/og-image.jpg"/>
 <meta property="og:image:width"  content="1200"/>
 <meta property="og:image:height" content="630"/>
@@ -2063,8 +2063,8 @@ function mainPage(baseUrl = 'https://www.mybeautymap.co.kr') { return `<!DOCTYPE
 
 <!-- Twitter Card -->
 <meta name="twitter:card"        content="summary_large_image"/>
-<meta name="twitter:title"       content="마이뷰티맵 – 내 주변 뷰티샵 한눈에"/>
-<meta name="twitter:description" content="마사지·헤드스파·피부관리·헤어·메이크업·왁싱·반영구 – 내 주변 뷰티샵을 지도와 피드로 한눈에! 위치 기반으로 가까운 샵을 찾고, 리뷰·가격·예약까지 바로 확인하세요."/>
+<meta name="twitter:title"       content="마이뷰티맵 – 뷰티 숏폼 보고 바로 예약"/>
+<meta name="twitter:description" content="마사지·헤드스파·피부관리·헤어·메이크업·왁싱·반영구 – 뷰티 숏폼 영상 보고 네이버 예약까지 한번에! 마음에 드는 샵을 발견하면 바로 예약하세요."/>
 <meta name="twitter:image"       content="${baseUrl}/og-image.jpg"/>
 
 <!-- Canonical & 네이버/구글 인증 -->
@@ -2089,7 +2089,7 @@ function mainPage(baseUrl = 'https://www.mybeautymap.co.kr') { return `<!DOCTYPE
       "name": "마이뷰티맵",
       "alternateName": "MyBeautyMap",
       "url": "${baseUrl}",
-      "description": "마사지·헤드스파·피부관리·헤어 – 내 주변 뷰티샵을 지도와 피드로 한눈에",
+      "description": "마사지·헤드스파·피부관리·헤어 – 뷰티 숏폼 보고 바로 예약",
       "inLanguage": "ko-KR",
       "potentialAction": {
         "@type": "SearchAction",
@@ -2104,13 +2104,13 @@ function mainPage(baseUrl = 'https://www.mybeautymap.co.kr') { return `<!DOCTYPE
       "@type": "WebPage",
       "@id": "${baseUrl}/#webpage",
       "url": "${baseUrl}",
-      "name": "마이뷰티맵 – 내 주변 뷰티샵 한눈에",
+      "name": "마이뷰티맵 – 뷰티 숏폼 보고 바로 예약",
       "isPartOf": { "@id": "${baseUrl}/#website" },
       "about": {
         "@type": "Thing",
         "name": "뷰티샵 지도 서비스"
       },
-      "description": "마사지·헤드스파·피부관리·헤어·메이크업·왁싱·반영구 – 위치 기반으로 가까운 뷰티샵을 찾고, 리뷰·가격·예약까지 바로 확인하세요."
+      "description": "마사지·헤드스파·피부관리·헤어·메이크업·왁싱·반영구 – 뷰티 숏폼 영상 보고 네이버 예약까지 한번에!"
     },
     {
       "@type": "Organization",
@@ -5917,7 +5917,7 @@ body{background:var(--bg);color:var(--t1);font-family:'Pretendard',-apple-system
   </div>
 
   <div class="rp-footer">
-    마이뷰티맵 · 내 주변 뷰티샵 한눈에<br>
+    마이뷰티맵 · 뷰티 숏폼 보고 바로 예약<br>
     <a href="/">mybeautymap.co.kr</a>
   </div>
 </div>
