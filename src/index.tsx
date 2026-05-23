@@ -1127,18 +1127,167 @@ app.delete('/api/admin/shorts/:id', async (c) => {
   return c.json({ ok: true })
 })
 
-// 숏폼 조회수 트래킹
+// shorts_daily_stats 테이블 자동 생성 헬퍼
+async function ensureShortsDailyStats() {
+  await sql`
+    CREATE TABLE IF NOT EXISTS shorts_daily_stats (
+      shorts_id  INTEGER NOT NULL,
+      stat_date  DATE    NOT NULL,
+      view_cnt   INTEGER NOT NULL DEFAULT 0,
+      sp_cnt     INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (shorts_id, stat_date)
+    )
+  `
+}
+
+// 숏폼 조회수 트래킹 (누적 + 일별)
 app.post('/api/track/shorts/view/:id', async (c) => {
   const id = +c.req.param('id')
+  const today = kstToday()
   await sql`UPDATE shorts_items SET view_cnt = view_cnt + 1 WHERE id = ${id}`
+  try {
+    await ensureShortsDailyStats()
+    await sql`
+      INSERT INTO shorts_daily_stats (shorts_id, stat_date, view_cnt)
+      VALUES (${id}, ${today}, 1)
+      ON CONFLICT (shorts_id, stat_date)
+      DO UPDATE SET view_cnt = shorts_daily_stats.view_cnt + 1
+    `
+  } catch(_) {}
   return c.json({ ok: true })
 })
 
-// 숏폼 예약클릭 트래킹
+// 숏폼 예약클릭 트래킹 (누적 + 일별)
 app.post('/api/track/shorts/sp/:id', async (c) => {
   const id = +c.req.param('id')
+  const today = kstToday()
   await sql`UPDATE shorts_items SET sp_cnt = sp_cnt + 1 WHERE id = ${id}`
+  try {
+    await ensureShortsDailyStats()
+    await sql`
+      INSERT INTO shorts_daily_stats (shorts_id, stat_date, sp_cnt)
+      VALUES (${id}, ${today}, 1)
+      ON CONFLICT (shorts_id, stat_date)
+      DO UPDATE SET sp_cnt = shorts_daily_stats.sp_cnt + 1
+    `
+  } catch(_) {}
   return c.json({ ok: true })
+})
+
+// ── 숏폼 통계 API ──────────────────────────────────────────────────────────
+
+// 전체 요약 (오늘/어제/7일/누적)
+app.get('/api/admin/shorts/stats/summary', async (c) => {
+  const today     = kstToday()
+  const yesterday = kstYesterday()
+  const day7      = new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10)
+  try {
+    await ensureShortsDailyStats()
+    const [totRow] = await sql`
+      SELECT COALESCE(SUM(view_cnt),0) as total_views,
+             COALESCE(SUM(sp_cnt),0)   as total_sp
+      FROM shorts_items
+    `
+    const [todayRow] = await sql`
+      SELECT COALESCE(SUM(view_cnt),0) as views,
+             COALESCE(SUM(sp_cnt),0)   as sp
+      FROM shorts_daily_stats WHERE stat_date = ${today}
+    `
+    const [yestRow] = await sql`
+      SELECT COALESCE(SUM(view_cnt),0) as views,
+             COALESCE(SUM(sp_cnt),0)   as sp
+      FROM shorts_daily_stats WHERE stat_date = ${yesterday}
+    `
+    const [weekRow] = await sql`
+      SELECT COALESCE(SUM(view_cnt),0) as views,
+             COALESCE(SUM(sp_cnt),0)   as sp
+      FROM shorts_daily_stats WHERE stat_date >= ${day7}
+    `
+    const totalItems = await sql`SELECT COUNT(*) as cnt FROM shorts_items`
+    const activeItems = await sql`SELECT COUNT(*) as cnt FROM shorts_items WHERE active = true`
+    return c.json({
+      total_views:  Number(totRow.total_views),
+      total_sp:     Number(totRow.total_sp),
+      today_views:  Number(todayRow.views),
+      today_sp:     Number(todayRow.sp),
+      yest_views:   Number(yestRow.views),
+      yest_sp:      Number(yestRow.sp),
+      week_views:   Number(weekRow.views),
+      week_sp:      Number(weekRow.sp),
+      total_items:  Number(totalItems[0].cnt),
+      active_items: Number(activeItems[0].cnt),
+    })
+  } catch(e) {
+    return c.json({ error: String(e) }, 500)
+  }
+})
+
+// 업체별 실적 (누적 + 최근 7일)
+app.get('/api/admin/shorts/stats/items', async (c) => {
+  const day7 = new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10)
+  try {
+    await ensureShortsDailyStats()
+    const rows = await sql`
+      SELECT s.id, s.name, s.category, s.youtube_id, s.active,
+             s.view_cnt as total_views, s.sp_cnt as total_sp,
+             COALESCE(w.week_views,0) as week_views,
+             COALESCE(w.week_sp,0)    as week_sp,
+             CASE WHEN s.view_cnt > 0
+               THEN ROUND(s.sp_cnt::numeric / s.view_cnt * 100, 1)
+               ELSE 0 END as ctr
+      FROM shorts_items s
+      LEFT JOIN (
+        SELECT shorts_id,
+               SUM(view_cnt) as week_views,
+               SUM(sp_cnt)   as week_sp
+        FROM shorts_daily_stats
+        WHERE stat_date >= ${day7}
+        GROUP BY shorts_id
+      ) w ON w.shorts_id = s.id
+      ORDER BY s.view_cnt DESC
+    `
+    return c.json(rows)
+  } catch(e) {
+    return c.json({ error: String(e) }, 500)
+  }
+})
+
+// 최근 30일 일별 추이
+app.get('/api/admin/shorts/stats/daily', async (c) => {
+  const day30 = new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10)
+  try {
+    await ensureShortsDailyStats()
+    const rows = await sql`
+      SELECT stat_date::text as date,
+             SUM(view_cnt) as views,
+             SUM(sp_cnt)   as sp
+      FROM shorts_daily_stats
+      WHERE stat_date >= ${day30}
+      GROUP BY stat_date
+      ORDER BY stat_date ASC
+    `
+    return c.json(rows)
+  } catch(e) {
+    return c.json({ error: String(e) }, 500)
+  }
+})
+
+// 특정 숏폼 일별 추이
+app.get('/api/admin/shorts/stats/item/:id', async (c) => {
+  const id    = +c.req.param('id')
+  const day30 = new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10)
+  try {
+    await ensureShortsDailyStats()
+    const rows = await sql`
+      SELECT stat_date::text as date, view_cnt as views, sp_cnt as sp
+      FROM shorts_daily_stats
+      WHERE shorts_id = ${id} AND stat_date >= ${day30}
+      ORDER BY stat_date ASC
+    `
+    return c.json(rows)
+  } catch(e) {
+    return c.json({ error: String(e) }, 500)
+  }
 })
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -6028,6 +6177,7 @@ function toast(msg) {
 // ══════════════════════════════════════════════════════════════════════════
 let _shortsAdminItems = [];
 let _shortsAdminEditId = null;
+let _shortsAdminTab = 'overview'; // overview | items | daily
 
 const CAT_OPTIONS = ['마사지','헤드스파','피부관리','헤어','메이크업','왁싱','반영구','병원','그외'];
 
@@ -6035,98 +6185,32 @@ async function loadShortsAdmin() {
   const p = document.getElementById('panel-shorts-admin');
   p.innerHTML = '<div style="padding:20px;text-align:center;color:#64748b">불러오는 중...</div>';
   _shortsAdminItems = await fetch('/api/admin/shorts').then(r=>r.json());
-  renderShortsAdmin();
+  renderShortsAdminShell();
+  switchShortsAdminTab(_shortsAdminTab);
 }
 
-function renderShortsAdmin() {
+// ── 외부 껍데기(탭바 + 컨텐츠 영역 + 모달) ──────────────────────────────
+function renderShortsAdminShell() {
   const p = document.getElementById('panel-shorts-admin');
-  const cards = _shortsAdminItems.map(item => {
-    const thumb = item.youtube_id
-      ? '<img src="https://img.youtube.com/vi/'+item.youtube_id+'/mqdefault.jpg" style="width:80px;height:52px;object-fit:cover;border-radius:8px;flex-shrink:0"/>'
-      : '<div style="width:80px;height:52px;background:rgba(255,255,255,.06);border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:22px">⚡</div>';
-    return '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:12px;margin-bottom:10px">' +
-      '<div style="display:flex;gap:10px;align-items:center">' +
-        thumb +
-        '<div style="flex:1;min-width:0">' +
-          '<div style="font-size:13px;font-weight:700;color:#f1f5f9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(item.name||'(업체명 없음)')+'</div>' +
-          '<div style="font-size:11px;color:#64748b;margin-top:2px">'+(item.category||'')+(item.address ? ' · '+item.address : '')+'</div>' +
-          '<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">' +
-            (item.youtube_id ? '<span style="font-size:10px;background:rgba(255,0,0,.12);color:#f87171;padding:1px 6px;border-radius:6px">유튜브</span>' : '<span style="font-size:10px;background:rgba(255,255,255,.06);color:#64748b;padding:1px 6px;border-radius:6px">영상없음</span>') +
-            (item.smart_place_url ? '<span style="font-size:10px;background:rgba(3,199,90,.12);color:#34d399;padding:1px 6px;border-radius:6px">예약링크✓</span>' : '<span style="font-size:10px;background:rgba(255,255,255,.06);color:#64748b;padding:1px 6px;border-radius:6px">예약링크없음</span>') +
-            '<span style="font-size:10px;background:'+(item.active?'rgba(3,199,90,.12)':'rgba(255,255,255,.06)')+';color:'+(item.active?'#34d399':'#64748b')+';padding:1px 6px;border-radius:6px">'+(item.active?'노출중':'숨김')+'</span>' +
-          '</div>' +
-          '<div style="margin-top:6px;display:flex;gap:10px">' +
-            '<span style="font-size:11px;color:#94a3b8"><i class="fas fa-eye" style="color:#6366f1;margin-right:3px"></i>'+(item.view_cnt||0)+'회</span>' +
-            '<span style="font-size:11px;color:#94a3b8"><i class="fas fa-calendar-check" style="color:#FF4D7D;margin-right:3px"></i>'+(item.sp_cnt||0)+'클릭</span>' +
-          '</div>' +
-        '</div>' +
-        '<div style="display:flex;gap:6px;flex-shrink:0">' +
-          '<button onclick="openShortsModal('+item.id+')" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);color:#f1f5f9;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">수정</button>' +
-          '<button onclick="delShorts('+item.id+')" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);color:#f87171;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">삭제</button>' +
-        '</div>' +
-      '</div>' +
-    '</div>';
-  }).join('');
+  const tabBtn = (key, label, icon) =>
+    '<button onclick="switchShortsAdminTab(\''+key+'\')" id="sat-'+key+'" style="flex:1;border:none;border-bottom:2px solid transparent;background:none;color:#64748b;font-size:12px;font-weight:700;padding:10px 4px;cursor:pointer;font-family:inherit;transition:all .2s;display:flex;flex-direction:column;align-items:center;gap:3px"><i class="fas '+icon+'" style="font-size:14px"></i>'+label+'</button>';
 
   p.innerHTML =
-    '<div style="padding:16px">' +
-      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">' +
-        '<div style="font-size:16px;font-weight:800;color:#e879f9">⚡ 숏폼 관리 <span style="font-size:12px;color:#64748b;font-weight:500">('+_shortsAdminItems.length+'개)</span></div>' +
-        '<button onclick="openShortsModal(null)" style="background:linear-gradient(135deg,#c026d3,#e879f9);color:#fff;border:none;border-radius:10px;padding:8px 14px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit">+ 숏폼 추가</button>' +
+    // 탭 헤더
+    '<div style="position:sticky;top:0;z-index:10;background:#111;border-bottom:1px solid rgba(255,255,255,.08)">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px 0">' +
+        '<div style="font-size:15px;font-weight:800;color:#e879f9">⚡ 숏폼 관리</div>' +
+        '<button onclick="openShortsModal(null)" style="background:linear-gradient(135deg,#c026d3,#e879f9);color:#fff;border:none;border-radius:10px;padding:7px 13px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit">+ 추가</button>' +
       '</div>' +
-      (cards || '<div style="padding:40px;text-align:center;color:#475569;font-size:13px">등록된 숏폼이 없습니다</div>') +
+      '<div style="display:flex;margin-top:8px">' +
+        tabBtn('overview','현황요약','fa-chart-pie') +
+        tabBtn('items','업체별','fa-list') +
+        tabBtn('daily','일별추이','fa-chart-bar') +
+      '</div>' +
     '</div>' +
+    '<div id="shorts-admin-body" style="padding:14px"></div>' +
     // 모달
-    '<div id="shortsModalBg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:flex-end" onclick="if(event.target===this)closeShortsModal()">' +
-      '<div id="shortsAdminModal" style="background:#161616;border-radius:20px 20px 0 0;padding:20px;width:100%;max-height:90vh;overflow-y:auto">' +
-        '<div style="font-size:15px;font-weight:800;margin-bottom:16px" id="shortsModalTitle">숏폼 추가</div>' +
-        '<div style="display:flex;flex-direction:column;gap:14px">' +
-          // 업체명
-          '<div>' +
-            '<label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">업체명 *</label>' +
-            '<input id="s-name" placeholder="예: 강남 힐링 마사지" style="'+adminInputStyle()+'"/>' +
-          '</div>' +
-          // 카테고리
-          '<div>' +
-            '<label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">카테고리</label>' +
-            '<select id="s-cat" style="'+adminInputStyle()+'background:#1b1b1b;color:#fff;appearance:auto">' +
-              '<option value="" style="background:#1b1b1b;color:#fff">선택 안함</option>' +
-            '</select>' +
-          '</div>' +
-          // 주소
-          '<div>' +
-            '<label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">주소</label>' +
-            '<input id="s-addr" placeholder="예: 서울 강남구 역삼동" style="'+adminInputStyle()+'"/>' +
-          '</div>' +
-          // 네이버 예약 링크
-          '<div>' +
-            '<label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">네이버 예약링크 (스마트플레이스)</label>' +
-            '<input id="s-place" placeholder="https://naver.me/xxxxx 또는 스마트플레이스 URL" style="'+adminInputStyle()+'"/>' +
-            '<div style="font-size:10px;color:#475569;margin-top:4px">입력하면 예약하기 버튼이 활성화됩니다</div>' +
-          '</div>' +
-          // 유튜브
-          '<div>' +
-            '<label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">유튜브 숏츠 링크 또는 ID *</label>' +
-            '<input id="s-ytid" placeholder="https://youtube.com/shorts/xxxxx" style="'+adminInputStyle()+'"/>' +
-            '<div id="s-yt-preview" style="margin-top:8px;border-radius:10px;overflow:hidden;display:none;aspect-ratio:9/16;max-height:280px;background:#000"><iframe id="s-yt-frame" width="100%" height="100%" style="border:none"></iframe></div>' +
-          '</div>' +
-          // 순서
-          '<div>' +
-            '<label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">정렬 순서 (숫자 작을수록 앞)</label>' +
-            '<input id="s-order" type="number" value="0" style="'+adminInputStyle()+'"/>' +
-          '</div>' +
-          // 노출
-          '<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0">' +
-            '<label style="font-size:14px;font-weight:700;color:#f1f5f9">노출</label>' +
-            '<input id="s-active" type="checkbox" checked style="width:20px;height:20px;cursor:pointer;accent-color:#c026d3"/>' +
-          '</div>' +
-        '</div>' +
-        '<div style="display:flex;gap:10px;margin-top:18px">' +
-          '<button onclick="saveShorts()" style="flex:1;background:linear-gradient(135deg,#c026d3,#e879f9);color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit">저장</button>' +
-          '<button onclick="closeShortsModal()" style="background:rgba(255,255,255,.06);color:#94a3b8;border:1.5px solid rgba(255,255,255,.09);border-radius:12px;padding:14px 18px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">취소</button>' +
-        '</div>' +
-      '</div>' +
-    '</div>';
+    _shortsAdminModalHtml();
 
   // 유튜브 입력 시 미리보기
   document.getElementById('s-ytid').addEventListener('input', function() {
@@ -6137,6 +6221,299 @@ function renderShortsAdmin() {
     else { preview.style.display='none'; frame.src=''; }
   });
 }
+
+function _shortsAdminModalHtml() {
+  return '<div id="shortsModalBg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:flex-end" onclick="if(event.target===this)closeShortsModal()">' +
+    '<div id="shortsAdminModal" style="background:#161616;border-radius:20px 20px 0 0;padding:20px;width:100%;max-height:90vh;overflow-y:auto">' +
+      '<div style="font-size:15px;font-weight:800;margin-bottom:16px" id="shortsModalTitle">숏폼 추가</div>' +
+      '<div style="display:flex;flex-direction:column;gap:14px">' +
+        '<div><label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">업체명 *</label>' +
+        '<input id="s-name" placeholder="예: 강남 힐링 마사지" style="'+adminInputStyle()+'"/></div>' +
+        '<div><label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">카테고리</label>' +
+        '<select id="s-cat" style="'+adminInputStyle()+'background:#1b1b1b;color:#fff;appearance:auto"><option value="" style="background:#1b1b1b;color:#fff">선택 안함</option></select></div>' +
+        '<div><label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">주소</label>' +
+        '<input id="s-addr" placeholder="예: 서울 강남구 역삼동" style="'+adminInputStyle()+'"/></div>' +
+        '<div><label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">네이버 예약링크</label>' +
+        '<input id="s-place" placeholder="https://naver.me/xxxxx" style="'+adminInputStyle()+'"/>' +
+        '<div style="font-size:10px;color:#475569;margin-top:4px">입력하면 예약하기 버튼이 활성화됩니다</div></div>' +
+        '<div><label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">유튜브 숏츠 링크 또는 ID *</label>' +
+        '<input id="s-ytid" placeholder="https://youtube.com/shorts/xxxxx" style="'+adminInputStyle()+'"/>' +
+        '<div id="s-yt-preview" style="margin-top:8px;border-radius:10px;overflow:hidden;display:none;aspect-ratio:9/16;max-height:280px;background:#000"><iframe id="s-yt-frame" width="100%" height="100%" style="border:none"></iframe></div></div>' +
+        '<div><label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">정렬 순서 (숫자 작을수록 앞)</label>' +
+        '<input id="s-order" type="number" value="0" style="'+adminInputStyle()+'"/></div>' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0">' +
+        '<label style="font-size:14px;font-weight:700;color:#f1f5f9">노출</label>' +
+        '<input id="s-active" type="checkbox" checked style="width:20px;height:20px;cursor:pointer;accent-color:#c026d3"/></div>' +
+      '</div>' +
+      '<div style="display:flex;gap:10px;margin-top:18px">' +
+        '<button onclick="saveShorts()" style="flex:1;background:linear-gradient(135deg,#c026d3,#e879f9);color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit">저장</button>' +
+        '<button onclick="closeShortsModal()" style="background:rgba(255,255,255,.06);color:#94a3b8;border:1.5px solid rgba(255,255,255,.09);border-radius:12px;padding:14px 18px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">취소</button>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+// ── 탭 전환 ──────────────────────────────────────────────────────────────
+function switchShortsAdminTab(tab) {
+  _shortsAdminTab = tab;
+  ['overview','items','daily'].forEach(k => {
+    const btn = document.getElementById('sat-'+k);
+    if (!btn) return;
+    btn.style.color       = k===tab ? '#e879f9' : '#64748b';
+    btn.style.borderColor = k===tab ? '#e879f9' : 'transparent';
+  });
+  const body = document.getElementById('shorts-admin-body');
+  if (!body) return;
+  body.innerHTML = '<div style="text-align:center;padding:20px;color:#475569">불러오는 중...</div>';
+  if (tab==='overview') renderShortsOverview();
+  else if (tab==='items') renderShortsItems();
+  else if (tab==='daily') renderShortsDaily();
+}
+
+// ── 탭1: 현황 요약 ────────────────────────────────────────────────────────
+async function renderShortsOverview() {
+  const body = document.getElementById('shorts-admin-body');
+  try {
+    const s = await fetch('/api/admin/shorts/stats/summary').then(r=>r.json());
+    if (s.error) throw new Error(s.error);
+
+    const todayVsDiff = s.yest_views > 0 ? Math.round((s.today_views - s.yest_views) / s.yest_views * 100) : null;
+    const todaySpDiff = s.yest_sp   > 0 ? Math.round((s.today_sp   - s.yest_sp)   / s.yest_sp   * 100) : null;
+    const totalCtr    = s.total_views > 0 ? (s.total_sp / s.total_views * 100).toFixed(1) : '0.0';
+    const weekCtr     = s.week_views  > 0 ? (s.week_sp  / s.week_views  * 100).toFixed(1) : '0.0';
+
+    const diffBadge = (v) => v===null ? '' :
+      '<span style="font-size:10px;padding:1px 6px;border-radius:6px;margin-left:5px;background:'+(v>=0?'rgba(52,211,153,.15)':'rgba(248,113,113,.15)')+';color:'+(v>=0?'#34d399':'#f87171')+'">'+(v>=0?'▲':'▼')+Math.abs(v)+'%</span>';
+
+    const kpiCard = (icon, label, val, sub, color) =>
+      '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:14px;flex:1;min-width:0">' +
+        '<div style="font-size:10px;color:#64748b;font-weight:700;margin-bottom:6px"><i class="fas '+icon+'" style="color:'+color+';margin-right:4px"></i>'+label+'</div>' +
+        '<div style="font-size:22px;font-weight:900;color:#f1f5f9">'+val+'</div>' +
+        '<div style="font-size:10px;color:#475569;margin-top:3px">'+sub+'</div>' +
+      '</div>';
+
+    body.innerHTML =
+      // KPI 4개
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">' +
+        kpiCard('fa-eye','오늘 조회',s.today_views.toLocaleString()+'회', '어제 '+s.yest_views.toLocaleString()+'회'+diffBadge(todayVsDiff), '#6366f1') +
+        kpiCard('fa-calendar-check','오늘 예약클릭',s.today_sp.toLocaleString()+'회', '어제 '+s.yest_sp.toLocaleString()+'회'+diffBadge(todaySpDiff), '#FF4D7D') +
+        kpiCard('fa-chart-line','7일 조회',s.week_views.toLocaleString()+'회', 'CTR '+weekCtr+'%', '#f59e0b') +
+        kpiCard('fa-video','총 숏폼',s.total_items+'개', '노출중 '+s.active_items+'개', '#e879f9') +
+      '</div>' +
+      // 누적 합계 바
+      '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:14px;margin-bottom:14px">' +
+        '<div style="font-size:11px;font-weight:800;color:#94a3b8;margin-bottom:10px">📊 누적 전체 실적</div>' +
+        '<div style="display:flex;justify-content:space-around;text-align:center">' +
+          '<div><div style="font-size:20px;font-weight:900;color:#6366f1">'+s.total_views.toLocaleString()+'</div><div style="font-size:10px;color:#64748b;margin-top:2px">총 조회수</div></div>' +
+          '<div style="width:1px;background:rgba(255,255,255,.08)"></div>' +
+          '<div><div style="font-size:20px;font-weight:900;color:#FF4D7D">'+s.total_sp.toLocaleString()+'</div><div style="font-size:10px;color:#64748b;margin-top:2px">총 예약클릭</div></div>' +
+          '<div style="width:1px;background:rgba(255,255,255,.08)"></div>' +
+          '<div><div style="font-size:20px;font-weight:900;color:#f59e0b">'+totalCtr+'%</div><div style="font-size:10px;color:#64748b;margin-top:2px">전체 CTR</div></div>' +
+        '</div>' +
+      '</div>' +
+      // TOP 3
+      await _shortsTop3Html();
+  } catch(e) {
+    body.innerHTML = '<div style="padding:20px;color:#f87171;font-size:12px">오류: '+e.message+'</div>';
+  }
+}
+
+async function _shortsTop3Html() {
+  try {
+    const items = await fetch('/api/admin/shorts/stats/items').then(r=>r.json());
+    if (!items.length) return '';
+    const top3 = items.slice(0,3);
+    const rows = top3.map((it,i) => {
+      const medals = ['🥇','🥈','🥉'];
+      return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.05)">' +
+        '<div style="font-size:18px;flex-shrink:0">'+medals[i]+'</div>' +
+        '<img src="https://img.youtube.com/vi/'+it.youtube_id+'/mqdefault.jpg" style="width:52px;height:34px;object-fit:cover;border-radius:6px;flex-shrink:0"/>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-size:12px;font-weight:700;color:#f1f5f9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(it.name||'-')+'</div>' +
+          '<div style="font-size:10px;color:#64748b">'+(it.category||'')+'</div>' +
+        '</div>' +
+        '<div style="text-align:right;flex-shrink:0">' +
+          '<div style="font-size:12px;font-weight:800;color:#6366f1">'+Number(it.total_views).toLocaleString()+'<span style="font-size:9px;color:#475569">회</span></div>' +
+          '<div style="font-size:10px;color:#FF4D7D">CTR '+it.ctr+'%</div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+    return '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:14px">' +
+      '<div style="font-size:11px;font-weight:800;color:#94a3b8;margin-bottom:8px">🏆 조회수 TOP 3</div>' +
+      rows +
+    '</div>';
+  } catch(_) { return ''; }
+}
+
+// ── 탭2: 업체별 실적 ──────────────────────────────────────────────────────
+async function renderShortsItems() {
+  const body = document.getElementById('shorts-admin-body');
+  try {
+    const items = await fetch('/api/admin/shorts/stats/items').then(r=>r.json());
+    if (!items.length) {
+      body.innerHTML = '<div style="padding:40px;text-align:center;color:#475569">등록된 숏폼이 없습니다</div>';
+      return;
+    }
+
+    const maxViews = Math.max(...items.map(it=>Number(it.total_views)||0), 1);
+
+    const cards = items.map(item => {
+      const pct = Math.round((Number(item.total_views)||0) / maxViews * 100);
+      const thumb = item.youtube_id
+        ? '<img src="https://img.youtube.com/vi/'+item.youtube_id+'/mqdefault.jpg" style="width:72px;height:46px;object-fit:cover;border-radius:7px;flex-shrink:0"/>'
+        : '<div style="width:72px;height:46px;background:rgba(255,255,255,.06);border-radius:7px;flex-shrink:0;display:flex;align-items:center;justify-content:center">📭</div>';
+      return '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:12px;margin-bottom:8px">' +
+        '<div style="display:flex;gap:10px;align-items:flex-start">' +
+          thumb +
+          '<div style="flex:1;min-width:0">' +
+            '<div style="display:flex;align-items:center;gap:5px;margin-bottom:2px">' +
+              '<div style="font-size:13px;font-weight:700;color:#f1f5f9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">'+(item.name||'(업체명 없음)')+'</div>' +
+              '<span style="font-size:9px;padding:1px 5px;border-radius:5px;flex-shrink:0;background:'+(item.active?'rgba(52,211,153,.15)':'rgba(255,255,255,.06)')+';color:'+(item.active?'#34d399':'#64748b')+'">'+(item.active?'노출':'숨김')+'</span>' +
+            '</div>' +
+            '<div style="font-size:10px;color:#64748b;margin-bottom:6px">'+(item.category||'')+'</div>' +
+            // 조회수 바
+            '<div style="background:rgba(255,255,255,.06);border-radius:4px;height:4px;margin-bottom:6px">' +
+              '<div style="width:'+pct+'%;height:4px;border-radius:4px;background:linear-gradient(90deg,#6366f1,#a78bfa)"></div>' +
+            '</div>' +
+            '<div style="display:flex;gap:12px;flex-wrap:wrap">' +
+              '<div style="text-align:center"><div style="font-size:14px;font-weight:800;color:#6366f1">'+Number(item.total_views).toLocaleString()+'</div><div style="font-size:9px;color:#475569">전체조회</div></div>' +
+              '<div style="text-align:center"><div style="font-size:14px;font-weight:800;color:#f59e0b">'+Number(item.week_views).toLocaleString()+'</div><div style="font-size:9px;color:#475569">7일조회</div></div>' +
+              '<div style="text-align:center"><div style="font-size:14px;font-weight:800;color:#FF4D7D">'+Number(item.total_sp).toLocaleString()+'</div><div style="font-size:9px;color:#475569">예약클릭</div></div>' +
+              '<div style="text-align:center"><div style="font-size:14px;font-weight:800;color:#34d399">'+item.ctr+'%</div><div style="font-size:9px;color:#475569">CTR</div></div>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div style="display:flex;gap:6px;margin-top:10px;justify-content:flex-end">' +
+          '<button onclick="showShortsItemDaily('+item.id+',\''+((item.name||'').replace(/'/g,''))+'\')"; style="background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.3);color:#a5b4fc;border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit"><i class="fas fa-chart-bar" style="margin-right:3px"></i>일별</button>' +
+          '<button onclick="openShortsModal('+item.id+')" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);color:#f1f5f9;border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">수정</button>' +
+          '<button onclick="delShorts('+item.id+')" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);color:#f87171;border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">삭제</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    body.innerHTML = '<div style="font-size:11px;color:#64748b;margin-bottom:10px">총 <b style="color:#e879f9">'+items.length+'</b>개 · 조회수 높은 순</div>' + cards;
+  } catch(e) {
+    body.innerHTML = '<div style="padding:20px;color:#f87171;font-size:12px">오류: '+e.message+'</div>';
+  }
+}
+
+// 특정 업체 일별 팝업
+async function showShortsItemDaily(id, name) {
+  const data = await fetch('/api/admin/shorts/stats/item/'+id).then(r=>r.json());
+  const body = document.getElementById('shorts-admin-body');
+
+  if (!data.length) {
+    alert(name+'\n\n아직 일별 데이터가 없습니다.\n(오늘부터 조회수가 쌓이면 표시됩니다)');
+    return;
+  }
+
+  // 간단한 텍스트 바 차트 오버레이
+  const maxV = Math.max(...data.map(d=>Number(d.views)||0), 1);
+  const rows = data.slice(-14).map(d => {  // 최근 14일
+    const pct = Math.round((Number(d.views)||0) / maxV * 100);
+    const dd  = d.date.slice(5);  // MM-DD
+    return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">' +
+      '<div style="font-size:10px;color:#64748b;width:32px;flex-shrink:0">'+dd+'</div>' +
+      '<div style="flex:1;background:rgba(255,255,255,.06);border-radius:3px;height:18px;position:relative">' +
+        '<div style="width:'+pct+'%;height:100%;border-radius:3px;background:linear-gradient(90deg,#6366f1,#a78bfa)"></div>' +
+        '<span style="position:absolute;right:6px;top:2px;font-size:10px;color:#f1f5f9;font-weight:700">'+Number(d.views).toLocaleString()+'</span>' +
+      '</div>' +
+      '<div style="font-size:10px;color:#FF4D7D;width:28px;text-align:right;flex-shrink:0">'+Number(d.sp)+'클</div>' +
+    '</div>';
+  }).join('');
+
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:2000;display:flex;align-items:flex-end';
+  overlay.innerHTML =
+    '<div style="background:#161616;border-radius:20px 20px 0 0;padding:20px;width:100%;max-height:80vh;overflow-y:auto">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">' +
+        '<div style="font-size:14px;font-weight:800;color:#f1f5f9">📊 '+name+' · 최근 14일</div>' +
+        '<button onclick="this.closest(\'div[style*=fixed]\').remove()" style="background:none;border:none;color:#64748b;font-size:20px;cursor:pointer;padding:0 4px">✕</button>' +
+      '</div>' +
+      '<div style="font-size:10px;color:#64748b;margin-bottom:10px;display:flex;gap:14px">' +
+        '<span><span style="color:#6366f1">■</span> 조회수</span>' +
+        '<span><span style="color:#FF4D7D">■</span> 예약클릭</span>' +
+      '</div>' +
+      rows +
+    '</div>';
+  overlay.addEventListener('click', e => { if(e.target===overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+}
+
+// ── 탭3: 일별 추이 ────────────────────────────────────────────────────────
+async function renderShortsDaily() {
+  const body = document.getElementById('shorts-admin-body');
+  try {
+    const data = await fetch('/api/admin/shorts/stats/daily').then(r=>r.json());
+
+    if (!data.length) {
+      body.innerHTML =
+        '<div style="text-align:center;padding:40px 20px;color:#475569">' +
+          '<div style="font-size:32px;margin-bottom:10px">📊</div>' +
+          '<div style="font-size:13px">아직 일별 데이터가 없습니다</div>' +
+          '<div style="font-size:11px;color:#334155;margin-top:6px">숏폼이 조회되면 자동으로 기록됩니다</div>' +
+        '</div>';
+      return;
+    }
+
+    const recent = data.slice(-30);
+    const maxV = Math.max(...recent.map(d=>Number(d.views)||0), 1);
+    const maxS = Math.max(...recent.map(d=>Number(d.sp)||0), 1);
+    const totalV = recent.reduce((s,d)=>s+Number(d.views),0);
+    const totalS = recent.reduce((s,d)=>s+Number(d.sp),0);
+
+    // 바 차트 (수평)
+    const rows = recent.map(d => {
+      const pctV = Math.round((Number(d.views)||0) / maxV * 100);
+      const pctS = Math.max(1, Math.round((Number(d.sp)||0) / maxV * 100));
+      const dd   = d.date.slice(5);
+      return '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">' +
+        '<div style="font-size:9px;color:#64748b;width:28px;flex-shrink:0;text-align:right">'+dd+'</div>' +
+        '<div style="flex:1;display:flex;flex-direction:column;gap:2px">' +
+          '<div style="background:rgba(255,255,255,.06);border-radius:3px;height:14px;position:relative">' +
+            '<div style="width:'+pctV+'%;height:100%;border-radius:3px;background:linear-gradient(90deg,#6366f1,#818cf8)"></div>' +
+            (Number(d.views)>0?'<span style="position:absolute;left:'+(pctV>50?'auto':'calc('+pctV+'% + 4px)')+';right:'+(pctV>50?'6px':'auto')+';top:1px;font-size:9px;color:#f1f5f9;font-weight:700">'+Number(d.views).toLocaleString()+'</span>':'') +
+          '</div>' +
+          (Number(d.sp)>0?
+          '<div style="background:rgba(255,255,255,.06);border-radius:3px;height:8px;position:relative">' +
+            '<div style="width:'+pctS+'%;height:100%;border-radius:3px;background:#FF4D7D88"></div>' +
+          '</div>':'') +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    body.innerHTML =
+      // 요약 배지
+      '<div style="display:flex;gap:8px;margin-bottom:14px">' +
+        '<div style="flex:1;background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.2);border-radius:12px;padding:10px;text-align:center">' +
+          '<div style="font-size:16px;font-weight:900;color:#818cf8">'+totalV.toLocaleString()+'</div>' +
+          '<div style="font-size:10px;color:#475569;margin-top:2px">30일 총 조회</div>' +
+        '</div>' +
+        '<div style="flex:1;background:rgba(255,77,125,.1);border:1px solid rgba(255,77,125,.2);border-radius:12px;padding:10px;text-align:center">' +
+          '<div style="font-size:16px;font-weight:900;color:#FF4D7D">'+totalS.toLocaleString()+'</div>' +
+          '<div style="font-size:10px;color:#475569;margin-top:2px">30일 예약클릭</div>' +
+        '</div>' +
+        '<div style="flex:1;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.2);border-radius:12px;padding:10px;text-align:center">' +
+          '<div style="font-size:16px;font-weight:900;color:#f59e0b">'+(totalV>0?(totalS/totalV*100).toFixed(1):'0.0')+'%</div>' +
+          '<div style="font-size:10px;color:#475569;margin-top:2px">평균 CTR</div>' +
+        '</div>' +
+      '</div>' +
+      // 범례
+      '<div style="font-size:10px;color:#64748b;margin-bottom:8px;display:flex;gap:12px">' +
+        '<span><span style="color:#818cf8">■</span> 조회수 (위)</span>' +
+        '<span><span style="color:#FF4D7D">■</span> 예약클릭 (아래)</span>' +
+      '</div>' +
+      // 차트
+      '<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:12px">' +
+        rows +
+      '</div>';
+
+  } catch(e) {
+    body.innerHTML = '<div style="padding:20px;color:#f87171;font-size:12px">오류: '+e.message+'</div>';
+  }
+}
+
+function renderShortsAdmin() { renderShortsAdminShell(); switchShortsAdminTab(_shortsAdminTab); }
 
 function adminInputStyle() {
   return 'width:100%;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.09);border-radius:10px;padding:10px 12px;color:#fff;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;';
