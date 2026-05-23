@@ -1850,7 +1850,7 @@ body.shorts-mode #shorts-mute-btn{ display:flex; }
     <div class="s-tags" id="sTags"></div>
     <div class="s-price">시술 <span id="sPrice"></span></div>
     <div class="s-actions">
-      <button class="s-book" id="sBook" onclick="_sessionTrackFeedBook();_sessionEvent('feed_book',curShop);openInapp()">
+      <button class="s-book" id="sBook" onclick="_sessionTrackFeedBook();_sessionEvent(&quot;feed_book&quot;,curShop);openInapp()">
         <i class="fas fa-calendar-check"></i> 네이버 예약하기
       </button>
     </div>
@@ -2629,7 +2629,7 @@ function feedCardHTML(s) {
         + ' data-name="' + safeName + '"'
         + ' onclick="'
             + 'curShop={id:+this.dataset.id,name:this.dataset.name,smartPlaceUrl:this.dataset.url};'
-            + '_sessionTrackFeedBook();_sessionEvent('feed_book',curShop);openInapp()">'
+            + '_sessionTrackFeedBook();_sessionEvent(&quot;feed_book&quot;,curShop);openInapp()">'  
         + '<i class="fas fa-calendar-check"></i><span>예약하기</span></button>'
     : '';
   // 프리미엄 뱃지
