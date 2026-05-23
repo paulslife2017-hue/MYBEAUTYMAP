@@ -6193,7 +6193,7 @@ async function loadShortsAdmin() {
 function renderShortsAdminShell() {
   const p = document.getElementById('panel-shorts-admin');
   const tabBtn = (key, label, icon) =>
-    '<button onclick="switchShortsAdminTab(\''+key+'\')" id="sat-'+key+'" style="flex:1;border:none;border-bottom:2px solid transparent;background:none;color:#64748b;font-size:12px;font-weight:700;padding:10px 4px;cursor:pointer;font-family:inherit;transition:all .2s;display:flex;flex-direction:column;align-items:center;gap:3px"><i class="fas '+icon+'" style="font-size:14px"></i>'+label+'</button>';
+    '<button onclick="switchShortsAdminTab(&quot;'+key+'&quot;)" id="sat-'+key+'" style="flex:1;border:none;border-bottom:2px solid transparent;background:none;color:#64748b;font-size:12px;font-weight:700;padding:10px 4px;cursor:pointer;font-family:inherit;transition:all .2s;display:flex;flex-direction:column;align-items:center;gap:3px"><i class="fas '+icon+'" style="font-size:14px"></i>'+label+'</button>';
 
   p.innerHTML =
     // 탭 헤더
@@ -6384,7 +6384,7 @@ async function renderShortsItems() {
           '</div>' +
         '</div>' +
         '<div style="display:flex;gap:6px;margin-top:10px;justify-content:flex-end">' +
-          '<button onclick="showShortsItemDaily('+item.id+',\''+((item.name||'').replace(/'/g,''))+'\')"; style="background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.3);color:#a5b4fc;border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit"><i class="fas fa-chart-bar" style="margin-right:3px"></i>일별</button>' +
+          '<button onclick="showShortsItemDaily('+item.id+',&quot;'+((item.name||'').replace(/"/g,''))+'&quot;)" style="background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.3);color:#a5b4fc;border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit"><i class="fas fa-chart-bar" style="margin-right:3px"></i>일별</button>' +
           '<button onclick="openShortsModal('+item.id+')" style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);color:#f1f5f9;border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">수정</button>' +
           '<button onclick="delShorts('+item.id+')" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);color:#f87171;border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">삭제</button>' +
         '</div>' +
@@ -6403,7 +6403,7 @@ async function showShortsItemDaily(id, name) {
   const body = document.getElementById('shorts-admin-body');
 
   if (!data.length) {
-    alert(name+'\n\n아직 일별 데이터가 없습니다.\n(오늘부터 조회수가 쌓이면 표시됩니다)');
+    alert(name+' - 아직 일별 데이터가 없습니다. (오늘부터 조회수가 쌓이면 표시됩니다)');
     return;
   }
 
@@ -6428,7 +6428,7 @@ async function showShortsItemDaily(id, name) {
     '<div style="background:#161616;border-radius:20px 20px 0 0;padding:20px;width:100%;max-height:80vh;overflow-y:auto">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">' +
         '<div style="font-size:14px;font-weight:800;color:#f1f5f9">📊 '+name+' · 최근 14일</div>' +
-        '<button onclick="this.closest(\'div[style*=fixed]\').remove()" style="background:none;border:none;color:#64748b;font-size:20px;cursor:pointer;padding:0 4px">✕</button>' +
+        '<button id="shorts-daily-close-btn" style="background:none;border:none;color:#64748b;font-size:20px;cursor:pointer;padding:0 4px">✕</button>' +
       '</div>' +
       '<div style="font-size:10px;color:#64748b;margin-bottom:10px;display:flex;gap:14px">' +
         '<span><span style="color:#6366f1">■</span> 조회수</span>' +
@@ -6438,6 +6438,8 @@ async function showShortsItemDaily(id, name) {
     '</div>';
   overlay.addEventListener('click', e => { if(e.target===overlay) overlay.remove(); });
   document.body.appendChild(overlay);
+  const closeBtn = overlay.querySelector('#shorts-daily-close-btn');
+  if (closeBtn) closeBtn.addEventListener('click', () => overlay.remove());
 }
 
 // ── 탭3: 일별 추이 ────────────────────────────────────────────────────────
