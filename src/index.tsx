@@ -6456,9 +6456,6 @@ body{font-family:'Pretendard',sans-serif;background:var(--bg);color:var(--t1);mi
   <button class="tabbtn" id="tab-ranking" onclick="switchTab('ranking')">
     <i class="fas fa-trophy"></i>업체순위
   </button>
-  <button class="tabbtn" id="tab-visitors" onclick="switchTab('visitors')">
-    <i class="fas fa-users"></i>방문자
-  </button>
   <button class="tabbtn" id="tab-shops" onclick="switchTab('shops')">
     <i class="fas fa-store"></i>업체
   </button>
@@ -6641,14 +6638,13 @@ function switchTab(t) {
     if (panEl) panEl.style.display = x===t ? 'block' : 'none';
   });
   document.querySelector('.add-btn').style.display = t==='shops' ? 'flex' : 'none';
-  if (t==='stats')         loadStats();
-  if (t==='ranking')       loadRanking();
-  if (t==='shops')         renderShops(shopData);
-  if (t==='inq')           loadInquiries();
-  if (t==='pay')           renderPayTab();
-  if (t==='cal')           renderCalendar();
-  if (t==='shorts-admin')  loadShortsAdmin();
-  if (t==='visitors')      loadVisitors();
+  if (t==='stats')        loadStats();
+  if (t==='ranking')      loadRanking();
+  if (t==='shops')        renderShops(shopData);
+  if (t==='inq')          loadInquiries();
+  if (t==='pay')          renderPayTab();
+  if (t==='cal')          renderCalendar();
+  if (t==='shorts-admin') loadShortsAdmin();
 }
 
 // ── 토스트
@@ -7342,17 +7338,20 @@ async function loadStats() {
   if (!p) return;
   p.innerHTML = '<div style="padding:30px;text-align:center;color:#64748b;font-size:13px"><i class="fas fa-spinner fa-spin"></i> 불러오는 중...</div>';
   try {
-    const [vs, trend] = await Promise.all([
+    const [vs, trend, sessions] = await Promise.all([
       fetch('/api/admin/sessions/summary').then(r=>r.json()),
       fetch('/api/admin/daily-trend').then(r=>r.json()),
+      fetch('/api/admin/sessions').then(r=>r.json()),
     ]);
     _visitorSummary = vs;
     _dailyTrend = Array.isArray(trend) ? trend : [];
-    renderStatsTab(vs, _dailyTrend);
+    _statsSessions = Array.isArray(sessions) ? sessions : [];
+    renderStatsTab(vs, _dailyTrend, _statsSessions);
   } catch(e) {
     p.innerHTML = '<div style="padding:20px;color:#f87171">로드 실패: '+e.message+'</div>';
   }
 }
+let _statsSessions = [];
 
 // ── 신규: 업체 랭킹 탭 로드
 let _rankingData = [];
@@ -7372,35 +7371,40 @@ async function loadRanking(days) {
 }
 
 // ======================================================
-// 통계 탭 렌더링 (완전 재작성)
+// 통계 탭 렌더링 (KPI + 1인당평균 + 퍼널 + 7일차트 + 세션카드 통합)
 // ======================================================
-function renderStatsTab(s, trend) {
+function renderStatsTab(s, trend, sessions) {
   const p = document.getElementById('panel-stats');
   if (!p) return;
   const n = (v) => Number(v) || 0;
   const fmtSec = (sec) => { sec=n(sec); if(sec<=0) return '-'; if(sec<60) return sec+'초'; return Math.floor(sec/60)+'분 '+(sec%60)+'초'; };
   const pct = (a,b) => b>0 ? Math.round(a/b*100) : 0;
+  const nowMs = Date.now();
 
-  // ── KPI 상단 4칸
-  const total = n(s.today_total);
+  // ── KPI 4칸
+  const total    = n(s.today_total);
+  const nowActive = (sessions||[]).filter(x => nowMs - new Date(x.last_seen).getTime() < 5*60*1000).length;
   const kpiSection =
     '<div style="padding:14px 14px 0">' +
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">' +
       '<div style="font-size:16px;font-weight:900;color:#f1f5f9">📊 오늘 통계</div>' +
-      '<button onclick="loadStats()" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);color:#94a3b8;border-radius:8px;padding:6px 12px;font-size:11px;cursor:pointer;font-family:inherit"><i class="fas fa-sync-alt" style="font-size:10px;margin-right:4px"></i>새로고침</button>' +
+      '<div style="display:flex;align-items:center;gap:6px">' +
+        (nowActive > 0 ? '<span style="font-size:10px;background:rgba(52,211,153,.15);color:#34d399;padding:3px 8px;border-radius:20px;font-weight:700">● 지금 '+nowActive+'명</span>' : '') +
+        '<button onclick="loadStats()" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);color:#94a3b8;border-radius:8px;padding:6px 10px;font-size:11px;cursor:pointer;font-family:inherit"><i class="fas fa-sync-alt" style="font-size:10px"></i></button>' +
+      '</div>' +
     '</div>' +
     '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:10px">' +
-      _kpiCard('fa-user-friends','오늘 방문자', n(s.today_total)+'명', '어제 '+n(s.yest_total)+'명 / 7일 '+n(s.week_total)+'명', '#6366f1') +
+      _kpiCard('fa-user-friends','오늘 방문자', n(s.today_total)+'명', '어제 '+n(s.yest_total)+'명 · 7일 '+n(s.week_total)+'명', '#6366f1') +
       _kpiCard('fa-clock','평균 체류시간', fmtSec(n(s.today_avg_sec)), '모바일 '+n(s.today_mobile)+' / PC '+n(s.today_desktop), '#f59e0b') +
       _kpiCard('fa-fire','예약 클릭', n(s.today_booked)+'명', '릴스 '+n(s.sum_shorts_book)+' · 영상 '+n(s.sum_feed_book)+' · 지도 '+n(s.sum_map_book), '#FF4D7D') +
-      _kpiCard('fa-mobile-alt','모바일 비율', total>0?Math.round(n(s.today_mobile)/total*100)+'%':'-', '릴스 이용 '+n(s.today_watched)+'명', '#e879f9') +
+      _kpiCard('fa-mobile-alt','모바일 비율', total>0?Math.round(n(s.today_mobile)/total*100)+'%':'-', '콘텐츠이용 '+n(s.today_watched)+'명', '#e879f9') +
     '</div>' +
     '</div>';
 
   // ── 1인당 평균 행동량
   const avgSection =
     '<div style="margin:0 14px 10px;background:linear-gradient(135deg,rgba(99,102,241,.12),rgba(168,85,247,.08));border:1px solid rgba(99,102,241,.25);border-radius:14px;padding:14px">' +
-      '<div style="font-size:11px;font-weight:800;color:#a5b4fc;margin-bottom:10px;display:flex;align-items:center;gap:6px"><i class="fas fa-chart-bar"></i> 1인당 평균 행동량 (오늘 이용자 기준)</div>' +
+      '<div style="font-size:11px;font-weight:800;color:#a5b4fc;margin-bottom:10px;display:flex;align-items:center;gap:6px"><i class="fas fa-chart-bar"></i> 1인당 평균 행동량</div>' +
       '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">' +
         _avgChip('⚡ 릴스', n(s.avg_shorts).toFixed(1)+'개', n(s.today_watched)+'명 이용', '#e879f9') +
         _avgChip('🎬 영상', n(s.avg_feed_card).toFixed(1)+'개', n(s.used_feed)+'명 이용', '#818cf8') +
@@ -7410,28 +7414,111 @@ function renderStatsTab(s, trend) {
         _miniChip('릴스예약', n(s.sum_shorts_book)+'회', '#FF4D7D') +
         _miniChip('영상예약', n(s.sum_feed_book)+'회', '#FF4D7D') +
         _miniChip('지도예약', n(s.sum_map_book)+'회', '#FF4D7D') +
-        _miniChip('검색', n(s.sum_search)+'회', '#fbbf24') +
+        _miniChip('🔍검색', n(s.sum_search)+'회', '#fbbf24') +
       '</div>' +
     '</div>';
 
   // ── 전환 퍼널
-  const watched  = n(s.today_watched) + n(s.used_feed);
-  const mapUsed  = n(s.used_map);
-  const booked   = n(s.today_booked);
+  const watched = n(s.today_watched) + n(s.used_feed);
+  const mapUsed = n(s.used_map);
+  const booked  = n(s.today_booked);
   const funnelSection =
     '<div style="margin:0 14px 10px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:14px">' +
       '<div style="font-size:11px;font-weight:800;color:#94a3b8;margin-bottom:10px"><i class="fas fa-filter" style="margin-right:5px"></i>전환 퍼널</div>' +
       _funnelRow('👣 진입', total, 100, '#6366f1', '') +
-      _funnelRow('📹 콘텐츠 시청', watched, pct(watched,total), '#e879f9', total>0?'진입자의 '+pct(watched,total)+'%':'') +
-      _funnelRow('🗺️ 지도 탐색', mapUsed, pct(mapUsed,total), '#34d399', watched>0?'시청자의 '+pct(mapUsed,watched)+'%':'') +
+      _funnelRow('📹 콘텐츠 시청', watched, pct(watched,total), '#e879f9', total>0?'진입의 '+pct(watched,total)+'%':'') +
+      _funnelRow('🗺️ 지도 탐색', mapUsed, pct(mapUsed,total), '#34d399', watched>0?'시청의 '+pct(mapUsed,watched)+'%':'') +
       _funnelRow('🔍 검색 사용', n(s.sum_search), pct(n(s.sum_search),total), '#fbbf24', '') +
-      _funnelRow('🎯 예약 클릭', booked, pct(booked,total), '#FF4D7D', total>0?'진입자의 '+pct(booked,total)+'%':'') +
+      _funnelRow('🎯 예약 클릭', booked, pct(booked,total), '#FF4D7D', total>0?'진입의 '+pct(booked,total)+'%':'') +
     '</div>';
 
-  // ── 7일 일별 추이 바 차트
+  // ── 7일 추이 차트
   const trendSection = _buildTrendChart(trend);
 
-  p.innerHTML = kpiSection + avgSection + funnelSection + trendSection;
+  // ── 방문자 세션 카드 (통합)
+  const sessSection = _buildSessionCards(sessions || [], s);
+
+  p.innerHTML = kpiSection + avgSection + funnelSection + trendSection + sessSection;
+}
+
+// ── 세션 카드 빌더 (통계 탭 하단 통합용)
+function _buildSessionCards(sessions, s) {
+  const n = (v) => Number(v) || 0;
+  const fmtSec = (sec) => { sec=n(sec); if(sec<=0) return '-'; if(sec<60) return sec+'초'; return Math.floor(sec/60)+'분 '+(sec%60)+'초'; };
+  const tabLabel = (t) => ({'shorts':'⚡릴스','feed':'🎬영상','map':'🗺️지도','inquiry':'✉️문의'}[t] || t);
+  const nowMs = Date.now();
+  const nowActive = sessions.filter(x => nowMs - new Date(x.last_seen).getTime() < 5*60*1000).length;
+
+  const badge = (bg, color, text) =>
+    '<span style="background:'+bg+';color:'+color+';padding:2px 5px;border-radius:4px;font-size:9px;font-weight:700">'+text+'</span>';
+
+  const badgeHtml = (sess) => {
+    const parts = [];
+    if (n(sess.shorts_count)  > 0) parts.push(badge('rgba(232,121,249,.15)','#e879f9','⚡'+n(sess.shorts_count)));
+    if (n(sess.shorts_book)   > 0) parts.push(badge('rgba(255,77,125,.18)','#FF4D7D','릴스예약'+n(sess.shorts_book)));
+    if (n(sess.feed_card_cnt) > 0) parts.push(badge('rgba(99,102,241,.15)','#818cf8','🎬'+n(sess.feed_card_cnt)));
+    if (n(sess.feed_book_cnt) > 0) parts.push(badge('rgba(255,77,125,.18)','#FF4D7D','영상예약'+n(sess.feed_book_cnt)));
+    if (n(sess.map_pin_cnt)   > 0) parts.push(badge('rgba(52,211,153,.15)','#34d399','📍'+n(sess.map_pin_cnt)));
+    if (n(sess.map_book_cnt)  > 0) parts.push(badge('rgba(255,77,125,.18)','#FF4D7D','지도예약'+n(sess.map_book_cnt)));
+    if (n(sess.search_cnt)    > 0) parts.push(badge('rgba(245,158,11,.15)','#fbbf24','🔍'+n(sess.search_cnt)));
+    if (n(sess.inquiry_cnt)   > 0) parts.push(badge('rgba(52,211,153,.15)','#34d399','✉️'+n(sess.inquiry_cnt)));
+    return parts.length ? parts.join(' ') : '<span style="color:#334155;font-size:9px">조용한 방문</span>';
+  };
+
+  const cards = sessions.map(sess => {
+    const isNow   = nowMs - new Date(sess.last_seen).getTime() < 5*60*1000;
+    const entered = new Date(sess.entered_at);
+    const timeStr = entered.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+    const dateStr = entered.toLocaleDateString('ko-KR',{month:'numeric',day:'numeric'});
+    const dur     = fmtSec(sess.duration_sec);
+    const device  = sess.device === 'mobile' ? '📱' : '🖥️';
+    const tabs    = (sess.tabs_visited||[]).map(tabLabel).join(' → ') || '진입만';
+    const sid     = sess.id;
+    const totalActs = n(sess.shorts_count)+n(sess.feed_card_cnt)+n(sess.map_pin_cnt)+n(sess.book_count);
+    const hasBook   = n(sess.book_count)>0||n(sess.shorts_book)>0||n(sess.feed_book_cnt)>0||n(sess.map_book_cnt)>0;
+
+    return (
+      '<div style="border:1px solid rgba(255,255,255,'+(isNow?'.18':hasBook?'.0':'.05')+');border-radius:12px;margin-bottom:6px;overflow:hidden;background:rgba(255,255,255,.02)'+(hasBook?';border-color:rgba(255,77,125,.28)':'')+(isNow?';box-shadow:0 0 0 1px rgba(52,211,153,.2)':'')+'">' +
+        '<div onclick="toggleSessTimeline(&quot;'+sid+'&quot;)" style="padding:10px 12px;cursor:pointer">' +
+          '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">' +
+            '<div style="display:flex;align-items:center;gap:5px">' +
+              '<span style="font-size:12px">'+device+'</span>' +
+              '<div>' +
+                '<div style="display:flex;align-items:center;gap:4px">' +
+                  '<span style="font-size:12px;font-weight:800;color:#f1f5f9">'+timeStr+'</span>' +
+                  '<span style="font-size:10px;color:#475569">'+dateStr+'</span>' +
+                  (isNow ? '<span style="font-size:9px;background:rgba(52,211,153,.2);color:#34d399;padding:1px 4px;border-radius:3px;font-weight:700">● 접속중</span>' : '') +
+                  (hasBook ? '<span style="font-size:9px;background:rgba(255,77,125,.2);color:#FF4D7D;padding:1px 4px;border-radius:3px;font-weight:700">🎯예약</span>' : '') +
+                '</div>' +
+                '<div style="font-size:9px;color:#475569;margin-top:1px">'+tabs+'</div>' +
+              '</div>' +
+            '</div>' +
+            '<div style="text-align:right;flex-shrink:0">' +
+              '<div style="font-size:10px;color:#64748b">'+dur+'</div>' +
+              '<div style="font-size:9px;color:'+(totalActs>0?'#818cf8':'#2d3748')+';background:rgba(99,102,241,.07);padding:1px 5px;border-radius:3px;margin-top:1px">'+totalActs+'행동 ▾</div>' +
+            '</div>' +
+          '</div>' +
+          '<div style="display:flex;gap:3px;flex-wrap:wrap">'+badgeHtml(sess)+'</div>' +
+        '</div>' +
+        '<div id="tl-'+sid+'" style="display:none;border-top:1px solid rgba(255,255,255,.06);padding:10px 12px;background:rgba(0,0,0,.2)">' +
+          '<div style="font-size:10px;color:#475569">로딩 중...</div>' +
+        '</div>' +
+      '</div>'
+    );
+  }).join('') || '<div style="text-align:center;padding:30px;color:#334155;font-size:12px">오늘·어제 방문자 없음</div>';
+
+  return (
+    '<div style="margin:0 14px 14px">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">' +
+        '<div style="font-size:12px;font-weight:800;color:#94a3b8">👁️ 방문자 목록 <span style="font-size:10px;font-weight:500;color:#475569">(오늘·어제 최대 200명)</span></div>' +
+        '<div style="display:flex;align-items:center;gap:6px">' +
+          (nowActive > 0 ? '<span style="font-size:10px;background:rgba(52,211,153,.12);color:#34d399;padding:2px 7px;border-radius:10px;font-weight:700">● '+nowActive+'명 접속중</span>' : '') +
+          '<span style="font-size:9px;color:#334155">▾클릭 시 타임라인</span>' +
+        '</div>' +
+      '</div>' +
+      cards +
+    '</div>'
+  );
 }
 
 function _avgChip(label, val, sub, color) {
@@ -8906,12 +8993,11 @@ async function delShop(id,name){
 
 /* 시작 */
 loadAll();
-loadStats();   // 통계 탭 초기 로드
+loadStats();
 setInterval(() => {
   loadAll();
   if (curTab === 'stats')   loadStats();
   if (curTab === 'ranking') loadRanking();
-  if (curTab === 'visitors') loadVisitors();
 }, 30000);
 </script>
 </body>
