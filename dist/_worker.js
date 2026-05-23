@@ -1850,7 +1850,7 @@ body.shorts-mode #shorts-mute-btn{ display:flex; }
     <div class="s-tags" id="sTags"></div>
     <div class="s-price">시술 <span id="sPrice"></span></div>
     <div class="s-actions">
-      <button class="s-book" id="sBook" onclick="openInapp()">
+      <button class="s-book" id="sBook" onclick="_sessionTrackFeedBook();_sessionEvent('feed_book',curShop);openInapp()">
         <i class="fas fa-calendar-check"></i> 네이버 예약하기
       </button>
     </div>
@@ -2120,6 +2120,7 @@ function _sessionTrackShorts() {
 function _sessionTrackShortsBook() {
   if (!_sessId) return;
   _sessShortsBook++;
+  _sessionFlush(false); // 예약 즉시 flush — 이탈 전 누락 방지
 }
 // 피드 업체카드 클릭
 function _sessionTrackFeedCard() {
@@ -2130,6 +2131,7 @@ function _sessionTrackFeedCard() {
 function _sessionTrackFeedBook() {
   if (!_sessId) return;
   _sessFeedBook++;
+  _sessionFlush(false); // 예약 즉시 flush
 }
 // 지도 마커 클릭
 function _sessionTrackMapPin() {
@@ -2140,6 +2142,7 @@ function _sessionTrackMapPin() {
 function _sessionTrackMapBook() {
   if (!_sessId) return;
   _sessMapBook++;
+  _sessionFlush(false); // 예약 즉시 flush
 }
 // 검색 사용
 function _sessionTrackSearch() {
@@ -2626,7 +2629,7 @@ function feedCardHTML(s) {
         + ' data-name="' + safeName + '"'
         + ' onclick="'
             + 'curShop={id:+this.dataset.id,name:this.dataset.name,smartPlaceUrl:this.dataset.url};'
-            + 'openInapp()">'
+            + '_sessionTrackFeedBook();_sessionEvent('feed_book',curShop);openInapp()">'
         + '<i class="fas fa-calendar-check"></i><span>예약하기</span></button>'
     : '';
   // 프리미엄 뱃지
@@ -3300,8 +3303,6 @@ function trackMapSPWithSrc(id) {
 let _rsvOrigUrl = '';
 function openInapp() {
   if (!curShop || !curShop.smartPlaceUrl) { showToast('예약 링크가 없어요'); return; }
-  _sessionTrackFeedBook(); // 👁️ 세션 추적 - 피드 예약클릭
-  _sessionEvent('feed_book', curShop); // 👁️ 업체 이벤트
   trackSP();
   _rsvOrigUrl = curShop.smartPlaceUrl;
   const name = curShop.name || '';
