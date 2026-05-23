@@ -1297,24 +1297,37 @@ app.get('/api/admin/shorts/stats/item/:id', async (c) => {
 async function ensureSessionsTable() {
   await sql`
     CREATE TABLE IF NOT EXISTS visitor_sessions (
-      id           TEXT    PRIMARY KEY,          -- 익명 세션 ID (클라이언트 생성)
-      entered_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      last_seen    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      device       TEXT    NOT NULL DEFAULT 'unknown', -- mobile | desktop
-      duration_sec INTEGER NOT NULL DEFAULT 0,   -- 총 체류초
-      tabs_visited TEXT[]  NOT NULL DEFAULT '{}',-- 방문한 탭 목록
-      shorts_count INTEGER NOT NULL DEFAULT 0,   -- 본 숏폼 수
-      book_count   INTEGER NOT NULL DEFAULT 0,   -- 예약버튼 클릭 수
-      exited       BOOLEAN NOT NULL DEFAULT false
+      id            TEXT    PRIMARY KEY,
+      entered_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_seen     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      device        TEXT    NOT NULL DEFAULT 'unknown',
+      duration_sec  INTEGER NOT NULL DEFAULT 0,
+      tabs_visited  TEXT[]  NOT NULL DEFAULT '{}',
+      shorts_count  INTEGER NOT NULL DEFAULT 0,
+      shorts_book   INTEGER NOT NULL DEFAULT 0,
+      feed_card_cnt INTEGER NOT NULL DEFAULT 0,
+      feed_book_cnt INTEGER NOT NULL DEFAULT 0,
+      map_pin_cnt   INTEGER NOT NULL DEFAULT 0,
+      map_book_cnt  INTEGER NOT NULL DEFAULT 0,
+      search_cnt    INTEGER NOT NULL DEFAULT 0,
+      inquiry_cnt   INTEGER NOT NULL DEFAULT 0,
+      book_count    INTEGER NOT NULL DEFAULT 0,
+      exited        BOOLEAN NOT NULL DEFAULT false
     )
   `
+  // 기존 테이블에 새 컬럼 없으면 추가 (마이그레이션)
+  const newCols = ['shorts_book','feed_card_cnt','feed_book_cnt','map_pin_cnt','map_book_cnt','search_cnt','inquiry_cnt']
+  for (const col of newCols) {
+    try {
+      await sql`ALTER TABLE visitor_sessions ADD COLUMN IF NOT EXISTS ${sql.unsafe(col)} INTEGER NOT NULL DEFAULT 0`
+    } catch(_) { /* 이미 존재하면 무시 */ }
+  }
 }
 
 // 세션 생성 (첫 진입)
 app.post('/api/track/session/start', async (c) => {
   try {
     await ensureSessionsTable()
-    // 7일 이상 된 세션 자동 삭제
     await sql`DELETE FROM visitor_sessions WHERE entered_at < NOW() - INTERVAL '7 days'`
     const b = await c.req.json()
     const id = b.id || ''
@@ -1334,16 +1347,30 @@ app.post('/api/track/session/update', async (c) => {
   try {
     await ensureSessionsTable()
     const b = await c.req.json()
-    const { id, duration_sec, tabs_visited, shorts_count, book_count, exited } = b
+    const {
+      id, duration_sec, tabs_visited, exited,
+      shorts_count, shorts_book,
+      feed_card_cnt, feed_book_cnt,
+      map_pin_cnt, map_book_cnt,
+      search_cnt, inquiry_cnt,
+    } = b
     if (!id) return c.json({ ok: false })
+    const book_total = (shorts_book||0) + (feed_book_cnt||0) + (map_book_cnt||0)
     await sql`
       UPDATE visitor_sessions SET
-        last_seen    = NOW(),
-        duration_sec = ${duration_sec || 0},
-        tabs_visited = ${tabs_visited || []}::text[],
-        shorts_count = ${shorts_count || 0},
-        book_count   = ${book_count || 0},
-        exited       = ${exited || false}
+        last_seen     = NOW(),
+        duration_sec  = ${duration_sec || 0},
+        tabs_visited  = ${tabs_visited || []}::text[],
+        shorts_count  = ${shorts_count || 0},
+        shorts_book   = ${shorts_book || 0},
+        feed_card_cnt = ${feed_card_cnt || 0},
+        feed_book_cnt = ${feed_book_cnt || 0},
+        map_pin_cnt   = ${map_pin_cnt || 0},
+        map_book_cnt  = ${map_book_cnt || 0},
+        search_cnt    = ${search_cnt || 0},
+        inquiry_cnt   = ${inquiry_cnt || 0},
+        book_count    = ${book_total},
+        exited        = ${exited || false}
       WHERE id = ${id}
     `
     return c.json({ ok: true })
@@ -1357,7 +1384,12 @@ app.get('/api/admin/sessions', async (c) => {
     const today = kstToday()
     const rows = await sql`
       SELECT id, entered_at, last_seen, device, duration_sec,
-             tabs_visited, shorts_count, book_count, exited
+             tabs_visited,
+             shorts_count, shorts_book,
+             feed_card_cnt, feed_book_cnt,
+             map_pin_cnt, map_book_cnt,
+             search_cnt, inquiry_cnt,
+             book_count, exited
       FROM visitor_sessions
       WHERE entered_at::date >= ${today}::date - INTERVAL '1 day'
       ORDER BY entered_at DESC
@@ -1374,13 +1406,20 @@ app.get('/api/admin/sessions/summary', async (c) => {
     const today = kstToday()
     const [todayRow] = await sql`
       SELECT
-        COUNT(*)                                        as total,
-        COUNT(*) FILTER (WHERE device='mobile')        as mobile,
-        COUNT(*) FILTER (WHERE device='desktop')       as desktop,
-        ROUND(AVG(duration_sec))                       as avg_sec,
-        COUNT(*) FILTER (WHERE book_count > 0)         as booked,
-        COUNT(*) FILTER (WHERE shorts_count > 0)       as watched_shorts,
-        ROUND(AVG(shorts_count) FILTER (WHERE shorts_count>0)) as avg_shorts
+        COUNT(*)                                              as total,
+        COUNT(*) FILTER (WHERE device='mobile')              as mobile,
+        COUNT(*) FILTER (WHERE device='desktop')             as desktop,
+        ROUND(AVG(duration_sec))                             as avg_sec,
+        COUNT(*) FILTER (WHERE book_count > 0)               as booked,
+        COUNT(*) FILTER (WHERE shorts_count > 0)             as watched_shorts,
+        ROUND(AVG(shorts_count) FILTER (WHERE shorts_count>0)) as avg_shorts,
+        COALESCE(SUM(shorts_book),0)                         as sum_shorts_book,
+        COALESCE(SUM(feed_card_cnt),0)                       as sum_feed_card,
+        COALESCE(SUM(feed_book_cnt),0)                       as sum_feed_book,
+        COALESCE(SUM(map_pin_cnt),0)                         as sum_map_pin,
+        COALESCE(SUM(map_book_cnt),0)                        as sum_map_book,
+        COALESCE(SUM(search_cnt),0)                          as sum_search,
+        COALESCE(SUM(inquiry_cnt),0)                         as sum_inquiry
       FROM visitor_sessions
       WHERE entered_at::date = ${today}::date
     `
@@ -1395,15 +1434,23 @@ app.get('/api/admin/sessions/summary', async (c) => {
       WHERE entered_at::date >= ${today}::date - INTERVAL '6 days'
     `
     return c.json({
-      today_total:    Number(todayRow?.total || 0),
-      today_mobile:   Number(todayRow?.mobile || 0),
-      today_desktop:  Number(todayRow?.desktop || 0),
-      today_avg_sec:  Number(todayRow?.avg_sec || 0),
-      today_booked:   Number(todayRow?.booked || 0),
-      today_watched:  Number(todayRow?.watched_shorts || 0),
+      today_total:      Number(todayRow?.total || 0),
+      today_mobile:     Number(todayRow?.mobile || 0),
+      today_desktop:    Number(todayRow?.desktop || 0),
+      today_avg_sec:    Number(todayRow?.avg_sec || 0),
+      today_booked:     Number(todayRow?.booked || 0),
+      today_watched:    Number(todayRow?.watched_shorts || 0),
       today_avg_shorts: Number(todayRow?.avg_shorts || 0),
-      yest_total:     Number(yestRow?.total || 0),
-      week_total:     Number(weekRow?.total || 0),
+      yest_total:       Number(yestRow?.total || 0),
+      week_total:       Number(weekRow?.total || 0),
+      // 행동별 합산
+      sum_shorts_book:  Number(todayRow?.sum_shorts_book || 0),
+      sum_feed_card:    Number(todayRow?.sum_feed_card || 0),
+      sum_feed_book:    Number(todayRow?.sum_feed_book || 0),
+      sum_map_pin:      Number(todayRow?.sum_map_pin || 0),
+      sum_map_book:     Number(todayRow?.sum_map_book || 0),
+      sum_search:       Number(todayRow?.sum_search || 0),
+      sum_inquiry:      Number(todayRow?.sum_inquiry || 0),
     })
   } catch(e) { return c.json({ error: String(e) }) }
 })
@@ -3227,19 +3274,35 @@ document.addEventListener('DOMContentLoaded', () => {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 let _sessId       = '';
 let _sessStart    = Date.now();
-let _sessTabs     = [];       // 방문한 탭 순서
-let _sessShorts   = 0;        // 본 숏폼 수
-let _sessBook     = 0;        // 예약버튼 클릭 수
+let _sessTabs     = [];   // 방문한 탭 순서
 let _sessTimer    = null;
+// 숏폼
+let _sessShorts   = 0;   // 숏폼 시청 수
+let _sessShortsBook = 0; // 숏폼 예약클릭 수
+// 피드
+let _sessFeedCard = 0;   // 피드 업체카드 클릭
+let _sessFeedBook = 0;   // 피드 예약클릭
+// 지도
+let _sessMapPin   = 0;   // 지도 마커 클릭
+let _sessMapBook  = 0;   // 지도 예약클릭
+// 기타
+let _sessSearch   = 0;   // 검색 사용
+let _sessInquiry  = 0;   // 문의 제출
 
 function _sessionInit() {
   // 세션 ID: localStorage에 저장 (탭 닫기 전까지 유지)
   // 새로고침은 새 세션으로 처리
   _sessId = 'v' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   _sessStart = Date.now();
-  _sessTabs  = [];
-  _sessShorts = 0;
-  _sessBook   = 0;
+  _sessTabs       = [];
+  _sessShorts     = 0;
+  _sessShortsBook = 0;
+  _sessFeedCard   = 0;
+  _sessFeedBook   = 0;
+  _sessMapPin     = 0;
+  _sessMapBook    = 0;
+  _sessSearch     = 0;
+  _sessInquiry    = 0;
 
   const ua = navigator.userAgent || '';
   const device = /Mobi|Android|iPhone|iPad/i.test(ua) ? 'mobile' : 'desktop';
@@ -3265,12 +3328,18 @@ function _sessionFlush(exited) {
   if (!_sessId) return;
   const duration = Math.round((Date.now() - _sessStart) / 1000);
   const payload  = JSON.stringify({
-    id:           _sessId,
-    duration_sec: duration,
-    tabs_visited: _sessTabs,
-    shorts_count: _sessShorts,
-    book_count:   _sessBook,
-    exited:       !!exited,
+    id:            _sessId,
+    duration_sec:  duration,
+    tabs_visited:  _sessTabs,
+    shorts_count:  _sessShorts,
+    shorts_book:   _sessShortsBook,
+    feed_card_cnt: _sessFeedCard,
+    feed_book_cnt: _sessFeedBook,
+    map_pin_cnt:   _sessMapPin,
+    map_book_cnt:  _sessMapBook,
+    search_cnt:    _sessSearch,
+    inquiry_cnt:   _sessInquiry,
+    exited:        !!exited,
   });
   // sendBeacon: 페이지 닫혀도 전송 보장
   if (exited && navigator.sendBeacon) {
@@ -3284,22 +3353,50 @@ function _sessionFlush(exited) {
   }
 }
 
-// 탭 전환 시 호출 (switchTab에서 호출)
+// 탭 전환
 function _sessionTrackTab(tab) {
   if (!_sessId) return;
   if (!_sessTabs.includes(tab)) _sessTabs.push(tab);
 }
-
-// 숏폼 시청 시 호출 (_shortsActivateSlide에서 호출)
+// 숏폼 시청
 function _sessionTrackShorts() {
   if (!_sessId) return;
   _sessShorts++;
 }
-
-// 예약버튼 클릭 시 호출 (shortsOpenBook에서 호출)
-function _sessionTrackBook() {
+// 숏폼 예약클릭
+function _sessionTrackShortsBook() {
   if (!_sessId) return;
-  _sessBook++;
+  _sessShortsBook++;
+}
+// 피드 업체카드 클릭
+function _sessionTrackFeedCard() {
+  if (!_sessId) return;
+  _sessFeedCard++;
+}
+// 피드 예약클릭
+function _sessionTrackFeedBook() {
+  if (!_sessId) return;
+  _sessFeedBook++;
+}
+// 지도 마커 클릭
+function _sessionTrackMapPin() {
+  if (!_sessId) return;
+  _sessMapPin++;
+}
+// 지도 예약클릭
+function _sessionTrackMapBook() {
+  if (!_sessId) return;
+  _sessMapBook++;
+}
+// 검색 사용
+function _sessionTrackSearch() {
+  if (!_sessId) return;
+  _sessSearch++;
+}
+// 문의 제출
+function _sessionTrackInquiry() {
+  if (!_sessId) return;
+  _sessInquiry++;
 }
 
 
@@ -3460,7 +3557,7 @@ function toggleShortsMute() {
 function shortsOpenBook(shop) {
   if (!shop.smart_place_url) { showToast('예약 링크가 없어요'); return; }
   fetch('/api/track/shorts/sp/' + shop.id, { method: 'POST' }).catch(() => {});
-  _sessionTrackBook(); // 👁️ 세션 추적
+  _sessionTrackShortsBook(); // 👁️ 세션 추적 - 숏폼 예약클릭
   curShop = { name: shop.name || '', smartPlaceUrl: shop.smart_place_url || '' };
   openInapp();
 }
@@ -3886,6 +3983,7 @@ let searchOpen = false;
 
 function toggleSearch() {
   searchOpen = !searchOpen;
+  if (searchOpen) _sessionTrackSearch(); // 👁️ 세션 추적 - 검색 열기
   const bar  = document.getElementById('searchBar');
   const icon = document.getElementById('searchBtnIcon');
   const catBar = document.getElementById('catBar');
@@ -4178,6 +4276,7 @@ function renderNaverMarkers(shops) {
 }
 
 function selectShopOnMap(id) {
+  _sessionTrackMapPin(); // 👁️ 세션 추적 - 지도 마커 클릭
   const shop = allShops.find(s=>s.id===id);
   if (!shop) return;
   curShop = shop;
@@ -4395,7 +4494,10 @@ function trackMapSP(id) {
   }).catch(()=>{});
 }
 // 지도 팝업 예약버튼 전용 (인라인 onclick 대체)
-function trackMapSPWithSrc(id) { trackMapSP(id); }
+function trackMapSPWithSrc(id) {
+  _sessionTrackMapBook(); // 👁️ 세션 추적 - 지도 예약클릭
+  trackMapSP(id);
+}
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // 예약 모달 (m.place.naver.com iframe)
@@ -4403,6 +4505,7 @@ function trackMapSPWithSrc(id) { trackMapSP(id); }
 let _rsvOrigUrl = '';
 function openInapp() {
   if (!curShop || !curShop.smartPlaceUrl) { showToast('예약 링크가 없어요'); return; }
+  _sessionTrackFeedBook(); // 👁️ 세션 추적 - 피드 예약클릭
   trackSP();
   _rsvOrigUrl = curShop.smartPlaceUrl;
   const name = curShop.name || '';
@@ -4493,6 +4596,7 @@ function submitInquiry() {
   }
   const url = document.getElementById('iq-url').value.trim();
   const msg = document.getElementById('iq-msg').value.trim();
+  _sessionTrackInquiry(); // 👁️ 세션 추적 - 문의 제출
   fetch('/api/inquiry', {
     method:'POST',
     headers:{'Content-Type':'application/json'},
@@ -5245,6 +5349,7 @@ function playVideo() {
 // /reserve iframe → 메인 페이지로 postMessage → openInapp() 실행
 function openReserve() {
   if (!curShop?.smartPlaceUrl) return;
+  _sessionTrackMapBook(); // 👁️ 세션 추적 - 지도 팝업 예약클릭
   // viewSrc는 지도 iframe 내부이므로 항상 'map'
   fetch('/api/track/mapsp/' + curShop.id, {
     method: 'POST',
@@ -5263,6 +5368,7 @@ function openReserve() {
 
 /* ── 카드 열기 ── */
 function openCard(shop) {
+  _sessionTrackFeedCard(); // 👁️ 세션 추적 - 피드 업체카드 클릭
   curShop = shop;
   const color = CAT_COLOR[shop.category] || '#FF4D7D';
 
@@ -6768,21 +6874,32 @@ function renderVisitors(s, sessions) {
   // 탭 이름 이모지
   const tabLabel = (t) => ({ shorts:'⚡릴스', feed:'🎬영상', map:'🗺️지도', inquiry:'✉️문의' }[t] || t);
 
-  // 행동 요약 뱃지
+  // 행동 요약 뱃지 (탭별 세분화)
   const actionBadge = (sess) => {
     const parts = [];
-    if (Number(sess.shorts_count) > 0) parts.push('<span style="background:rgba(232,121,249,.15);color:#e879f9;padding:1px 6px;border-radius:5px;font-size:10px">숏폼 ' + sess.shorts_count + '개</span>');
-    if (Number(sess.book_count)   > 0) parts.push('<span style="background:rgba(255,77,125,.15);color:#FF4D7D;padding:1px 6px;border-radius:5px;font-size:10px">예약클릭 ' + sess.book_count + '회</span>');
-    if (!parts.length) parts.push('<span style="color:#334155;font-size:10px">행동 없음</span>');
+    const n = (v) => Number(v) || 0;
+    if (n(sess.shorts_count) > 0) parts.push('<span style="background:rgba(232,121,249,.15);color:#e879f9;padding:1px 6px;border-radius:5px;font-size:10px">⚡릴스 ' + n(sess.shorts_count) + '개</span>');
+    if (n(sess.shorts_book)  > 0) parts.push('<span style="background:rgba(255,77,125,.12);color:#FF4D7D;padding:1px 6px;border-radius:5px;font-size:10px">릴스예약 ' + n(sess.shorts_book) + '</span>');
+    if (n(sess.feed_card_cnt)> 0) parts.push('<span style="background:rgba(99,102,241,.15);color:#818cf8;padding:1px 6px;border-radius:5px;font-size:10px">🎬영상 ' + n(sess.feed_card_cnt) + '개</span>');
+    if (n(sess.feed_book_cnt)> 0) parts.push('<span style="background:rgba(255,77,125,.12);color:#FF4D7D;padding:1px 6px;border-radius:5px;font-size:10px">영상예약 ' + n(sess.feed_book_cnt) + '</span>');
+    if (n(sess.map_pin_cnt)  > 0) parts.push('<span style="background:rgba(16,185,129,.15);color:#34d399;padding:1px 6px;border-radius:5px;font-size:10px">🗺️지도 ' + n(sess.map_pin_cnt) + '곳</span>');
+    if (n(sess.map_book_cnt) > 0) parts.push('<span style="background:rgba(255,77,125,.12);color:#FF4D7D;padding:1px 6px;border-radius:5px;font-size:10px">지도예약 ' + n(sess.map_book_cnt) + '</span>');
+    if (n(sess.search_cnt)   > 0) parts.push('<span style="background:rgba(245,158,11,.15);color:#fbbf24;padding:1px 6px;border-radius:5px;font-size:10px">🔍검색 ' + n(sess.search_cnt) + '</span>');
+    if (n(sess.inquiry_cnt)  > 0) parts.push('<span style="background:rgba(52,211,153,.15);color:#34d399;padding:1px 6px;border-radius:5px;font-size:10px">✉️문의 ' + n(sess.inquiry_cnt) + '</span>');
+    if (!parts.length) parts.push('<span style="color:#334155;font-size:10px">조용한 방문</span>');
     return parts.join(' ');
   };
 
-  // 퍼널: 진입 → 숏폼시청 → 예약클릭
+  // 퍼널: 진입 → 컨텐츠 시청 → 예약클릭
   const total    = sessions.length;
-  const watched  = sessions.filter(s => Number(s.shorts_count) > 0).length;
+  const watched  = sessions.filter(s => (Number(s.shorts_count)||0) + (Number(s.feed_card_cnt)||0) > 0).length;
   const booked   = sessions.filter(s => Number(s.book_count) > 0).length;
-  const funnelW  = total  > 0 ? Math.round(watched / total * 100) : 0;
-  const funnelB  = total  > 0 ? Math.round(booked  / total * 100) : 0;
+  const mapUsed  = sessions.filter(s => Number(s.map_pin_cnt) > 0).length;
+  const searched = sessions.filter(s => Number(s.search_cnt) > 0).length;
+  const funnelW  = total  > 0 ? Math.round(watched  / total * 100) : 0;
+  const funnelB  = total  > 0 ? Math.round(booked   / total * 100) : 0;
+  const funnelM  = total  > 0 ? Math.round(mapUsed  / total * 100) : 0;
+  const funnelS  = total  > 0 ? Math.round(searched / total * 100) : 0;
 
   // 지금 활성(마지막 ping 5분 이내)
   const nowActive = sessions.filter(s => {
@@ -6836,13 +6953,29 @@ function renderVisitors(s, sessions) {
         _kpiCard('fa-user','오늘 방문', s.today_total + '명', '어제 ' + s.yest_total + '명' + diffBadge(s.today_total, s.yest_total), '#6366f1') +
         _kpiCard('fa-clock','평균 체류', fmtSec(s.today_avg_sec), '7일 누적 ' + s.week_total + '명', '#f59e0b') +
         _kpiCard('fa-mobile-alt','모바일 비율', s.today_total > 0 ? Math.round(s.today_mobile / s.today_total * 100) + '%' : '-', '모바일 ' + s.today_mobile + ' / PC ' + s.today_desktop, '#e879f9') +
-        _kpiCard('fa-calendar-check','예약클릭', s.today_booked + '명', '숏폼 시청 ' + s.today_watched + '명', '#FF4D7D') +
+        _kpiCard('fa-calendar-check','전체 예약클릭', s.today_booked + '명', '릴스 ' + (s.sum_shorts_book||0) + ' · 영상 ' + (s.sum_feed_book||0) + ' · 지도 ' + (s.sum_map_book||0), '#FF4D7D') +
+      '</div>' +
+      // 탭별 행동 합산 그리드
+      '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:13px;margin-bottom:12px">' +
+        '<div style="font-size:11px;font-weight:800;color:#94a3b8;margin-bottom:10px">📊 오늘 탭별 행동 합산</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">' +
+          _statChip('⚡릴스 시청', s.today_watched + '명', '#e879f9') +
+          _statChip('릴스 예약', (s.sum_shorts_book||0) + '회', '#FF4D7D') +
+          _statChip('🎬영상 카드', (s.sum_feed_card||0) + '회', '#818cf8') +
+          _statChip('영상 예약', (s.sum_feed_book||0) + '회', '#FF4D7D') +
+          _statChip('🗺️지도 마커', (s.sum_map_pin||0) + '회', '#34d399') +
+          _statChip('지도 예약', (s.sum_map_book||0) + '회', '#FF4D7D') +
+          _statChip('🔍검색', (s.sum_search||0) + '회', '#fbbf24') +
+          _statChip('✉️문의', (s.sum_inquiry||0) + '회', '#34d399') +
+        '</div>' +
       '</div>' +
       // 퍼널
       '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:13px;margin-bottom:12px">' +
         '<div style="font-size:11px;font-weight:800;color:#94a3b8;margin-bottom:10px">🔻 오늘 행동 퍼널</div>' +
         _funnelBar('진입', total, 100, '#6366f1') +
-        _funnelBar('숏폼 시청', watched, funnelW, '#e879f9') +
+        _funnelBar('콘텐츠 시청', watched, funnelW, '#e879f9') +
+        _funnelBar('지도 탐색', mapUsed, funnelM, '#34d399') +
+        _funnelBar('검색 사용', searched, funnelS, '#fbbf24') +
         _funnelBar('예약 클릭', booked, funnelB, '#FF4D7D') +
       '</div>' +
       // 세션 목록
@@ -6856,6 +6989,13 @@ function _kpiCard(icon, label, val, sub, color) {
     '<div style="font-size:10px;color:#64748b;font-weight:700;margin-bottom:5px"><i class="fas ' + icon + '" style="color:' + color + ';margin-right:4px"></i>' + label + '</div>' +
     '<div style="font-size:20px;font-weight:900;color:#f1f5f9">' + val + '</div>' +
     '<div style="font-size:10px;color:#475569;margin-top:3px">' + sub + '</div>' +
+  '</div>';
+}
+
+function _statChip(label, val, color) {
+  return '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:8px 10px;text-align:center">' +
+    '<div style="font-size:9px;color:#64748b;margin-bottom:4px">' + label + '</div>' +
+    '<div style="font-size:15px;font-weight:800;color:' + color + '">' + val + '</div>' +
   '</div>';
 }
 
