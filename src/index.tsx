@@ -1428,6 +1428,78 @@ app.get('/api/admin/sessions/:sid/events', async (c) => {
   } catch(e) { return c.json([]) }
 })
 
+// 관리자: 업체별 랭킹 (session_events 집계)
+app.get('/api/admin/shop-ranking', async (c) => {
+  try {
+    await ensureEventsTable()
+    const days = Number(c.req.query('days') || 7)
+    const rows = await sql`
+      SELECT
+        shop_id,
+        shop_name,
+        shop_cat,
+        COUNT(*) FILTER (WHERE event_type IN ('shorts_view','feed_card','map_pin'))          AS view_cnt,
+        COUNT(*) FILTER (WHERE event_type = 'shorts_view')                                   AS shorts_cnt,
+        COUNT(*) FILTER (WHERE event_type = 'feed_card')                                     AS feed_cnt,
+        COUNT(*) FILTER (WHERE event_type = 'map_pin')                                       AS map_cnt,
+        COUNT(*) FILTER (WHERE event_type IN ('shorts_book','feed_book','map_book'))          AS book_cnt,
+        COUNT(DISTINCT session_id)                                                            AS uniq_sessions,
+        COALESCE(SUM(viewed_sec) FILTER (WHERE event_type='shorts_view_end'), 0)             AS total_view_sec
+      FROM session_events
+      WHERE shop_id IS NOT NULL
+        AND occurred_at >= NOW() - (${days} || ' days')::INTERVAL
+      GROUP BY shop_id, shop_name, shop_cat
+      ORDER BY view_cnt DESC
+      LIMIT 50
+    `
+    return c.json(rows.map(r => ({
+      shop_id:       Number(r.shop_id),
+      shop_name:     r.shop_name || '',
+      shop_cat:      r.shop_cat  || '',
+      view_cnt:      Number(r.view_cnt),
+      shorts_cnt:    Number(r.shorts_cnt),
+      feed_cnt:      Number(r.feed_cnt),
+      map_cnt:       Number(r.map_cnt),
+      book_cnt:      Number(r.book_cnt),
+      uniq_sessions: Number(r.uniq_sessions),
+      total_view_sec:Number(r.total_view_sec),
+      conv_rate:     r.uniq_sessions > 0 ? Math.round(Number(r.book_cnt)/Number(r.uniq_sessions)*100) : 0,
+    })))
+  } catch(e) { return c.json([]) }
+})
+
+// 관리자: 7일치 일별 방문 추이
+app.get('/api/admin/daily-trend', async (c) => {
+  try {
+    await ensureSessionsTable()
+    const rows = await sql`
+      SELECT
+        (entered_at AT TIME ZONE 'Asia/Seoul')::date AS day,
+        COUNT(*)                                      AS total,
+        COUNT(*) FILTER (WHERE device='mobile')       AS mobile,
+        COUNT(*) FILTER (WHERE book_count>0)          AS booked,
+        COALESCE(SUM(shorts_count),0)                 AS shorts_total,
+        COALESCE(SUM(feed_card_cnt),0)                AS feed_total,
+        COALESCE(SUM(map_pin_cnt),0)                  AS map_total,
+        ROUND(AVG(duration_sec))                      AS avg_sec
+      FROM visitor_sessions
+      WHERE entered_at >= NOW() - INTERVAL '7 days'
+      GROUP BY 1
+      ORDER BY 1 ASC
+    `
+    return c.json(rows.map(r => ({
+      day:          String(r.day).slice(0, 10),
+      total:        Number(r.total),
+      mobile:       Number(r.mobile),
+      booked:       Number(r.booked),
+      shorts_total: Number(r.shorts_total),
+      feed_total:   Number(r.feed_total),
+      map_total:    Number(r.map_total),
+      avg_sec:      Number(r.avg_sec),
+    })))
+  } catch(e) { return c.json([]) }
+})
+
 // 관리자: 오늘 방문자 목록
 app.get('/api/admin/sessions', async (c) => {
   try {
@@ -6379,37 +6451,38 @@ body{font-family:'Pretendard',sans-serif;background:var(--bg);color:var(--t1);mi
 <!-- 탭바 -->
 <div class="tabbar">
   <button class="tabbtn on" id="tab-stats" onclick="switchTab('stats')">
-    <i class="fas fa-chart-line"></i>대시보드
+    <i class="fas fa-chart-line"></i>통계
+  </button>
+  <button class="tabbtn" id="tab-ranking" onclick="switchTab('ranking')">
+    <i class="fas fa-trophy"></i>업체순위
+  </button>
+  <button class="tabbtn" id="tab-visitors" onclick="switchTab('visitors')">
+    <i class="fas fa-users"></i>방문자
   </button>
   <button class="tabbtn" id="tab-shops" onclick="switchTab('shops')">
-    <i class="fas fa-store"></i>업체 관리
-  </button>
-  <button class="tabbtn" id="tab-pay" onclick="switchTab('pay')">
-    <i class="fas fa-credit-card"></i>구독관리
-  </button>
-  <button class="tabbtn" id="tab-inq" onclick="switchTab('inq')">
-    <i class="fas fa-envelope"></i>입점문의
-  </button>
-  <button class="tabbtn" id="tab-cal" onclick="switchTab('cal')">
-    <i class="fas fa-calendar-alt"></i>달력
+    <i class="fas fa-store"></i>업체
   </button>
   <button class="tabbtn" id="tab-shorts-admin" onclick="switchTab('shorts-admin')">
     <i class="fas fa-bolt" style="font-size:11px"></i>숏폼
   </button>
-  <button class="tabbtn" id="tab-visitors" onclick="switchTab('visitors')">
-    <i class="fas fa-users"></i>방문자
+  <button class="tabbtn" id="tab-inq" onclick="switchTab('inq')">
+    <i class="fas fa-envelope"></i>문의
+  </button>
+  <button class="tabbtn" id="tab-pay" onclick="switchTab('pay')">
+    <i class="fas fa-credit-card"></i>구독
   </button>
 </div>
 
 <!-- 콘텐츠 -->
 <div class="wrap">
   <div id="panel-stats"></div>
-  <div id="panel-shops"       style="display:none"></div>
-  <div id="panel-pay"         style="display:none"></div>
-  <div id="panel-inq"         style="display:none"></div>
-  <div id="panel-cal"         style="display:none"></div>
-  <div id="panel-shorts-admin" style="display:none"></div>
+  <div id="panel-ranking"     style="display:none"></div>
   <div id="panel-visitors"    style="display:none"></div>
+  <div id="panel-shops"       style="display:none"></div>
+  <div id="panel-shorts-admin" style="display:none"></div>
+  <div id="panel-inq"         style="display:none"></div>
+  <div id="panel-pay"         style="display:none"></div>
+  <div id="panel-cal"         style="display:none"></div>
 </div>
 
 <!-- 업체 추가/수정 모달 -->
@@ -6561,19 +6634,21 @@ let _stats = null, _dvRows = [], _chartMode = 'view', _rankMode = 'today', _insi
 // ── 탭 전환
 function switchTab(t) {
   curTab = t;
-  ['stats','shops','pay','inq','cal','shorts-admin','visitors'].forEach(x => {
+  ['stats','ranking','shops','pay','inq','cal','shorts-admin','visitors'].forEach(x => {
     const tabEl = document.getElementById('tab-'+x);
     const panEl = document.getElementById('panel-'+x);
     if (tabEl) tabEl.classList.toggle('on', x===t);
     if (panEl) panEl.style.display = x===t ? 'block' : 'none';
   });
   document.querySelector('.add-btn').style.display = t==='shops' ? 'flex' : 'none';
-  if (t==='shops') renderShops(shopData);
-  if (t==='inq') loadInquiries();
-  if (t==='pay') renderPayTab();
-  if (t==='cal') renderCalendar();
-  if (t==='shorts-admin') loadShortsAdmin();
-  if (t==='visitors') loadVisitors();
+  if (t==='stats')         loadStats();
+  if (t==='ranking')       loadRanking();
+  if (t==='shops')         renderShops(shopData);
+  if (t==='inq')           loadInquiries();
+  if (t==='pay')           renderPayTab();
+  if (t==='cal')           renderCalendar();
+  if (t==='shorts-admin')  loadShortsAdmin();
+  if (t==='visitors')      loadVisitors();
 }
 
 // ── 토스트
@@ -6969,160 +7044,97 @@ async function loadVisitors() {
 function renderVisitors(s, sessions) {
   const p = document.getElementById('panel-visitors');
   const n = (v) => Number(v) || 0;
-
-  // ── 공통 포맷 헬퍼 ───────────────────────────────────────────────────
-  const fmtSec = (sec) => {
-    sec = n(sec);
-    if (sec <= 0) return '-';
-    if (sec < 60) return sec + '초';
-    return Math.floor(sec/60) + '분 ' + (sec%60) + '초';
-  };
+  const fmtSec = (sec) => { sec=n(sec); if(sec<=0) return '-'; if(sec<60) return sec+'초'; return Math.floor(sec/60)+'분 '+(sec%60)+'초'; };
   const tabLabel = (t) => ({'shorts':'⚡릴스','feed':'🎬영상','map':'🗺️지도','inquiry':'✉️문의'}[t] || t);
-  const diffBadge = (v, y) => {
-    if (!y) return '';
-    const d = v - y, c = d >= 0 ? '#34d399' : '#f87171';
-    return '<span style="font-size:10px;color:'+c+';margin-left:4px">'+(d>=0?'▲':'▼')+Math.abs(d)+'</span>';
-  };
 
-  // ── 집계 ─────────────────────────────────────────────────────────────
   const total    = sessions.length;
   const nowActive = sessions.filter(x => Date.now() - new Date(x.last_seen).getTime() < 5*60*1000).length;
-  const watched  = sessions.filter(x => n(x.shorts_count)+n(x.feed_card_cnt) > 0).length;
-  const booked   = sessions.filter(x => n(x.book_count) > 0).length;
-  const mapUsed  = sessions.filter(x => n(x.map_pin_cnt) > 0).length;
-  const searched = sessions.filter(x => n(x.search_cnt) > 0).length;
   const pct = (a,b) => b > 0 ? Math.round(a/b*100) : 0;
 
-  // ── 세션 카드 (클릭하면 타임라인 펼치기) ──────────────────────────────
-  const evtIcon = {'shorts_view':'⚡','shorts_view_end':'⏱','shorts_book':'🎯',
-                   'feed_card':'🎬','feed_book':'🎯','map_pin':'📍','map_book':'🎯'};
-  const evtLabel = {'shorts_view':'릴스 시청','shorts_view_end':'릴스 시청 완료',
-                    'shorts_book':'릴스 예약클릭','feed_card':'영상 업체 조회',
-                    'feed_book':'영상 예약클릭','map_pin':'지도 업체 선택',
-                    'map_book':'지도 예약클릭'};
-  const evtColor = {'shorts_view':'#e879f9','shorts_view_end':'#a855f7','shorts_book':'#FF4D7D',
-                    'feed_card':'#818cf8','feed_book':'#FF4D7D',
-                    'map_pin':'#34d399','map_book':'#FF4D7D'};
+  // ── 배지 헬퍼
+  const badge = (bg, color, text) =>
+    '<span style="background:'+bg+';color:'+color+';padding:2px 6px;border-radius:5px;font-size:9px;font-weight:700">'+text+'</span>';
 
   const badgeHtml = (sess) => {
     const parts = [];
-    if (n(sess.shorts_count) > 0) parts.push('<span style="background:rgba(232,121,249,.15);color:#e879f9;padding:1px 5px;border-radius:4px;font-size:10px">⚡'+n(sess.shorts_count)+'개</span>');
-    if (n(sess.shorts_book)  > 0) parts.push('<span style="background:rgba(255,77,125,.12);color:#FF4D7D;padding:1px 5px;border-radius:4px;font-size:10px">릴스예약'+n(sess.shorts_book)+'</span>');
-    if (n(sess.feed_card_cnt)> 0) parts.push('<span style="background:rgba(99,102,241,.15);color:#818cf8;padding:1px 5px;border-radius:4px;font-size:10px">🎬'+n(sess.feed_card_cnt)+'개</span>');
-    if (n(sess.feed_book_cnt)> 0) parts.push('<span style="background:rgba(255,77,125,.12);color:#FF4D7D;padding:1px 5px;border-radius:4px;font-size:10px">영상예약'+n(sess.feed_book_cnt)+'</span>');
-    if (n(sess.map_pin_cnt)  > 0) parts.push('<span style="background:rgba(16,185,129,.15);color:#34d399;padding:1px 5px;border-radius:4px;font-size:10px">📍'+n(sess.map_pin_cnt)+'곳</span>');
-    if (n(sess.map_book_cnt) > 0) parts.push('<span style="background:rgba(255,77,125,.12);color:#FF4D7D;padding:1px 5px;border-radius:4px;font-size:10px">지도예약'+n(sess.map_book_cnt)+'</span>');
-    if (n(sess.search_cnt)   > 0) parts.push('<span style="background:rgba(245,158,11,.15);color:#fbbf24;padding:1px 5px;border-radius:4px;font-size:10px">🔍'+n(sess.search_cnt)+'</span>');
-    if (n(sess.inquiry_cnt)  > 0) parts.push('<span style="background:rgba(52,211,153,.15);color:#34d399;padding:1px 5px;border-radius:4px;font-size:10px">✉️'+n(sess.inquiry_cnt)+'</span>');
+    if (n(sess.shorts_count) > 0) parts.push(badge('rgba(232,121,249,.15)','#e879f9','⚡'+n(sess.shorts_count)));
+    if (n(sess.shorts_book)  > 0) parts.push(badge('rgba(255,77,125,.15)','#FF4D7D','릴스예약'+n(sess.shorts_book)));
+    if (n(sess.feed_card_cnt)> 0) parts.push(badge('rgba(99,102,241,.15)','#818cf8','🎬'+n(sess.feed_card_cnt)));
+    if (n(sess.feed_book_cnt)> 0) parts.push(badge('rgba(255,77,125,.15)','#FF4D7D','영상예약'+n(sess.feed_book_cnt)));
+    if (n(sess.map_pin_cnt)  > 0) parts.push(badge('rgba(52,211,153,.15)','#34d399','📍'+n(sess.map_pin_cnt)));
+    if (n(sess.map_book_cnt) > 0) parts.push(badge('rgba(255,77,125,.15)','#FF4D7D','지도예약'+n(sess.map_book_cnt)));
+    if (n(sess.search_cnt)   > 0) parts.push(badge('rgba(245,158,11,.15)','#fbbf24','🔍'+n(sess.search_cnt)));
+    if (n(sess.inquiry_cnt)  > 0) parts.push(badge('rgba(52,211,153,.15)','#34d399','✉️'+n(sess.inquiry_cnt)));
     return parts.length ? parts.join(' ') : '<span style="color:#334155;font-size:10px">조용한 방문</span>';
   };
 
+  // ── 세션 카드
   const cards = sessions.map(sess => {
     const isNow  = Date.now() - new Date(sess.last_seen).getTime() < 5*60*1000;
-    const timeStr = new Date(sess.entered_at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+    const entered = new Date(sess.entered_at);
+    const timeStr = entered.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+    const dateStr = entered.toLocaleDateString('ko-KR',{month:'numeric',day:'numeric'});
     const dur    = fmtSec(sess.duration_sec);
     const device = sess.device === 'mobile' ? '📱' : '🖥️';
     const tabs   = (sess.tabs_visited||[]).map(tabLabel).join(' → ') || '진입만';
     const sid    = sess.id;
     const totalActs = n(sess.shorts_count)+n(sess.feed_card_cnt)+n(sess.map_pin_cnt)+n(sess.book_count);
+    const hasBook = n(sess.book_count) > 0 || n(sess.shorts_book) > 0 || n(sess.feed_book_cnt) > 0 || n(sess.map_book_cnt) > 0;
 
     return (
-      '<div id="sc-'+sid+'" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,'+(isNow?'.18':'.06')+');border-radius:14px;margin-bottom:8px;overflow:hidden'+(isNow?';box-shadow:0 0 0 1px rgba(52,211,153,.25)':'')+'">' +
-        // 카드 헤더 (클릭 영역)
-        '<div onclick="toggleSessTimeline(&quot;'+sid+'&quot;)" style="padding:11px 13px;cursor:pointer">' +
-          '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">' +
+      '<div style="border:1px solid rgba(255,255,255,'+(isNow?'.18':'.06')+');border-radius:14px;margin-bottom:7px;overflow:hidden;background:rgba(255,255,255,.02)'+(hasBook?';border-color:rgba(255,77,125,.3)':'')+(isNow?';box-shadow:0 0 0 1px rgba(52,211,153,.2)':'')+'\">' +
+        // 카드 헤더 클릭 영역
+        '<div onclick="toggleSessTimeline(&quot;'+sid+'&quot;)" style="padding:10px 12px;cursor:pointer">' +
+          '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">' +
             '<div style="display:flex;align-items:center;gap:6px">' +
-              '<span style="font-size:14px">'+device+'</span>' +
-              '<span style="font-size:12px;font-weight:700;color:#f1f5f9">'+timeStr+'</span>' +
-              (isNow ? '<span style="font-size:9px;background:rgba(52,211,153,.2);color:#34d399;padding:1px 5px;border-radius:4px;font-weight:700">● 접속중</span>' : '') +
-              (sess.exited ? '<span style="font-size:9px;color:#475569">이탈</span>' : '') +
+              '<span style="font-size:13px">'+device+'</span>' +
+              '<div>' +
+                '<div style="display:flex;align-items:center;gap:4px">' +
+                  '<span style="font-size:12px;font-weight:800;color:#f1f5f9">'+timeStr+'</span>' +
+                  '<span style="font-size:10px;color:#475569">'+dateStr+'</span>' +
+                  (isNow ? '<span style="font-size:9px;background:rgba(52,211,153,.2);color:#34d399;padding:1px 5px;border-radius:4px;font-weight:700;animation:pulse 2s infinite">● 접속중</span>' : '') +
+                  (hasBook ? '<span style="font-size:9px;background:rgba(255,77,125,.2);color:#FF4D7D;padding:1px 5px;border-radius:4px;font-weight:700">🎯예약</span>' : '') +
+                '</div>' +
+                '<div style="font-size:10px;color:#475569;margin-top:1px">'+tabs+'</div>' +
+              '</div>' +
             '</div>' +
-            '<div style="display:flex;align-items:center;gap:8px">' +
-              '<span style="font-size:11px;color:#64748b">'+dur+'</span>' +
-              '<span style="font-size:10px;color:'+(totalActs>0?'#818cf8':'#334155')+';background:rgba(99,102,241,.1);padding:1px 6px;border-radius:4px">'+totalActs+'개 행동 ▾</span>' +
+            '<div style="text-align:right">' +
+              '<div style="font-size:11px;color:#64748b">'+dur+'</div>' +
+              '<div style="font-size:10px;color:'+(totalActs>0?'#818cf8':'#334155')+';background:rgba(99,102,241,.08);padding:1px 6px;border-radius:4px;margin-top:2px">'+totalActs+'행동 ▾</div>' +
             '</div>' +
           '</div>' +
-          '<div style="font-size:11px;color:#475569;margin-bottom:5px">'+tabs+'</div>' +
-          '<div style="display:flex;gap:4px;flex-wrap:wrap">'+badgeHtml(sess)+'</div>' +
+          '<div style="display:flex;gap:3px;flex-wrap:wrap">'+badgeHtml(sess)+'</div>' +
         '</div>' +
-        // 타임라인 (처음엔 숨김)
-        '<div id="tl-'+sid+'" style="display:none;border-top:1px solid rgba(255,255,255,.06);padding:10px 13px;background:rgba(0,0,0,.2)">' +
-          '<div style="font-size:10px;color:#475569;margin-bottom:8px">행동 타임라인 로딩 중...</div>' +
+        // 타임라인 (숨김)
+        '<div id="tl-'+sid+'" style="display:none;border-top:1px solid rgba(255,255,255,.06);padding:10px 12px;background:rgba(0,0,0,.25)">' +
+          '<div style="font-size:10px;color:#475569">로딩 중...</div>' +
         '</div>' +
       '</div>'
     );
-  }).join('') || '<div style="text-align:center;padding:30px;color:#334155;font-size:13px">오늘 방문자가 없습니다</div>';
+  }).join('') || '<div style="text-align:center;padding:40px;color:#334155;font-size:13px">방문자 데이터가 없습니다</div>';
 
   p.innerHTML =
     '<div style="padding:14px">' +
       // 헤더
-      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">' +
-        '<div style="font-size:15px;font-weight:800;color:#f1f5f9">👁️ 방문자 현황</div>' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">' +
+        '<div style="font-size:16px;font-weight:900;color:#f1f5f9">👁️ 방문자 목록</div>' +
         '<div style="display:flex;align-items:center;gap:6px">' +
-          (nowActive > 0 ? '<span style="font-size:11px;background:rgba(52,211,153,.15);color:#34d399;padding:3px 10px;border-radius:20px;font-weight:700">● 지금 '+nowActive+'명</span>' : '') +
+          (nowActive > 0 ? '<span style="font-size:10px;background:rgba(52,211,153,.15);color:#34d399;padding:3px 8px;border-radius:20px;font-weight:700">● 지금 '+nowActive+'명</span>' : '') +
           '<button onclick="loadVisitors()" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);color:#94a3b8;border-radius:8px;padding:5px 10px;font-size:11px;cursor:pointer;font-family:inherit"><i class="fas fa-sync-alt" style="font-size:10px"></i></button>' +
         '</div>' +
       '</div>' +
-
-      // KPI — 상단 4칸
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">' +
-        _kpiCard('fa-user','오늘 방문', s.today_total+'명', '어제 '+s.yest_total+'명'+diffBadge(s.today_total,s.yest_total), '#6366f1') +
-        _kpiCard('fa-clock','평균 체류', fmtSec(s.today_avg_sec), '7일 누적 '+s.week_total+'명', '#f59e0b') +
-        _kpiCard('fa-mobile-alt','모바일 비율', s.today_total > 0 ? Math.round(s.today_mobile/s.today_total*100)+'%' : '-', '모바일 '+s.today_mobile+' / PC '+s.today_desktop, '#e879f9') +
-        _kpiCard('fa-calendar-check','예약클릭', s.today_booked+'명', '릴스 '+(s.sum_shorts_book||0)+' · 영상 '+(s.sum_feed_book||0)+' · 지도 '+(s.sum_map_book||0), '#FF4D7D') +
+      // 미니 KPI
+      '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px">' +
+        '<div style="background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.2);border-radius:10px;padding:8px;text-align:center"><div style="font-size:16px;font-weight:800;color:#818cf8">'+total+'</div><div style="font-size:9px;color:#64748b">오늘·어제</div></div>' +
+        '<div style="background:rgba(52,211,153,.08);border:1px solid rgba(52,211,153,.15);border-radius:10px;padding:8px;text-align:center"><div style="font-size:16px;font-weight:800;color:#34d399">'+nowActive+'</div><div style="font-size:9px;color:#64748b">접속중</div></div>' +
+        '<div style="background:rgba(232,121,249,.08);border:1px solid rgba(232,121,249,.15);border-radius:10px;padding:8px;text-align:center"><div style="font-size:16px;font-weight:800;color:#e879f9">'+sessions.filter(x=>Number(x.shorts_count)>0||Number(x.feed_card_cnt)>0).length+'</div><div style="font-size:9px;color:#64748b">콘텐츠시청</div></div>' +
+        '<div style="background:rgba(255,77,125,.08);border:1px solid rgba(255,77,125,.15);border-radius:10px;padding:8px;text-align:center"><div style="font-size:16px;font-weight:800;color:#FF4D7D">'+sessions.filter(x=>Number(x.book_count)>0||Number(x.shorts_book)>0||Number(x.feed_book_cnt)>0||Number(x.map_book_cnt)>0).length+'</div><div style="font-size:9px;color:#64748b">예약클릭</div></div>' +
       '</div>' +
-
-      // 1인당 평균 행동량 섹션
-      '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:12px;margin-bottom:10px">' +
-        '<div style="font-size:11px;font-weight:800;color:#94a3b8;margin-bottom:9px">📐 1인당 평균 행동량</div>' +
-        '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">' +
-          _statChip('⚡릴스', n(s.avg_shorts).toFixed(1)+'개', '#e879f9') +
-          _statChip('🎬영상', n(s.avg_feed_card).toFixed(1)+'개', '#818cf8') +
-          _statChip('🗺️지도', n(s.avg_map_pin).toFixed(1)+'곳', '#34d399') +
-        '</div>' +
-        // 세분화 탭별 이용자 수
-        '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;font-size:10px;color:#64748b">' +
-          '<span>릴스 이용 <b style="color:#e879f9">'+s.today_watched+'명</b></span>' +
-          '<span>영상 이용 <b style="color:#818cf8">'+s.used_feed+'명</b></span>' +
-          '<span>지도 이용 <b style="color:#34d399">'+s.used_map+'명</b></span>' +
-          '<span>검색 이용 <b style="color:#fbbf24">'+(s.sum_search||0)+'회</b></span>' +
-        '</div>' +
-      '</div>' +
-
-      // 탭별 합산 그리드
-      '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:12px;margin-bottom:10px">' +
-        '<div style="font-size:11px;font-weight:800;color:#94a3b8;margin-bottom:9px">📊 오늘 탭별 행동 합산</div>' +
-        '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px">' +
-          _statChip('⚡시청', (s.sum_feed_card||0)+n(s.today_watched)+'회', '#e879f9') +
-          _statChip('릴스예약', (s.sum_shorts_book||0)+'회', '#FF4D7D') +
-          _statChip('🎬카드', (s.sum_feed_card||0)+'회', '#818cf8') +
-          _statChip('영상예약', (s.sum_feed_book||0)+'회', '#FF4D7D') +
-          _statChip('📍마커', (s.sum_map_pin||0)+'회', '#34d399') +
-          _statChip('지도예약', (s.sum_map_book||0)+'회', '#FF4D7D') +
-          _statChip('🔍검색', (s.sum_search||0)+'회', '#fbbf24') +
-          _statChip('✉️문의', (s.sum_inquiry||0)+'회', '#34d399') +
-        '</div>' +
-      '</div>' +
-
-      // 전환 퍼널
-      '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:12px;margin-bottom:10px">' +
-        '<div style="font-size:11px;font-weight:800;color:#94a3b8;margin-bottom:9px">🔻 전환 퍼널</div>' +
-        _funnelBar('진입', total, 100, '#6366f1') +
-        _funnelBar('콘텐츠 시청', watched, pct(watched,total), '#e879f9') +
-        _funnelBar('지도 탐색', mapUsed, pct(mapUsed,total), '#34d399') +
-        _funnelBar('검색 사용', searched, pct(searched,total), '#fbbf24') +
-        _funnelBar('예약 클릭', booked, pct(booked,total), '#FF4D7D') +
-      '</div>' +
-
-      // 세션 목록
-      '<div style="font-size:11px;color:#64748b;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">' +
-        '<span>오늘·어제 방문자 (최대 200명)</span>' +
-        '<span style="color:#334155">▾ 클릭하면 행동 타임라인 확인</span>' +
-      '</div>' +
+      // 안내
+      '<div style="font-size:10px;color:#334155;text-align:right;margin-bottom:8px">▾ 카드 클릭 시 업체별 행동 타임라인</div>' +
       cards +
     '</div>';
 }
-
 // 세션 타임라인 펼치기/접기
 const _tlOpen = {};
 async function toggleSessTimeline(sid) {
@@ -7317,13 +7329,260 @@ async function loadAll() {
   _stats  = d;
   _dvRows = Array.isArray(dv) ? dv : [];
   shopData = d.stats || [];
-  renderDashboard();
   if (curTab==='shops') renderShops(shopData);
   if (curTab==='pay')   renderPayTab();
+  if (curTab==='stats') loadStats();
+}
+
+// ── 신규: 통계 탭 로드 (방문자 요약 + 일별추이 + 기존stats 병합)
+let _visitorSummary = null;
+let _dailyTrend = [];
+async function loadStats() {
+  const p = document.getElementById('panel-stats');
+  if (!p) return;
+  p.innerHTML = '<div style="padding:30px;text-align:center;color:#64748b;font-size:13px"><i class="fas fa-spinner fa-spin"></i> 불러오는 중...</div>';
+  try {
+    const [vs, trend] = await Promise.all([
+      fetch('/api/admin/sessions/summary').then(r=>r.json()),
+      fetch('/api/admin/daily-trend').then(r=>r.json()),
+    ]);
+    _visitorSummary = vs;
+    _dailyTrend = Array.isArray(trend) ? trend : [];
+    renderStatsTab(vs, _dailyTrend);
+  } catch(e) {
+    p.innerHTML = '<div style="padding:20px;color:#f87171">로드 실패: '+e.message+'</div>';
+  }
+}
+
+// ── 신규: 업체 랭킹 탭 로드
+let _rankingData = [];
+let _rankingDays = 7;
+async function loadRanking(days) {
+  if (days) _rankingDays = days;
+  const p = document.getElementById('panel-ranking');
+  if (!p) return;
+  p.innerHTML = '<div style="padding:30px;text-align:center;color:#64748b;font-size:13px"><i class="fas fa-spinner fa-spin"></i> 불러오는 중...</div>';
+  try {
+    const data = await fetch('/api/admin/shop-ranking?days='+_rankingDays).then(r=>r.json());
+    _rankingData = Array.isArray(data) ? data : [];
+    renderRankingTab(_rankingData);
+  } catch(e) {
+    p.innerHTML = '<div style="padding:20px;color:#f87171">로드 실패: '+e.message+'</div>';
+  }
 }
 
 // ======================================================
-// 대시보드 탭
+// 통계 탭 렌더링 (완전 재작성)
+// ======================================================
+function renderStatsTab(s, trend) {
+  const p = document.getElementById('panel-stats');
+  if (!p) return;
+  const n = (v) => Number(v) || 0;
+  const fmtSec = (sec) => { sec=n(sec); if(sec<=0) return '-'; if(sec<60) return sec+'초'; return Math.floor(sec/60)+'분 '+(sec%60)+'초'; };
+  const pct = (a,b) => b>0 ? Math.round(a/b*100) : 0;
+
+  // ── KPI 상단 4칸
+  const total = n(s.today_total);
+  const kpiSection =
+    '<div style="padding:14px 14px 0">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">' +
+      '<div style="font-size:16px;font-weight:900;color:#f1f5f9">📊 오늘 통계</div>' +
+      '<button onclick="loadStats()" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);color:#94a3b8;border-radius:8px;padding:6px 12px;font-size:11px;cursor:pointer;font-family:inherit"><i class="fas fa-sync-alt" style="font-size:10px;margin-right:4px"></i>새로고침</button>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:10px">' +
+      _kpiCard('fa-user-friends','오늘 방문자', n(s.today_total)+'명', '어제 '+n(s.yest_total)+'명 / 7일 '+n(s.week_total)+'명', '#6366f1') +
+      _kpiCard('fa-clock','평균 체류시간', fmtSec(n(s.today_avg_sec)), '모바일 '+n(s.today_mobile)+' / PC '+n(s.today_desktop), '#f59e0b') +
+      _kpiCard('fa-fire','예약 클릭', n(s.today_booked)+'명', '릴스 '+n(s.sum_shorts_book)+' · 영상 '+n(s.sum_feed_book)+' · 지도 '+n(s.sum_map_book), '#FF4D7D') +
+      _kpiCard('fa-mobile-alt','모바일 비율', total>0?Math.round(n(s.today_mobile)/total*100)+'%':'-', '릴스 이용 '+n(s.today_watched)+'명', '#e879f9') +
+    '</div>' +
+    '</div>';
+
+  // ── 1인당 평균 행동량
+  const avgSection =
+    '<div style="margin:0 14px 10px;background:linear-gradient(135deg,rgba(99,102,241,.12),rgba(168,85,247,.08));border:1px solid rgba(99,102,241,.25);border-radius:14px;padding:14px">' +
+      '<div style="font-size:11px;font-weight:800;color:#a5b4fc;margin-bottom:10px;display:flex;align-items:center;gap:6px"><i class="fas fa-chart-bar"></i> 1인당 평균 행동량 (오늘 이용자 기준)</div>' +
+      '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">' +
+        _avgChip('⚡ 릴스', n(s.avg_shorts).toFixed(1)+'개', n(s.today_watched)+'명 이용', '#e879f9') +
+        _avgChip('🎬 영상', n(s.avg_feed_card).toFixed(1)+'개', n(s.used_feed)+'명 이용', '#818cf8') +
+        _avgChip('🗺️ 지도', n(s.avg_map_pin).toFixed(1)+'곳', n(s.used_map)+'명 이용', '#34d399') +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px">' +
+        _miniChip('릴스예약', n(s.sum_shorts_book)+'회', '#FF4D7D') +
+        _miniChip('영상예약', n(s.sum_feed_book)+'회', '#FF4D7D') +
+        _miniChip('지도예약', n(s.sum_map_book)+'회', '#FF4D7D') +
+        _miniChip('검색', n(s.sum_search)+'회', '#fbbf24') +
+      '</div>' +
+    '</div>';
+
+  // ── 전환 퍼널
+  const watched  = n(s.today_watched) + n(s.used_feed);
+  const mapUsed  = n(s.used_map);
+  const booked   = n(s.today_booked);
+  const funnelSection =
+    '<div style="margin:0 14px 10px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:14px">' +
+      '<div style="font-size:11px;font-weight:800;color:#94a3b8;margin-bottom:10px"><i class="fas fa-filter" style="margin-right:5px"></i>전환 퍼널</div>' +
+      _funnelRow('👣 진입', total, 100, '#6366f1', '') +
+      _funnelRow('📹 콘텐츠 시청', watched, pct(watched,total), '#e879f9', total>0?'진입자의 '+pct(watched,total)+'%':'') +
+      _funnelRow('🗺️ 지도 탐색', mapUsed, pct(mapUsed,total), '#34d399', watched>0?'시청자의 '+pct(mapUsed,watched)+'%':'') +
+      _funnelRow('🔍 검색 사용', n(s.sum_search), pct(n(s.sum_search),total), '#fbbf24', '') +
+      _funnelRow('🎯 예약 클릭', booked, pct(booked,total), '#FF4D7D', total>0?'진입자의 '+pct(booked,total)+'%':'') +
+    '</div>';
+
+  // ── 7일 일별 추이 바 차트
+  const trendSection = _buildTrendChart(trend);
+
+  p.innerHTML = kpiSection + avgSection + funnelSection + trendSection;
+}
+
+function _avgChip(label, val, sub, color) {
+  return '<div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:12px;padding:10px;text-align:center">' +
+    '<div style="font-size:10px;color:#64748b;margin-bottom:4px">'+label+'</div>' +
+    '<div style="font-size:20px;font-weight:900;color:'+color+'">'+val+'</div>' +
+    '<div style="font-size:9px;color:#475569;margin-top:3px">'+sub+'</div>' +
+  '</div>';
+}
+
+function _miniChip(label, val, color) {
+  return '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);border-radius:8px;padding:6px;text-align:center">' +
+    '<div style="font-size:9px;color:#475569;margin-bottom:2px">'+label+'</div>' +
+    '<div style="font-size:13px;font-weight:800;color:'+color+'">'+val+'</div>' +
+  '</div>';
+}
+
+function _funnelRow(label, count, pctVal, color, sub) {
+  return '<div style="margin-bottom:8px">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">' +
+      '<span style="font-size:11px;color:#cbd5e1">'+label+'</span>' +
+      '<div style="display:flex;align-items:center;gap:8px">' +
+        (sub ? '<span style="font-size:9px;color:#475569">'+sub+'</span>' : '') +
+        '<span style="font-size:12px;font-weight:700;color:'+color+'">'+count+'명 <span style="font-size:10px;font-weight:500;color:#64748b">'+pctVal+'%</span></span>' +
+      '</div>' +
+    '</div>' +
+    '<div style="background:rgba(255,255,255,.06);border-radius:6px;height:8px;overflow:hidden">' +
+      '<div style="width:'+pctVal+'%;height:100%;background:'+color+';border-radius:6px;transition:width .5s"></div>' +
+    '</div>' +
+  '</div>';
+}
+
+function _buildTrendChart(trend) {
+  if (!trend || !trend.length) return '<div style="margin:0 14px 10px;padding:14px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:14px;text-align:center;color:#334155;font-size:12px">7일 추이 데이터 없음</div>';
+  const maxVal = Math.max(...trend.map(r => r.total), 1);
+  const days = ['일','월','화','수','목','금','토'];
+  const bars = trend.map(r => {
+    const h = Math.max(4, Math.round(r.total/maxVal*80));
+    const d = new Date(r.day);
+    const dayLabel = (d.getMonth()+1)+'/'+(d.getDate())+'<br><span style="font-size:8px;color:#475569">'+days[d.getDay()]+'</span>';
+    const bookBar = r.total>0 ? Math.round(r.booked/r.total*h) : 0;
+    return '<div style="display:flex;flex-direction:column;align-items:center;flex:1;gap:3px">' +
+      '<div style="font-size:9px;color:#6366f1;font-weight:700">'+(r.total||0)+'</div>' +
+      '<div style="width:100%;max-width:28px;height:80px;display:flex;flex-direction:column;justify-content:flex-end;gap:1px">' +
+        '<div style="width:100%;border-radius:4px 4px 0 0;background:rgba(255,77,125,.7);height:'+bookBar+'px"></div>' +
+        '<div style="width:100%;border-radius:4px 4px 0 0;background:#6366f1;height:'+(h-bookBar)+'px"></div>' +
+      '</div>' +
+      '<div style="font-size:9px;color:#64748b;text-align:center;line-height:1.2">'+dayLabel+'</div>' +
+    '</div>';
+  }).join('');
+  const legend =
+    '<div style="display:flex;gap:10px;justify-content:flex-end;margin-bottom:6px">' +
+      '<div style="display:flex;align-items:center;gap:3px"><div style="width:8px;height:8px;background:#6366f1;border-radius:2px"></div><span style="font-size:9px;color:#64748b">방문</span></div>' +
+      '<div style="display:flex;align-items:center;gap:3px"><div style="width:8px;height:8px;background:rgba(255,77,125,.7);border-radius:2px"></div><span style="font-size:9px;color:#64748b">예약클릭</span></div>' +
+    '</div>';
+  return '<div style="margin:0 14px 14px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:14px">' +
+    '<div style="font-size:11px;font-weight:800;color:#94a3b8;margin-bottom:8px"><i class="fas fa-chart-bar" style="margin-right:5px"></i>7일 방문 추이</div>' +
+    legend +
+    '<div style="display:flex;align-items:flex-end;gap:4px;height:96px">'+bars+'</div>' +
+  '</div>';
+}
+
+// ======================================================
+// 업체 랭킹 탭 렌더링
+// ======================================================
+function renderRankingTab(data) {
+  const p = document.getElementById('panel-ranking');
+  if (!p) return;
+
+  const fmtSec = (s) => { s=Number(s)||0; if(!s) return '-'; if(s<60) return s+'초'; return Math.floor(s/60)+'분'+(s%60?+(s%60)+'초':''); };
+  const dayBtns =
+    '<div style="display:flex;gap:6px;margin-bottom:12px">' +
+      [['7일','7'],['30일','30'],['전체','365']].map(([label,d]) =>
+        '<button onclick="loadRanking('+d+')" style="flex:1;padding:7px;border:1px solid rgba(255,255,255,'+(String(_rankingDays)===d?'.3':'.08')+');border-radius:8px;background:rgba(255,255,255,'+(String(_rankingDays)===d?'.1':'.03')+');color:'+(String(_rankingDays)===d?'#f1f5f9':'#64748b')+';font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">'+label+'</button>'
+      ).join('') +
+    '</div>';
+
+  if (!data.length) {
+    p.innerHTML = '<div style="padding:14px">'+dayBtns+'<div style="padding:40px;text-align:center;color:#334155;font-size:13px">업체 행동 데이터가 없습니다<br><span style="font-size:11px;color:#475569">방문자가 업체를 조회하면 여기에 표시됩니다</span></div></div>';
+    return;
+  }
+
+  // 상위 3개 하이라이트
+  const top3 = data.slice(0,3);
+  const medals = ['🥇','🥈','🥉'];
+  const top3Html = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px">' +
+    top3.map((shop, i) =>
+      '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,'+(i===0?'.2':'.08')+');border-radius:14px;padding:12px;text-align:center'+(i===0?';box-shadow:0 0 0 1px rgba(251,191,36,.2)':'')+'">' +
+        '<div style="font-size:18px">'+medals[i]+'</div>' +
+        '<div style="font-size:11px;font-weight:800;color:#f1f5f9;margin:4px 0;line-height:1.3">'+shop.shop_name+'</div>' +
+        '<div style="font-size:9px;color:#64748b;margin-bottom:5px">'+shop.shop_cat+'</div>' +
+        '<div style="font-size:16px;font-weight:900;color:#e879f9">'+shop.view_cnt+'</div>' +
+        '<div style="font-size:9px;color:#64748b">총 조회</div>' +
+        '<div style="margin-top:5px;font-size:10px;color:#FF4D7D;font-weight:700">'+(shop.book_cnt>0?'🎯 예약'+shop.book_cnt+'회':'')+'</div>' +
+      '</div>'
+    ).join('') +
+  '</div>';
+
+  // 전체 순위 테이블
+  const maxView = Math.max(...data.map(r => r.view_cnt), 1);
+  const rows = data.map((shop, i) => {
+    const convRate = shop.uniq_sessions > 0 ? Math.round(shop.book_cnt/shop.uniq_sessions*100) : 0;
+    const barW = Math.round(shop.view_cnt/maxView*100);
+    const catColors = {'마사지':'#e879f9','헤드스파':'#818cf8','피부관리':'#34d399','헤어':'#fbbf24','메이크업':'#f87171','왁싱':'#fb923c','반영구':'#a78bfa','병원':'#38bdf8','그외':'#64748b'};
+    const catColor = catColors[shop.shop_cat] || '#64748b';
+    return '<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05)'+(i===data.length-1?';border-bottom:none':'')+'">' +
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">' +
+        '<span style="font-size:12px;font-weight:900;color:'+(i<3?'#fbbf24':'#475569');+';width:18px;flex-shrink:0">'+(i+1)+'</span>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="display:flex;align-items:center;gap:5px;margin-bottom:2px">' +
+            '<span style="font-size:12px;font-weight:700;color:#f1f5f9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+shop.shop_name+'</span>' +
+            '<span style="font-size:9px;background:'+catColor+'22;color:'+catColor+';padding:1px 5px;border-radius:4px;flex-shrink:0">'+shop.shop_cat+'</span>' +
+          '</div>' +
+          '<div style="background:rgba(255,255,255,.06);border-radius:3px;height:4px;overflow:hidden">' +
+            '<div style="width:'+barW+'%;height:100%;background:linear-gradient(90deg,#6366f1,#e879f9);border-radius:3px"></div>' +
+          '</div>' +
+        '</div>' +
+        '<div style="text-align:right;flex-shrink:0">' +
+          '<div style="font-size:13px;font-weight:800;color:#e879f9">'+shop.view_cnt+'</div>' +
+          '<div style="font-size:9px;color:#475569">조회</div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="display:flex;gap:4px;flex-wrap:wrap;padding-left:26px">' +
+        '<span style="font-size:10px;background:rgba(232,121,249,.1);color:#e879f9;padding:1px 6px;border-radius:4px">⚡릴스 '+shop.shorts_cnt+'</span>' +
+        '<span style="font-size:10px;background:rgba(99,102,241,.1);color:#818cf8;padding:1px 6px;border-radius:4px">🎬영상 '+shop.feed_cnt+'</span>' +
+        '<span style="font-size:10px;background:rgba(52,211,153,.1);color:#34d399;padding:1px 6px;border-radius:4px">📍지도 '+shop.map_cnt+'</span>' +
+        (shop.book_cnt>0 ? '<span style="font-size:10px;background:rgba(255,77,125,.15);color:#FF4D7D;padding:1px 6px;border-radius:4px;font-weight:700">🎯예약 '+shop.book_cnt+'회</span>' : '') +
+        '<span style="font-size:10px;background:rgba(255,255,255,.05);color:#64748b;padding:1px 6px;border-radius:4px">👥'+shop.uniq_sessions+'명</span>' +
+        (shop.total_view_sec>0 ? '<span style="font-size:10px;background:rgba(251,191,36,.1);color:#fbbf24;padding:1px 6px;border-radius:4px">⏱'+fmtSec(shop.total_view_sec)+'</span>' : '') +
+        (convRate>0 ? '<span style="font-size:10px;background:rgba(255,77,125,.2);color:#FF4D7D;padding:1px 6px;border-radius:4px;font-weight:800">전환 '+convRate+'%</span>' : '') +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  p.innerHTML =
+    '<div style="padding:14px">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">' +
+        '<div style="font-size:16px;font-weight:900;color:#f1f5f9">🏆 업체 인기 순위</div>' +
+        '<button onclick="loadRanking()" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);color:#94a3b8;border-radius:8px;padding:6px 10px;font-size:11px;cursor:pointer;font-family:inherit"><i class="fas fa-sync-alt" style="font-size:10px"></i></button>' +
+      '</div>' +
+      dayBtns +
+      (data.length >= 3 ? top3Html : '') +
+      '<div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:12px">' +
+        '<div style="font-size:11px;font-weight:800;color:#94a3b8;margin-bottom:8px">전체 순위 ('+data.length+'개 업체)</div>' +
+        rows +
+      '</div>' +
+    '</div>';
+}
+
+// ======================================================
+// 대시보드 탭 (기존 유지 — loadAll에서 호출)
 // ======================================================
 function renderDashboard() {
   const d   = _stats;
@@ -8647,7 +8906,13 @@ async function delShop(id,name){
 
 /* 시작 */
 loadAll();
-setInterval(loadAll, 30000);
+loadStats();   // 통계 탭 초기 로드
+setInterval(() => {
+  loadAll();
+  if (curTab === 'stats')   loadStats();
+  if (curTab === 'ranking') loadRanking();
+  if (curTab === 'visitors') loadVisitors();
+}, 30000);
 </script>
 </body>
 </html>`
