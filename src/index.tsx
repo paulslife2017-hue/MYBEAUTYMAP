@@ -1079,10 +1079,15 @@ app.post('/api/admin/upload-thumbnail', async (c) => {
 
 // 목록 조회 (사용자 - 활성 항목만)
 app.get('/api/shorts', async (c) => {
-  const rows = await sql`
-    SELECT * FROM shorts_items WHERE active = true ORDER BY sort_order ASC, id DESC
-  `
-  return c.json(rows)
+  try {
+    const rows = await sql`
+      SELECT * FROM shorts_items WHERE active = true ORDER BY sort_order ASC, id DESC
+    `
+    return c.json(rows)
+  } catch (e) {
+    console.error('[/api/shorts] DB error:', e)
+    return c.json([], 200)
+  }
 })
 
 // 전체 목록 (관리자)
@@ -3560,6 +3565,13 @@ function filterShorts(btn, cat) {
   loadShorts(cat);
 }
 
+// 불러오기 실패 시 재시도
+function retryLoadShorts() {
+  _shortsLoaded = false;
+  _shortsItems  = [];
+  loadShorts(_shortsCat);
+}
+
 async function loadShorts(cat) {
   cat = cat || 'all';
   _shortsCat = cat;
@@ -3571,10 +3583,21 @@ async function loadShorts(cat) {
     _shortsLoaded = true;
     el.innerHTML = '<div class="shorts-empty">불러오는 중...</div>';
     try {
-      _shortsItems = await fetch('/api/shorts').then(r => r.json());
+      const res = await fetch('/api/shorts');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      _shortsItems = Array.isArray(data) ? data : [];
     } catch(e) {
-      el.innerHTML = '<div class="shorts-empty">불러오기 실패</div>';
+      console.error('[loadShorts] fetch error:', e);
       _shortsLoaded = false;
+      el.innerHTML = '<div class="shorts-empty">'
+        + '<div style="font-size:32px;margin-bottom:12px">😥</div>'
+        + '<div style="margin-bottom:16px">영상을 불러오지 못했어요</div>'
+        + '<button onclick="retryLoadShorts()" style="'
+          + 'background:var(--pink);color:#fff;border:none;border-radius:20px;'
+          + 'padding:10px 24px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">'
+          + '🔄 다시 시도</button>'
+        + '</div>';
       return;
     }
   }
