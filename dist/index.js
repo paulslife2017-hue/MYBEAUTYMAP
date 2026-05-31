@@ -285,9 +285,9 @@ buffer/index.js:
     WHERE visit_date >= ${r}
       AND visit_date <= ${i}
     ORDER BY visit_date ASC
-  `,y={};h.forEach(x=>{y[x.visit_date]=parseInt(x.visit_cnt)||0});const b=h.reduce((x,l)=>x+(parseInt(l.visit_cnt)||0),0);return e.json({year:t,month:s,monthTotal:{views:parseInt(f.views)||0,feedSP:parseInt(f.feed_sp)||0,mapSP:parseInt(f.map_sp)||0,visits:b},daily:a.map(x=>({date:x.stat_date,visits:y[x.stat_date]||0,views:parseInt(x.views)||0,feedSP:parseInt(x.feed_sp)||0,mapSP:parseInt(x.map_sp)||0,activeShops:parseInt(x.active_shops)||0})),shopDetail:o.map(x=>({id:x.id,name:x.name,category:x.category,thumbnail:x.thumbnail,views:parseInt(x.views)||0,feedSP:parseInt(x.feed_sp)||0,mapSP:parseInt(x.map_sp)||0}))})});j.get("/api/admin/inquiries",async e=>{const t=await R`SELECT * FROM inquiries ORDER BY created_at DESC`;return e.json(t)});j.get("/favicon.ico",e=>Hi());j.get("/favicon.svg",e=>Hi());function Hi(e){return new Response('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#FF4D7D"/><text x="16" y="23" font-size="18" text-anchor="middle">💄</text></svg>',{headers:{"Content-Type":"image/svg+xml","Cache-Control":"public,max-age=86400"}})}j.get("/og-image.jpg",e=>{try{const t=ia.join(process.cwd(),"public","og-image.jpg"),s=ta.readFileSync(t);return new Response(s,{headers:{"Content-Type":"image/jpeg","Cache-Control":"public,max-age=86400"}})}catch{return e.notFound()}});j.post("/api/admin/upload-thumbnail",async e=>{const t=await e.req.json(),{shopId:s,dataUrl:r}=t;return!r||!s?e.json({error:"required"},400):(await R`UPDATE shops SET thumbnail = ${r} WHERE id = ${s}`,e.json({ok:!0,url:r}))});j.get("/api/shorts",async e=>{const t=await R`
-    SELECT * FROM shorts_items WHERE active = true ORDER BY sort_order ASC, id DESC
-  `;return e.json(t)});j.get("/api/admin/shorts",async e=>{const t=await R`SELECT * FROM shorts_items ORDER BY sort_order ASC, id DESC`;return e.json(t)});j.post("/api/admin/shorts",async e=>{const t=await e.req.json(),s=await R`
+  `,y={};h.forEach(x=>{y[x.visit_date]=parseInt(x.visit_cnt)||0});const b=h.reduce((x,l)=>x+(parseInt(l.visit_cnt)||0),0);return e.json({year:t,month:s,monthTotal:{views:parseInt(f.views)||0,feedSP:parseInt(f.feed_sp)||0,mapSP:parseInt(f.map_sp)||0,visits:b},daily:a.map(x=>({date:x.stat_date,visits:y[x.stat_date]||0,views:parseInt(x.views)||0,feedSP:parseInt(x.feed_sp)||0,mapSP:parseInt(x.map_sp)||0,activeShops:parseInt(x.active_shops)||0})),shopDetail:o.map(x=>({id:x.id,name:x.name,category:x.category,thumbnail:x.thumbnail,views:parseInt(x.views)||0,feedSP:parseInt(x.feed_sp)||0,mapSP:parseInt(x.map_sp)||0}))})});j.get("/api/admin/inquiries",async e=>{const t=await R`SELECT * FROM inquiries ORDER BY created_at DESC`;return e.json(t)});j.get("/favicon.ico",e=>Hi());j.get("/favicon.svg",e=>Hi());function Hi(e){return new Response('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#FF4D7D"/><text x="16" y="23" font-size="18" text-anchor="middle">💄</text></svg>',{headers:{"Content-Type":"image/svg+xml","Cache-Control":"public,max-age=86400"}})}j.get("/og-image.jpg",e=>{try{const t=ia.join(process.cwd(),"public","og-image.jpg"),s=ta.readFileSync(t);return new Response(s,{headers:{"Content-Type":"image/jpeg","Cache-Control":"public,max-age=86400"}})}catch{return e.notFound()}});j.post("/api/admin/upload-thumbnail",async e=>{const t=await e.req.json(),{shopId:s,dataUrl:r}=t;return!r||!s?e.json({error:"required"},400):(await R`UPDATE shops SET thumbnail = ${r} WHERE id = ${s}`,e.json({ok:!0,url:r}))});j.get("/api/shorts",async e=>{try{const t=await R`
+      SELECT * FROM shorts_items WHERE active = true ORDER BY sort_order ASC, id DESC
+    `;return e.json(t)}catch(t){return console.error("[/api/shorts] DB error:",t),e.json([],200)}});j.get("/api/admin/shorts",async e=>{const t=await R`SELECT * FROM shorts_items ORDER BY sort_order ASC, id DESC`;return e.json(t)});j.post("/api/admin/shorts",async e=>{const t=await e.req.json(),s=await R`
     INSERT INTO shorts_items (name, category, address, youtube_id, smart_place_url, sort_order, active)
     VALUES (${t.name||""}, ${t.category||""}, ${t.address||""}, ${t.youtubeId||""}, ${t.smartPlaceUrl||""}, ${t.sortOrder||0}, ${t.active!==!1})
     RETURNING *
@@ -2181,6 +2181,13 @@ function filterShorts(btn, cat) {
   loadShorts(cat);
 }
 
+// 불러오기 실패 시 재시도
+function retryLoadShorts() {
+  _shortsLoaded = false;
+  _shortsItems  = [];
+  loadShorts(_shortsCat);
+}
+
 async function loadShorts(cat) {
   cat = cat || 'all';
   _shortsCat = cat;
@@ -2192,10 +2199,21 @@ async function loadShorts(cat) {
     _shortsLoaded = true;
     el.innerHTML = '<div class="shorts-empty">불러오는 중...</div>';
     try {
-      _shortsItems = await fetch('/api/shorts').then(r => r.json());
+      const res = await fetch('/api/shorts');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      _shortsItems = Array.isArray(data) ? data : [];
     } catch(e) {
-      el.innerHTML = '<div class="shorts-empty">불러오기 실패</div>';
+      console.error('[loadShorts] fetch error:', e);
       _shortsLoaded = false;
+      el.innerHTML = '<div class="shorts-empty">'
+        + '<div style="font-size:32px;margin-bottom:12px">😥</div>'
+        + '<div style="margin-bottom:16px">영상을 불러오지 못했어요</div>'
+        + '<button onclick="retryLoadShorts()" style="'
+          + 'background:var(--pink);color:#fff;border:none;border-radius:20px;'
+          + 'padding:10px 24px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">'
+          + '🔄 다시 시도</button>'
+        + '</div>';
       return;
     }
   }
