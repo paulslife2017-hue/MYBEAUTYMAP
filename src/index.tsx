@@ -3883,7 +3883,8 @@ function _shortsDestroyAll() {
   Object.values(_ytPlayers).forEach(p => { try { p.destroy(); } catch(e) {} });
   _ytPlayers = {};
   _shortsActiveIdx = -1;
-  _shortsUserGestured = false;
+  // _shortsUserGestured는 리셋하지 않음:
+  // 카테고리 변경/탭 이동 후에도 이미 사용자 제스처가 있었으면 autoplay 유지
 }
 
 function initShortsObserver(screen) {
@@ -3985,7 +3986,8 @@ function feedThumbFallback(img, shopThumb) {
 }
 
 function feedCardHTML(s) {
-  // iframe을 처음부터 삽입 (autoplay=0, mute=1)
+  // iframe을 처음부터 삽입 (autoplay=1, mute=1)
+  // 브라우저 autoplay 정책: mute=1 필수 (음소거 상태로 자동재생)
   // 화면에 들어오면 자동재생, 이탈하면 src 비워서 정지
   const ytArea = s.youtubeId
     ? '<div class="yt-area"'
@@ -3993,7 +3995,7 @@ function feedCardHTML(s) {
         + '<iframe class="feed-iframe"'
         + ' src=""'
         + ' data-src="https://www.youtube.com/embed/' + s.youtubeId
-        + '?autoplay=1&mute=0&playsinline=1&rel=0&modestbranding=1&controls=1"'
+        + '?autoplay=1&mute=1&playsinline=1&rel=0&modestbranding=1&controls=1"'
         + ' allow="autoplay;encrypted-media;picture-in-picture;fullscreen"'
         + ' allowfullscreen></iframe>'
       + '</div>'
