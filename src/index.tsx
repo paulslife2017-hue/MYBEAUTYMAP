@@ -204,8 +204,10 @@ function calcDist(la1: number, lo1: number, la2: number, lo2: number) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// 자동 마이그레이션 — 첫 요청 전에 반드시 완료 보장 (once-flag 패턴)
+// 자동 마이그레이션 — schema_migrations 버전 테이블로 1회만 실행
+// DB가 깨어있을 때 딱 1번만 쿼리 → Neon 컴퓨트 시간 낭비 방지
 // ══════════════════════════════════════════════════════════════════════════
+const MIGRATION_VERSION = 10  // 마이그레이션 추가 시 +1
 let _migrationDone = false
 let _migrationPromise: Promise<void> | null = null
 
@@ -214,78 +216,138 @@ async function runMigrations() {
   if (_migrationPromise) return _migrationPromise
   _migrationPromise = (async () => {
     try {
-      await sql`ALTER TABLE shops ADD COLUMN IF NOT EXISTS report_token   TEXT`
-    } catch (_) {}
-    try {
-      await sql`ALTER TABLE shops ADD COLUMN IF NOT EXISTS is_recommended BOOLEAN NOT NULL DEFAULT false`
-    } catch (_) {}
-    try {
-      await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS feed_view    INTEGER NOT NULL DEFAULT 0`
-    } catch (_) {}
-    try {
-      await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS catalog_view INTEGER NOT NULL DEFAULT 0`
-    } catch (_) {}
-    try {
-      await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS map_view     INTEGER NOT NULL DEFAULT 0`
-    } catch (_) {}
-    try {
-      await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS vts_feed     INTEGER NOT NULL DEFAULT 0`
-    } catch (_) {}
-    try {
-      await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS vts_catalog  INTEGER NOT NULL DEFAULT 0`
-    } catch (_) {}
-    try {
-      await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS vts_map      INTEGER NOT NULL DEFAULT 0`
-    } catch (_) {}
-    try {
-      await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS rec_view     INTEGER NOT NULL DEFAULT 0`
-    } catch (_) {}
-    // 꿀템 테이블
-    try {
-      await sql`CREATE TABLE IF NOT EXISTS honey_items (
-        id           SERIAL PRIMARY KEY,
-        title        TEXT    NOT NULL,
-        description  TEXT    NOT NULL DEFAULT '',
-        youtube_id   TEXT    NOT NULL DEFAULT '',
-        coupang_url  TEXT    NOT NULL DEFAULT '',
-        coupang_url2 TEXT    NOT NULL DEFAULT '',
-        price        TEXT    NOT NULL DEFAULT '',
-        tags         TEXT[]  NOT NULL DEFAULT '{}',
-        sort_order   INTEGER NOT NULL DEFAULT 0,
-        active       BOOLEAN NOT NULL DEFAULT true,
-        created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      )`
-    } catch (_) {}
-    // 기존 honey_items 테이블에 coupang_url2 컬럼 추가 (없는 경우)
-    try {
-      await sql`ALTER TABLE honey_items ADD COLUMN IF NOT EXISTS coupang_url2 TEXT NOT NULL DEFAULT ''`
-    } catch (_) {}
-    // 숏폼 전용 테이블
-    try {
-      await sql`CREATE TABLE IF NOT EXISTS shorts_items (
-        id               SERIAL PRIMARY KEY,
-        name             TEXT    NOT NULL DEFAULT '',
-        category         TEXT    NOT NULL DEFAULT '',
-        address          TEXT    NOT NULL DEFAULT '',
-        youtube_id       TEXT    NOT NULL DEFAULT '',
-        smart_place_url  TEXT    NOT NULL DEFAULT '',
-        sort_order       INTEGER NOT NULL DEFAULT 0,
-        active           BOOLEAN NOT NULL DEFAULT true,
-        view_cnt         INTEGER NOT NULL DEFAULT 0,
-        sp_cnt           INTEGER NOT NULL DEFAULT 0,
-        created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      )`
-      // 기존 테이블에 없는 컬럼 추가
-      try { await sql`ALTER TABLE shorts_items ADD COLUMN IF NOT EXISTS smart_place_url TEXT NOT NULL DEFAULT ''` } catch(_){}
-      try { await sql`ALTER TABLE shorts_items ADD COLUMN IF NOT EXISTS view_cnt INTEGER NOT NULL DEFAULT 0` } catch(_){}
-      try { await sql`ALTER TABLE shorts_items ADD COLUMN IF NOT EXISTS sp_cnt INTEGER NOT NULL DEFAULT 0` } catch(_){}
-    } catch (_) {}
-    _migrationDone = true
+      // 버전 테이블 생성 (없으면)
+      await sql`
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+          version     INTEGER PRIMARY KEY,
+          applied_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `
+      // 이미 현재 버전이면 즉시 종료 (DB 쿼리 1개로 끝)
+      const rows = await sql`SELECT version FROM schema_migrations WHERE version = ${MIGRATION_VERSION}`
+      if (rows.length > 0) { _migrationDone = true; return }
+
+      // ── 테이블 생성 ──────────────────────────────────────────────────
+      await sql`
+        CREATE TABLE IF NOT EXISTS daily_stats (
+          shop_id      INTEGER NOT NULL,
+          stat_date    DATE    NOT NULL,
+          view_cnt     INTEGER NOT NULL DEFAULT 0,
+          feed_sp      INTEGER NOT NULL DEFAULT 0,
+          map_sp       INTEGER NOT NULL DEFAULT 0,
+          feed_view    INTEGER NOT NULL DEFAULT 0,
+          catalog_view INTEGER NOT NULL DEFAULT 0,
+          map_view     INTEGER NOT NULL DEFAULT 0,
+          vts_feed     INTEGER NOT NULL DEFAULT 0,
+          vts_catalog  INTEGER NOT NULL DEFAULT 0,
+          vts_map      INTEGER NOT NULL DEFAULT 0,
+          rec_view     INTEGER NOT NULL DEFAULT 0,
+          PRIMARY KEY (shop_id, stat_date)
+        )
+      `
+      await sql`
+        CREATE TABLE IF NOT EXISTS honey_items (
+          id           SERIAL PRIMARY KEY,
+          title        TEXT    NOT NULL,
+          description  TEXT    NOT NULL DEFAULT '',
+          youtube_id   TEXT    NOT NULL DEFAULT '',
+          coupang_url  TEXT    NOT NULL DEFAULT '',
+          coupang_url2 TEXT    NOT NULL DEFAULT '',
+          price        TEXT    NOT NULL DEFAULT '',
+          tags         TEXT[]  NOT NULL DEFAULT '{}',
+          sort_order   INTEGER NOT NULL DEFAULT 0,
+          active       BOOLEAN NOT NULL DEFAULT true,
+          created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `
+      await sql`
+        CREATE TABLE IF NOT EXISTS shorts_items (
+          id               SERIAL PRIMARY KEY,
+          name             TEXT    NOT NULL DEFAULT '',
+          category         TEXT    NOT NULL DEFAULT '',
+          address          TEXT    NOT NULL DEFAULT '',
+          youtube_id       TEXT    NOT NULL DEFAULT '',
+          smart_place_url  TEXT    NOT NULL DEFAULT '',
+          sort_order       INTEGER NOT NULL DEFAULT 0,
+          active           BOOLEAN NOT NULL DEFAULT true,
+          view_cnt         INTEGER NOT NULL DEFAULT 0,
+          sp_cnt           INTEGER NOT NULL DEFAULT 0,
+          created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `
+      await sql`
+        CREATE TABLE IF NOT EXISTS shorts_daily_stats (
+          shorts_id  INTEGER NOT NULL,
+          stat_date  DATE    NOT NULL,
+          view_cnt   INTEGER NOT NULL DEFAULT 0,
+          sp_cnt     INTEGER NOT NULL DEFAULT 0,
+          PRIMARY KEY (shorts_id, stat_date)
+        )
+      `
+      await sql`
+        CREATE TABLE IF NOT EXISTS visitor_sessions (
+          id            TEXT    PRIMARY KEY,
+          entered_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          last_seen     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          device        TEXT    NOT NULL DEFAULT 'unknown',
+          duration_sec  INTEGER NOT NULL DEFAULT 0,
+          tabs_visited  TEXT[]  NOT NULL DEFAULT '{}',
+          shorts_count  INTEGER NOT NULL DEFAULT 0,
+          shorts_book   INTEGER NOT NULL DEFAULT 0,
+          feed_card_cnt INTEGER NOT NULL DEFAULT 0,
+          feed_book_cnt INTEGER NOT NULL DEFAULT 0,
+          map_pin_cnt   INTEGER NOT NULL DEFAULT 0,
+          map_book_cnt  INTEGER NOT NULL DEFAULT 0,
+          search_cnt    INTEGER NOT NULL DEFAULT 0,
+          inquiry_cnt   INTEGER NOT NULL DEFAULT 0,
+          book_count    INTEGER NOT NULL DEFAULT 0,
+          exited        BOOLEAN NOT NULL DEFAULT false
+        )
+      `
+      await sql`
+        CREATE TABLE IF NOT EXISTS session_events (
+          id          BIGSERIAL PRIMARY KEY,
+          session_id  TEXT        NOT NULL,
+          occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          event_type  TEXT        NOT NULL,
+          shop_id     INTEGER,
+          shop_name   TEXT,
+          shop_cat    TEXT,
+          viewed_sec  INTEGER     NOT NULL DEFAULT 0
+        )
+      `
+      await sql`CREATE INDEX IF NOT EXISTS idx_se_session  ON session_events(session_id)`
+      await sql`CREATE INDEX IF NOT EXISTS idx_se_occurred ON session_events(occurred_at)`
+
+      // ── 기존 테이블 컬럼 추가 (IF NOT EXISTS로 안전하게) ─────────────
+      await sql`ALTER TABLE shops             ADD COLUMN IF NOT EXISTS report_token   TEXT`
+      await sql`ALTER TABLE shops             ADD COLUMN IF NOT EXISTS is_recommended BOOLEAN NOT NULL DEFAULT false`
+      await sql`ALTER TABLE daily_stats       ADD COLUMN IF NOT EXISTS feed_view      INTEGER NOT NULL DEFAULT 0`
+      await sql`ALTER TABLE daily_stats       ADD COLUMN IF NOT EXISTS catalog_view   INTEGER NOT NULL DEFAULT 0`
+      await sql`ALTER TABLE daily_stats       ADD COLUMN IF NOT EXISTS map_view       INTEGER NOT NULL DEFAULT 0`
+      await sql`ALTER TABLE daily_stats       ADD COLUMN IF NOT EXISTS vts_feed       INTEGER NOT NULL DEFAULT 0`
+      await sql`ALTER TABLE daily_stats       ADD COLUMN IF NOT EXISTS vts_catalog    INTEGER NOT NULL DEFAULT 0`
+      await sql`ALTER TABLE daily_stats       ADD COLUMN IF NOT EXISTS vts_map        INTEGER NOT NULL DEFAULT 0`
+      await sql`ALTER TABLE daily_stats       ADD COLUMN IF NOT EXISTS rec_view       INTEGER NOT NULL DEFAULT 0`
+      await sql`ALTER TABLE honey_items       ADD COLUMN IF NOT EXISTS coupang_url2   TEXT    NOT NULL DEFAULT ''`
+      await sql`ALTER TABLE shorts_items      ADD COLUMN IF NOT EXISTS smart_place_url TEXT   NOT NULL DEFAULT ''`
+      await sql`ALTER TABLE shorts_items      ADD COLUMN IF NOT EXISTS view_cnt        INTEGER NOT NULL DEFAULT 0`
+      await sql`ALTER TABLE shorts_items      ADD COLUMN IF NOT EXISTS sp_cnt          INTEGER NOT NULL DEFAULT 0`
+      await sql`ALTER TABLE session_events    ADD COLUMN IF NOT EXISTS viewed_sec      INTEGER NOT NULL DEFAULT 0`
+
+      // ── 버전 기록 ────────────────────────────────────────────────────
+      await sql`INSERT INTO schema_migrations (version) VALUES (${MIGRATION_VERSION}) ON CONFLICT DO NOTHING`
+      _migrationDone = true
+    } catch (e) {
+      console.error('[migration] error:', e)
+      // 실패해도 앱은 계속 동작 (다음 요청에서 재시도)
+      _migrationPromise = null
+    }
   })()
   return _migrationPromise
 }
 
-// 모든 요청 처리 전 마이그레이션 완료 보장
+// 첫 요청에서만 마이그레이션 실행 (이후엔 _migrationDone=true로 즉시 리턴)
 app.use('*', async (_c, next) => {
   await runMigrations()
   return next()
@@ -560,14 +622,6 @@ app.post('/api/track/view/:id', async (c) => {
   await sql`INSERT INTO stats (shop_id, view_cnt) VALUES (${id}, 1)
       ON CONFLICT (shop_id) DO UPDATE SET view_cnt = stats.view_cnt + 1`
 
-  // daily_stats: view_cnt(합계) + 출처별 컬럼 동시 업데이트
-  // feed_view / catalog_view / map_view 컬럼이 없으면 ADD COLUMN (마이그레이션 자동화)
-  try {
-    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS feed_view    INTEGER NOT NULL DEFAULT 0`
-    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS catalog_view INTEGER NOT NULL DEFAULT 0`
-    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS map_view     INTEGER NOT NULL DEFAULT 0`
-  } catch (_) {}
-
   if (source === 'feed') {
     await sql`INSERT INTO daily_stats (shop_id, stat_date, view_cnt, feed_view)
                 VALUES (${id}, ${today}, 1, 1)
@@ -596,13 +650,6 @@ app.post('/api/track/sp/:id', async (c) => {
   // viewSrc: 영상을 본 출처 ('feed'|'catalog'|'map'|null) — 전환 분석용
   let viewSrc: string | null = null
   try { const b = await c.req.json(); viewSrc = b?.viewSrc || null } catch (_) {}
-
-  // view_to_sp 컬럼 자동 추가 (마이그레이션)
-  try {
-    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS vts_feed    INTEGER NOT NULL DEFAULT 0`
-    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS vts_catalog INTEGER NOT NULL DEFAULT 0`
-    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS vts_map     INTEGER NOT NULL DEFAULT 0`
-  } catch (_) {}
 
   // feed_sp 누적 (합계)
   await sql`INSERT INTO stats (shop_id, feed_sp) VALUES (${id}, 1)
@@ -641,12 +688,6 @@ app.post('/api/track/mapsp/:id', async (c) => {
   const today = kstToday()
   let viewSrc: string | null = null
   try { const b = await c.req.json(); viewSrc = b?.viewSrc || null } catch (_) {}
-
-  try {
-    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS vts_feed    INTEGER NOT NULL DEFAULT 0`
-    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS vts_catalog INTEGER NOT NULL DEFAULT 0`
-    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS vts_map     INTEGER NOT NULL DEFAULT 0`
-  } catch (_) {}
 
   await sql`INSERT INTO stats (shop_id, map_sp) VALUES (${id}, 1)
       ON CONFLICT (shop_id) DO UPDATE SET map_sp = stats.map_sp + 1`
@@ -703,32 +744,13 @@ app.post('/api/admin/reset-stats', async (c) => {
   return c.json({ ok: true })
 })
 
-// ── daily_stats 테이블 초기화 (최초 1회) ─────────────────────────────────
+// ── daily_stats 테이블 초기화 (마이그레이션 강제 재실행) ──────────────────
 app.post('/api/admin/init-daily-stats', async (c) => {
-  await sql`
-    CREATE TABLE IF NOT EXISTS daily_stats (
-      shop_id      INTEGER NOT NULL,
-      stat_date    DATE    NOT NULL,
-      view_cnt     INTEGER NOT NULL DEFAULT 0,
-      feed_sp      INTEGER NOT NULL DEFAULT 0,
-      map_sp       INTEGER NOT NULL DEFAULT 0,
-      feed_view    INTEGER NOT NULL DEFAULT 0,
-      catalog_view INTEGER NOT NULL DEFAULT 0,
-      map_view     INTEGER NOT NULL DEFAULT 0,
-      PRIMARY KEY (shop_id, stat_date)
-    )
-  `
-  // 기존 테이블에 컬럼 추가 (이미 존재하면 무시)
-  await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS feed_view    INTEGER NOT NULL DEFAULT 0`
-  await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS catalog_view INTEGER NOT NULL DEFAULT 0`
-  await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS map_view     INTEGER NOT NULL DEFAULT 0`
-  await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS vts_feed     INTEGER NOT NULL DEFAULT 0`
-  await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS vts_catalog  INTEGER NOT NULL DEFAULT 0`
-  await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS vts_map      INTEGER NOT NULL DEFAULT 0`
-  await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS rec_view     INTEGER NOT NULL DEFAULT 0`
-  // shops 테이블 컬럼 추가
-  await sql`ALTER TABLE shops ADD COLUMN IF NOT EXISTS report_token   TEXT`
-  await sql`ALTER TABLE shops ADD COLUMN IF NOT EXISTS is_recommended BOOLEAN NOT NULL DEFAULT false`
+  // schema_migrations 버전을 리셋해서 다음 요청에 마이그레이션 재실행
+  _migrationDone = false
+  _migrationPromise = null
+  await sql`DELETE FROM schema_migrations WHERE version = ${MIGRATION_VERSION}`
+  await runMigrations()
   return c.json({ ok: true })
 })
 
@@ -736,27 +758,6 @@ app.post('/api/admin/init-daily-stats', async (c) => {
 app.get('/api/admin/stats', async (c) => {
   const today     = kstToday()
   const yesterday = kstYesterday()
-
-  // daily_stats 테이블 자동 생성 (없으면) + 출처별 컬럼 마이그레이션
-  await sql`
-    CREATE TABLE IF NOT EXISTS daily_stats (
-      shop_id      INTEGER NOT NULL,
-      stat_date    DATE    NOT NULL,
-      view_cnt     INTEGER NOT NULL DEFAULT 0,
-      feed_sp      INTEGER NOT NULL DEFAULT 0,
-      map_sp       INTEGER NOT NULL DEFAULT 0,
-      feed_view    INTEGER NOT NULL DEFAULT 0,
-      catalog_view INTEGER NOT NULL DEFAULT 0,
-      map_view     INTEGER NOT NULL DEFAULT 0,
-      PRIMARY KEY (shop_id, stat_date)
-    )
-  `
-  // 기존 테이블에 신규 컬럼 추가 (없으면)
-  try {
-    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS feed_view    INTEGER NOT NULL DEFAULT 0`
-    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS catalog_view INTEGER NOT NULL DEFAULT 0`
-    await sql`ALTER TABLE daily_stats ADD COLUMN IF NOT EXISTS map_view     INTEGER NOT NULL DEFAULT 0`
-  } catch (_) {}
 
   // 업체별 누적 통계 (랭킹용)
   const rows = await sql`
@@ -1133,7 +1134,9 @@ app.delete('/api/admin/shorts/:id', async (c) => {
 })
 
 // shorts_daily_stats 테이블 자동 생성 헬퍼
+let _shortsDailyStatsDone = false
 async function ensureShortsDailyStats() {
+  if (_shortsDailyStatsDone) return
   await sql`
     CREATE TABLE IF NOT EXISTS shorts_daily_stats (
       shorts_id  INTEGER NOT NULL,
@@ -1143,6 +1146,7 @@ async function ensureShortsDailyStats() {
       PRIMARY KEY (shorts_id, stat_date)
     )
   `
+  _shortsDailyStatsDone = true
 }
 
 // 숏폼 조회수 트래킹 (누적 + 일별)
@@ -1299,7 +1303,9 @@ app.get('/api/admin/shorts/stats/item/:id', async (c) => {
 // 👁️ 방문자 세션 추적 API
 // ══════════════════════════════════════════════════════════════════════════
 
+let _sessionsTableDone = false
 async function ensureSessionsTable() {
+  if (_sessionsTableDone) return
   await sql`
     CREATE TABLE IF NOT EXISTS visitor_sessions (
       id            TEXT    PRIMARY KEY,
@@ -1320,13 +1326,7 @@ async function ensureSessionsTable() {
       exited        BOOLEAN NOT NULL DEFAULT false
     )
   `
-  // 기존 테이블에 새 컬럼 없으면 추가 (마이그레이션)
-  const newCols = ['shorts_book','feed_card_cnt','feed_book_cnt','map_pin_cnt','map_book_cnt','search_cnt','inquiry_cnt']
-  for (const col of newCols) {
-    try {
-      await sql`ALTER TABLE visitor_sessions ADD COLUMN IF NOT EXISTS ${sql.unsafe(col)} INTEGER NOT NULL DEFAULT 0`
-    } catch(_) { /* 이미 존재하면 무시 */ }
-  }
+  _sessionsTableDone = true
 }
 
 // 세션 생성 (첫 진입)
@@ -1383,7 +1383,9 @@ app.post('/api/track/session/update', async (c) => {
 })
 
 // ── 업체별 이벤트 로그 테이블 ─────────────────────────────────────────────
+let _eventsTableDone = false
 async function ensureEventsTable() {
+  if (_eventsTableDone) return
   await sql`
     CREATE TABLE IF NOT EXISTS session_events (
       id          BIGSERIAL PRIMARY KEY,
@@ -1398,7 +1400,7 @@ async function ensureEventsTable() {
   `
   await sql`CREATE INDEX IF NOT EXISTS idx_se_session ON session_events(session_id)`
   await sql`CREATE INDEX IF NOT EXISTS idx_se_occurred ON session_events(occurred_at)`
-  try { await sql`ALTER TABLE session_events ADD COLUMN IF NOT EXISTS viewed_sec INTEGER NOT NULL DEFAULT 0` } catch(_){}
+  _eventsTableDone = true
 }
 
 // 업체 이벤트 기록
@@ -1782,10 +1784,6 @@ app.get('/c/:category/:region', async (c) => {
 // ── report_token 생성 (관리자용) ─────────────────────────────────────────
 app.post('/api/admin/shops/:id/report-token', async (c) => {
   const id = +c.req.param('id')
-  // report_token 컬럼 자동 마이그레이션
-  try {
-    await sql`ALTER TABLE shops ADD COLUMN IF NOT EXISTS report_token TEXT`
-  } catch (_) {}
   // 랜덤 토큰 생성 (12자리 hex)
   const token = Array.from({length: 12}, () => Math.floor(Math.random()*16).toString(16)).join('')
   const rows = await sql`
