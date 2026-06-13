@@ -3680,26 +3680,73 @@ async function loadShorts(cat) {
   _shortsTotal = items.length;
   _shortsActiveIdx = -1;
   screen.scrollTop = 0;
-  // PC(768px+)에서 2단 레이아웃: wrap/overlay에 직접 스타일 주입 (CSS specificity 우회)
+  // PC(768px+)에서 2단 레이아웃: slide/wrap/overlay 모두 직접 주입 (CSS specificity + overflow:hidden 우회)
   if (window.innerWidth >= 768) {
+    const sv = 'calc(100dvh - var(--hd) - 44px - var(--nav) - var(--safe))';
     el.querySelectorAll('.shorts-slide').forEach(slide => {
+      // 1) slide 자체: flex-row + overflow:visible (기본 overflow:hidden 제거)
+      slide.style.cssText = [
+        'display:flex',
+        'flex-direction:row',
+        'flex-shrink:0',
+        'width:100%',
+        'height:' + sv,
+        'min-height:' + sv,
+        'max-height:' + sv,
+        'overflow:visible',
+        'background:#000',
+        'scroll-snap-align:start',
+        'scroll-snap-stop:always',
+        'position:relative',
+      ].join(';');
+
+      // 2) wrap: flex item으로 9:16 너비 차지, absolute 해제
       const wrap = slide.querySelector('.shorts-iframe-wrap, .shorts-no-video');
-      const ov   = slide.querySelector('.shorts-overlay');
       if (wrap) {
-        wrap.style.cssText = 'position:relative;flex-shrink:0;width:calc((100dvh - var(--hd) - 44px - var(--nav) - var(--safe)) * 9 / 16);height:100%;top:auto;left:auto;right:auto;bottom:auto;overflow:hidden';
+        wrap.style.cssText = [
+          'position:relative',
+          'flex-shrink:0',
+          'width:' + sv + ' * 9 / 16',  // fallback
+          'width:calc(' + sv + ' * 9 / 16)',
+          'height:100%',
+          'top:auto','left:auto','right:auto','bottom:auto',
+          'overflow:hidden',
+          'background:#000',
+        ].join(';');
         const vid = wrap.querySelector('.shorts-cl-video');
         if (vid) vid.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;display:block;pointer-events:none;background:#000';
       }
+
+      // 3) overlay: flex item으로 300px 패널, absolute 완전 해제
+      const ov = slide.querySelector('.shorts-overlay');
       if (ov) {
-        ov.style.cssText = 'position:relative;width:300px;flex-shrink:0;bottom:auto;background:#111;border-left:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;justify-content:center;padding:36px 28px;overflow-y:auto';
-        // PC 패널 내부 텍스트/버튼 크기 직접 주입
+        ov.style.cssText = [
+          'position:relative',
+          'flex:1',
+          'min-width:0',
+          'flex-shrink:0',
+          'width:300px',
+          'height:100%',
+          'top:auto','left:auto','right:auto','bottom:auto',
+          'background:#111',
+          'border-left:1px solid rgba(255,255,255,.08)',
+          'display:flex',
+          'flex-direction:column',
+          'justify-content:center',
+          'padding:36px 28px',
+          'overflow-y:auto',
+          'z-index:1',
+        ].join(';');
+        // 내부 텍스트/버튼 크기
         const nm   = ov.querySelector('.shorts-name');
         const addr = ov.querySelector('.shorts-addr');
         const cat  = ov.querySelector('.shorts-cat');
         const btn  = ov.querySelector('.shorts-book-btn');
-        if (nm)   nm.style.cssText   = 'font-size:24px;font-weight:900;line-height:1.3;white-space:normal;word-break:keep-all;margin-bottom:8px;color:#fff';
+        const row  = ov.querySelector('.shorts-info-row');
+        if (row)  row.style.cssText  = 'display:flex;flex-direction:column;align-items:flex-start;gap:20px;width:100%';
+        if (nm)   nm.style.cssText   = 'font-size:24px;font-weight:900;line-height:1.3;white-space:normal;word-break:keep-all;margin-bottom:8px;color:#fff;text-shadow:none';
         if (addr) addr.style.cssText = 'font-size:13px;margin-top:4px;color:rgba(255,255,255,0.7)';
-        if (cat)  cat.style.cssText  = 'font-size:12px;padding:4px 12px;border-radius:20px;display:inline-block;margin-bottom:12px';
+        if (cat)  cat.style.cssText  = 'font-size:12px;padding:4px 12px;border-radius:20px;display:inline-block;margin-bottom:4px;color:var(--pink);background:rgba(255,77,125,.12);border:1px solid rgba(255,77,125,.25)';
         if (btn)  btn.style.cssText  = 'width:100%;font-size:15px;font-weight:800;padding:16px;border-radius:16px;background:var(--pink);color:#fff;border:none;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px;margin-top:20px';
       }
     });
