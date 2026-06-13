@@ -3691,6 +3691,32 @@ async function loadShorts(cat) {
   _shortsTotal = items.length;
   _shortsActiveIdx = -1;
   screen.scrollTop = 0;
+  // PC(768px+)에서 2단 레이아웃: wrap/overlay에 직접 스타일 주입 (CSS specificity 우회)
+  if (window.innerWidth >= 768) {
+    const slotH = 'calc(100dvh - var(--hd) - 44px - var(--nav) - var(--safe))';
+    el.querySelectorAll('.shorts-slide').forEach(slide => {
+      const wrap = slide.querySelector('.shorts-iframe-wrap, .shorts-no-video');
+      const ov   = slide.querySelector('.shorts-overlay');
+      if (wrap) {
+        wrap.style.cssText = [
+          'position:relative', 'flex-shrink:0',
+          'width:calc((100dvh - var(--hd) - 44px - var(--nav) - var(--safe)) * 9 / 16)',
+          'height:100%', 'top:auto', 'left:auto', 'right:auto', 'bottom:auto'
+        ].join(';');
+        const vid = wrap.querySelector('.shorts-cl-video');
+        if (vid) vid.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;display:block;pointer-events:none;background:#000';
+      }
+      if (ov) {
+        ov.style.cssText = [
+          'position:relative', 'flex:1', 'bottom:auto',
+          'background:linear-gradient(160deg,#111 0%,#0d0d0d 100%)',
+          'border-left:1px solid rgba(255,255,255,.06)',
+          'display:flex', 'flex-direction:column', 'justify-content:center',
+          'padding:40px 32px', 'overflow-y:auto'
+        ].join(';');
+      }
+    });
+  }
   // 레이아웃 그려진 후 Observer 등록 → 첫 슬라이드 자동 감지·재생
   // 모바일 Safari: display:block 전환 후 layout 확정까지 200ms 대기
   setTimeout(() => { initShortsObserver(screen); }, 200);
