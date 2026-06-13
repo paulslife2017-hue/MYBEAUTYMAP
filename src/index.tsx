@@ -6812,11 +6812,19 @@ function _shortsAdminModalHtml() {
         '<div><label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">Cloudinary Public ID</label>' +
         '<input id="s-clid" placeholder="mybeautymap/shorts/영상ID" style="'+adminInputStyle()+'"/>' +
         '<div style="font-size:10px;color:#475569;margin-top:4px">예: mybeautymap/shorts/zeoiZiOrzS0</div>' +
-        '<div id="s-cl-preview" style="margin-top:8px;border-radius:10px;overflow:hidden;display:none;width:100%;max-width:160px;aspect-ratio:9/16;background:#000;position:relative"><video id="s-cl-vid" style="position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;object-fit:cover;display:block" controls muted playsinline></video></div></div>' +
+        '<div id="s-cl-preview" style="display:none;margin-top:8px">' +
+          '<div style="width:140px;height:249px;border-radius:10px;overflow:hidden;background:#000;position:relative">' +
+            '<video id="s-cl-vid" style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover" controls muted playsinline></video>' +
+          '</div>' +
+        '</div></div>' +
         '<div><label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">유튜브 숏츠 ID (기존/백업용)</label>' +
         '<input id="s-ytid" placeholder="https://youtube.com/shorts/xxxxx" style="'+adminInputStyle()+'"/>' +
         '<div style="font-size:10px;color:#475569;margin-top:4px">Cloudinary 없을 때 fallback으로 사용</div>' +
-        '<div id="s-yt-preview" style="margin-top:8px;border-radius:10px;overflow:hidden;display:none;width:100%;max-width:160px;aspect-ratio:9/16;background:#000"><iframe id="s-yt-frame" width="100%" height="100%" style="border:none"></iframe></div></div>' +
+        '<div id="s-yt-preview" style="display:none;margin-top:8px">' +
+          '<div style="width:140px;height:249px;border-radius:10px;overflow:hidden;background:#000">' +
+            '<iframe id="s-yt-frame" src="" style="width:100%;height:100%;border:none;display:block"></iframe>' +
+          '</div>' +
+        '</div></div>' +
         '<div><label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">정렬 순서 (숫자 작을수록 앞)</label>' +
         '<input id="s-order" type="number" value="0" style="'+adminInputStyle()+'"/></div>' +
         '<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0">' +
