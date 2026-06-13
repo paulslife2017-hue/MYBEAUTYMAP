@@ -2230,7 +2230,8 @@ html,body{height:100%;background:var(--bg);color:#fff;
 /* 숏폼: 헤더+카탈로그바 아래 ~ 탭바 바로 위 */
 #shortsScreen{position:fixed;
   top:calc(var(--hd) + 44px);
-  left:0;right:0;
+  left:50%;transform:translateX(-50%);
+  width:min(100vw, calc((100dvh - var(--hd) - 44px - var(--nav) - var(--safe)) * 9 / 16));
   bottom:calc(var(--nav) + var(--safe));
   display:none;overflow-y:scroll;scroll-snap-type:y mandatory;
   background:#000;-webkit-overflow-scrolling:touch;}
@@ -2413,6 +2414,8 @@ body.shorts-mode #shorts-mute-btn{ display:flex; }
   flex-shrink:0;
   background:#000;
   overflow:hidden;
+  /* PC에서 가로로 넘어가지 않도록 */
+  max-width:100%;
 }
 .shorts-iframe-wrap{
   position:absolute;
