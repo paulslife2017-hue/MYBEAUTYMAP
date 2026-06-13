@@ -2423,6 +2423,21 @@ body.shorts-mode #shorts-mute-btn{ display:flex; }
   background:#000;
   overflow:hidden;
 }
+/* Cloudinary 네이티브 video */
+.shorts-cl-video{
+  position:absolute;
+  top:50%;left:50%;
+  transform:translate(-50%,-50%);
+  /* 세로(9:16) 영상이 세로 화면을 꽉 채우도록 */
+  width:auto;
+  height:100%;
+  min-width:100%;
+  min-height:100%;
+  object-fit:cover;
+  pointer-events:none;
+  display:block;
+  background:#000;
+}
 /* YT.Player가 이 div를 iframe으로 교체 — wrap을 꽉 채워야 함 */
 .shorts-yt-placeholder{
   position:absolute;inset:0;
@@ -3661,7 +3676,7 @@ function shortsSlide(shop, idx) {
           '<video class="shorts-cl-video" id="cl-vid-' + idx + '" src="' + clUrl + '"' +
           ' poster="' + clPoster + '"' +
           ' playsinline loop muted preload="metadata"' +
-          ' style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;object-position:center top;pointer-events:none;display:block;">'  +
+          ' style="">'  +
           '</video>' +
         '</div>'
       : (ytId
