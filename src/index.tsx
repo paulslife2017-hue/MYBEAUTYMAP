@@ -2419,6 +2419,11 @@ body.shorts-mode #shorts-mute-btn{ display:flex; }
 .shorts-iframe-wrap{
   position:absolute;inset:0;
   width:100%;height:100%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:#000;
+  overflow:hidden;
 }
 /* YT.Player가 이 div를 iframe으로 교체 — wrap을 꽉 채워야 함 */
 .shorts-yt-placeholder{
@@ -3641,13 +3646,13 @@ function shortsSlide(shop, idx) {
   const cat  = shop.category || '';
   const name = shop.name || '';
   const addr = shop.address || '';
-  // Cloudinary 영상 URL 생성
+  // Cloudinary 영상 URL 생성 (9:16 세로 변환 + 중앙 크롭)
   const clUrl = clId
-    ? 'https://res.cloudinary.com/dc0ouozcd/video/upload/' + clId + '.mp4'
+    ? 'https://res.cloudinary.com/dc0ouozcd/video/upload/ar_9:16,c_fill,g_center/' + clId + '.mp4'
     : '';
-  // Cloudinary 썸네일 URL (poster)
+  // Cloudinary 썸네일 URL (poster) - 9:16 세로 변환
   const clPoster = clId
-    ? 'https://res.cloudinary.com/dc0ouozcd/video/upload/so_0/' + clId + '.jpg'
+    ? 'https://res.cloudinary.com/dc0ouozcd/video/upload/ar_9:16,c_fill,g_center,so_0/' + clId + '.jpg'
     : '';
   const hasVideo = clUrl || ytId;
   return (
@@ -3658,7 +3663,7 @@ function shortsSlide(shop, idx) {
           '<video class="shorts-cl-video" id="cl-vid-' + idx + '" src="' + clUrl + '"' +
           ' poster="' + clPoster + '"' +
           ' playsinline loop muted preload="metadata"' +
-          ' style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none;">' +
+          ' style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center center;pointer-events:none;">' +
           '</video>' +
         '</div>'
       : (ytId
