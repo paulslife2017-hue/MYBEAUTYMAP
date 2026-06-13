@@ -1101,8 +1101,8 @@ app.get('/api/admin/shorts', async (c) => {
 app.post('/api/admin/shorts', async (c) => {
   const b = await c.req.json()
   const rows = await sql`
-    INSERT INTO shorts_items (name, category, address, youtube_id, smart_place_url, sort_order, active)
-    VALUES (${b.name||''}, ${b.category||''}, ${b.address||''}, ${b.youtubeId||''}, ${b.smartPlaceUrl||''}, ${b.sortOrder||0}, ${b.active!==false})
+    INSERT INTO shorts_items (name, category, address, youtube_id, cloudinary_public_id, smart_place_url, sort_order, active)
+    VALUES (${b.name||''}, ${b.category||''}, ${b.address||''}, ${b.youtubeId||''}, ${b.cloudinaryPublicId||''}, ${b.smartPlaceUrl||''}, ${b.sortOrder||0}, ${b.active!==false})
     RETURNING *
   `
   return c.json(rows[0])
@@ -1114,13 +1114,14 @@ app.put('/api/admin/shorts/:id', async (c) => {
   const b  = await c.req.json()
   const rows = await sql`
     UPDATE shorts_items SET
-      name            = ${b.name||''},
-      category        = ${b.category||''},
-      address         = ${b.address||''},
-      youtube_id      = ${b.youtubeId||''},
-      smart_place_url = ${b.smartPlaceUrl||''},
-      sort_order      = ${b.sortOrder||0},
-      active          = ${b.active!==false}
+      name                 = ${b.name||''},
+      category             = ${b.category||''},
+      address              = ${b.address||''},
+      youtube_id           = ${b.youtubeId||''},
+      cloudinary_public_id = ${b.cloudinaryPublicId||''},
+      smart_place_url      = ${b.smartPlaceUrl||''},
+      sort_order           = ${b.sortOrder||0},
+      active               = ${b.active!==false}
     WHERE id = ${id} RETURNING *
   `
   return c.json(rows[0])
@@ -3635,16 +3636,34 @@ async function loadShorts(cat) {
 let _shortsMuted = true;
 
 function shortsSlide(shop, idx) {
+  const clId = shop.cloudinary_public_id || '';
   const ytId = shop.youtube_id || '';
   const cat  = shop.category || '';
   const name = shop.name || '';
   const addr = shop.address || '';
+  // Cloudinary 영상 URL 생성
+  const clUrl = clId
+    ? 'https://res.cloudinary.com/dc0ouozcd/video/upload/' + clId + '.mp4'
+    : '';
+  // Cloudinary 썸네일 URL (poster)
+  const clPoster = clId
+    ? 'https://res.cloudinary.com/dc0ouozcd/video/upload/so_0/' + clId + '.jpg'
+    : '';
+  const hasVideo = clUrl || ytId;
   return (
-    '<div class="shorts-slide" data-shop-id="' + shop.id + '" data-ytid="' + ytId + '" data-idx="' + idx + '"' +
+    '<div class="shorts-slide" data-shop-id="' + shop.id + '" data-clid="' + clId + '" data-ytid="' + ytId + '" data-idx="' + idx + '"' +
     ' onclick="shortsSlideClick(event,this)">' +
-    (ytId
-      ? '<div class="shorts-iframe-wrap"><div class="shorts-yt-placeholder" id="yt-ph-' + idx + '"></div></div>'
-      : '<div class="shorts-no-video"></div>') +
+    (clUrl
+      ? '<div class="shorts-iframe-wrap">' +
+          '<video class="shorts-cl-video" id="cl-vid-' + idx + '" src="' + clUrl + '"' +
+          ' poster="' + clPoster + '"' +
+          ' playsinline loop muted preload="metadata"' +
+          ' style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none;">' +
+          '</video>' +
+        '</div>'
+      : (ytId
+          ? '<div class="shorts-iframe-wrap"><div class="shorts-yt-placeholder" id="yt-ph-' + idx + '"></div></div>'
+          : '<div class="shorts-no-video"></div>')) +
     '<div class="shorts-overlay">' +
       '<div class="shorts-info-row">' +
         '<div class="shorts-info-body">' +
@@ -3666,10 +3685,32 @@ function shortsSlide(shop, idx) {
 function shortsSlideClick(e, slide) {
   if (!slide) return;
   if (e.target.closest('.shorts-overlay')) return;
-  const idx = parseInt(slide.dataset.idx || '0', 10);
+  const idx  = parseInt(slide.dataset.idx || '0', 10);
+  const clId = slide.dataset.clid || '';
+
+  // Cloudinary 영상인 경우
+  if (clId) {
+    const vid = document.getElementById('cl-vid-' + idx);
+    if (!vid) return;
+    if (!_shortsUserGestured) {
+      _shortsUserGestured = true;
+      vid.play().catch(() => {});
+      _shortsShowIcon(slide, 'play');
+      return;
+    }
+    if (vid.paused) {
+      vid.play().catch(() => {});
+      _shortsShowIcon(slide, 'play');
+    } else {
+      vid.pause();
+      _shortsShowIcon(slide, 'pause');
+    }
+    return;
+  }
+
+  // YouTube fallback
   const player = _ytPlayers[idx];
   if (!player) return;
-  // 첫 탭: iOS 사용자 제스처 컨텍스트에서 재생 시작
   if (!_shortsUserGestured) {
     _shortsUserGestured = true;
     try { player.playVideo(); } catch(e2) {}
@@ -3677,7 +3718,6 @@ function shortsSlideClick(e, slide) {
     return;
   }
   const state = player.getPlayerState ? player.getPlayerState() : -1;
-  // YT.PlayerState.PLAYING = 1
   if (state === 1) {
     player.pauseVideo();
     _shortsShowIcon(slide, 'pause');
@@ -3718,6 +3758,11 @@ function _shortsShowIcon(slide, type) {
 // ── 음소거 토글 ───────────────────────────────────────────────────────────
 function toggleShortsMute() {
   _shortsMuted = !_shortsMuted;
+  // Cloudinary <video> 음소거
+  document.querySelectorAll('.shorts-cl-video').forEach(v => {
+    v.muted = _shortsMuted;
+  });
+  // YouTube fallback 음소거
   Object.values(_ytPlayers).forEach(p => {
     try { _shortsMuted ? p.mute() : p.unMute(); } catch(e) {}
   });
@@ -3737,19 +3782,36 @@ function shortsOpenBook(shop) {
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// YouTube IFrame Player API 엔진
+// 숏폼 플레이어 엔진 (Cloudinary <video> + YouTube IFrame fallback)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-let _ytPlayers        = {};   // { idx: YT.Player }
+let _ytPlayers        = {};   // { idx: YT.Player } — YouTube fallback용
 let _ytApiReady       = false;
 let _ytApiLoading     = false;
-let _ytPendingInits   = [];   // API 로드 전에 요청된 슬라이드 대기열
+let _ytPendingInits   = [];
 let _shortsActiveIdx  = -1;
 let _shortsTotal      = 0;
-let _shortsUserGestured = false; // iOS: 첫 탭 후 재생 가능 여부
-let _shortsViewStart  = 0;   // 현재 슬라이드 시청 시작 시각 (ms)
-let _shortsViewShopId = null; // 현재 시청 중인 shop id
+let _shortsUserGestured = false;
+let _shortsViewStart  = 0;
+let _shortsViewShopId = null;
 
-// YouTube IFrame API 스크립트 로드 (1회)
+// ── Cloudinary <video> 헬퍼 ───────────────────────────────────────────
+function _clGetVideo(idx) {
+  return document.getElementById('cl-vid-' + idx);
+}
+
+function _clPlayVideo(idx) {
+  const v = _clGetVideo(idx);
+  if (!v) return;
+  v.muted = _shortsMuted;
+  v.play().catch(() => {});
+}
+
+function _clPauseVideo(idx) {
+  const v = _clGetVideo(idx);
+  if (v) v.pause();
+}
+
+// ── YouTube IFrame fallback (youtube_id만 있는 구 데이터용) ──────────
 function _ytLoadApi() {
   if (_ytApiReady || _ytApiLoading) return;
   _ytApiLoading = true;
@@ -3758,116 +3820,82 @@ function _ytLoadApi() {
   document.head.appendChild(tag);
 }
 
-// YouTube API 준비 완료 콜백 (전역 함수 — YT API가 호출)
 window.onYouTubeIframeAPIReady = function() {
   _ytApiReady = true;
-  // 대기 중인 슬라이드 초기화
   _ytPendingInits.forEach(fn => fn());
   _ytPendingInits = [];
 };
 
-// 슬라이드에 YT.Player 생성
 function _ytCreatePlayer(slide) {
   const idx  = parseInt(slide.dataset.idx || '0', 10);
   const ytId = slide.dataset.ytid || '';
-  if (!ytId || _ytPlayers[idx]) return; // 이미 있으면 스킵
-
+  if (!ytId || _ytPlayers[idx]) return;
   const ph = slide.querySelector('.shorts-yt-placeholder');
   if (!ph) return;
-
   const create = () => {
-    // placeholder div를 대상으로 YT.Player 생성
     const player = new window.YT.Player(ph, {
       videoId: ytId,
       playerVars: {
-        autoplay: 1,
-        mute:     1,   // 자동재생을 위해 음소거로 시작
-        loop:     1,
-        playlist: ytId,
-        controls: 0,
-        playsinline: 1,
-        rel:      0,
-        modestbranding: 1,
-        enablejsapi: 1,
+        autoplay: 1, mute: 1, loop: 1, playlist: ytId,
+        controls: 0, playsinline: 1, rel: 0, modestbranding: 1, enablejsapi: 1,
       },
       events: {
         onReady: (e) => {
-          // 플레이어 준비 완료
-          if (_shortsMuted) {
-            e.target.mute();
-          } else {
-            e.target.unMute();
-          }
-          // 현재 활성 슬라이드면 바로 재생
-          if (_shortsActiveIdx === idx) {
-            try { e.target.playVideo(); } catch(err) {}
-          }
+          _shortsMuted ? e.target.mute() : e.target.unMute();
+          if (_shortsActiveIdx === idx) { try { e.target.playVideo(); } catch(err) {} }
         },
         onStateChange: (e) => {
-          // 영상 끝나면 처음부터 (loop=1 이지만 보험)
-          if (e.data === 0) { // ENDED
-            try { e.target.seekTo(0); e.target.playVideo(); } catch(err) {}
-          }
+          if (e.data === 0) { try { e.target.seekTo(0); e.target.playVideo(); } catch(err) {} }
         },
-        onError: () => {
-          // 에러 시 placeholder 복구 시도 안 함
-        }
       }
     });
     _ytPlayers[idx] = player;
-    // YT.Player가 생성되면 placeholder div를 iframe으로 교체함 (YT API가 자동 처리)
-    // iframe에 스타일 적용
     const applyStyle = () => {
       const iframe = slide.querySelector('.shorts-iframe-wrap iframe');
-      if (iframe) {
-        iframe.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:none;pointer-events:none;';
-      } else {
-        setTimeout(applyStyle, 100);
-      }
+      if (iframe) iframe.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:none;pointer-events:none;';
+      else setTimeout(applyStyle, 100);
     };
     applyStyle();
   };
-
-  if (_ytApiReady) {
-    create();
-  } else {
-    _ytPendingInits.push(create);
-    _ytLoadApi();
-  }
+  if (_ytApiReady) create();
+  else { _ytPendingInits.push(create); _ytLoadApi(); }
 }
 
-// 슬라이드 활성화: 플레이어 생성 또는 재생
+// 슬라이드 활성화: Cloudinary <video> 재생 or YouTube 플레이어 생성
 function _shortsActivateSlide(slide) {
   const idx  = parseInt(slide.dataset.idx || '0', 10);
+  const clId = slide.dataset.clid || '';
   const ytId = slide.dataset.ytid || '';
-  if (!ytId) return;
-  if (_shortsActiveIdx === idx) return; // 이미 활성
+  if (!clId && !ytId) return;
+  if (_shortsActiveIdx === idx) return;
 
   // ── 이전 슬라이드 시청 시간 마무리 ──────────────────────
   if (_shortsViewStart > 0 && _shortsViewShopId) {
     const prevSec = Math.round((Date.now() - _shortsViewStart) / 1000);
     const prevShop = _shortsItems.find(s => String(s.id) === String(_shortsViewShopId));
-    if (prevShop && prevSec > 0) {
-      _sessionEvent('shorts_view_end', prevShop, prevSec);
-    }
+    if (prevShop && prevSec > 0) _sessionEvent('shorts_view_end', prevShop, prevSec);
   }
 
   _shortsActiveIdx = idx;
-  _sessionTrackShorts(); // 👁️ 세션 추적
+  _sessionTrackShorts();
 
   // 아이콘 초기화
   const icon = slide.querySelector('.shorts-pi');
   if (icon) { icon.style.opacity='0'; icon.style.transform='translate(-50%,-50%) scale(0)'; }
 
-  // 플레이어 없으면 생성
-  if (!_ytPlayers[idx]) {
-    _ytCreatePlayer(slide);
+  // Cloudinary 영상 재생
+  if (clId) {
+    _clPlayVideo(idx);
   } else {
-    try { _ytPlayers[idx].playVideo(); } catch(e) {}
-    if (!_shortsMuted) { try { _ytPlayers[idx].unMute(); } catch(e) {} }
+    // YouTube fallback
+    if (!_ytPlayers[idx]) _ytCreatePlayer(slide);
+    else {
+      try { _ytPlayers[idx].playVideo(); } catch(e) {}
+      if (!_shortsMuted) { try { _ytPlayers[idx].unMute(); } catch(e) {} }
+    }
   }
 
-  // 조회수 트래킹 + 세션 이벤트 + 시청 시작 타이머
+  // 조회수 트래킹
   const sid = slide.dataset.shopId;
   _shortsViewStart  = Date.now();
   _shortsViewShopId = sid || null;
@@ -3879,21 +3907,27 @@ function _shortsActivateSlide(slide) {
   }
 }
 
-// 슬라이드 비활성화: 정지 + 리소스 유지 (플레이어는 재사용)
+// 슬라이드 비활성화: 정지
 function _shortsDeactivateSlide(slide) {
-  const idx = parseInt(slide.dataset.idx || '0', 10);
-  if (!_ytPlayers[idx]) return;
-  try { _ytPlayers[idx].pauseVideo(); } catch(e) {}
+  const idx  = parseInt(slide.dataset.idx || '0', 10);
+  const clId = slide.dataset.clid || '';
+  if (clId) {
+    _clPauseVideo(idx);
+  } else if (_ytPlayers[idx]) {
+    try { _ytPlayers[idx].pauseVideo(); } catch(e) {}
+  }
 }
 
 function _shortsStopAll() {
-  // 마지막 시청 시간 마무리
   if (_shortsViewStart > 0 && _shortsViewShopId) {
     const sec = Math.round((Date.now() - _shortsViewStart) / 1000);
     const shop = _shortsItems.find(s => String(s.id) === String(_shortsViewShopId));
     if (shop && sec > 0) _sessionEvent('shorts_view_end', shop, sec);
     _shortsViewStart = 0; _shortsViewShopId = null;
   }
+  // Cloudinary 영상 전부 정지
+  document.querySelectorAll('.shorts-cl-video').forEach(v => { try { v.pause(); } catch(e) {} });
+  // YouTube fallback 전부 정지
   Object.values(_ytPlayers).forEach(p => { try { p.pauseVideo(); } catch(e) {} });
   _shortsActiveIdx = -1;
   const sc = document.getElementById('shortsScreen');
@@ -3901,11 +3935,15 @@ function _shortsStopAll() {
 }
 
 function _shortsDestroyAll() {
+  // Cloudinary 영상 초기화
+  document.querySelectorAll('.shorts-cl-video').forEach(v => {
+    try { v.pause(); v.currentTime = 0; } catch(e) {}
+  });
+  // YouTube fallback 제거
   Object.values(_ytPlayers).forEach(p => { try { p.destroy(); } catch(e) {} });
   _ytPlayers = {};
   _shortsActiveIdx = -1;
-  // _shortsUserGestured는 리셋하지 않음:
-  // 카테고리 변경/탭 이동 후에도 이미 사용자 제스처가 있었으면 autoplay 유지
+  // _shortsUserGestured는 리셋하지 않음
 }
 
 function initShortsObserver(screen) {
@@ -3914,9 +3952,6 @@ function initShortsObserver(screen) {
     screen.removeEventListener('scroll', screen._shortsScrollHandler);
     screen._shortsScrollHandler = null;
   }
-
-  // YouTube API 미리 로드
-  _ytLoadApi();
 
   // IntersectionObserver: 50% 이상 보이면 활성화, 20% 미만이면 비활성화
   _shortsObserver = new IntersectionObserver((entries) => {
@@ -6725,7 +6760,20 @@ function renderShortsAdminShell() {
     // 모달
     _shortsAdminModalHtml();
 
-  // 유튜브 입력 시 미리보기
+  // Cloudinary ID 입력 시 미리보기
+  document.getElementById('s-clid').addEventListener('input', function() {
+    const clId    = this.value.trim();
+    const preview = document.getElementById('s-cl-preview');
+    const vid     = document.getElementById('s-cl-vid');
+    if (clId) {
+      preview.style.display = 'block';
+      vid.src = 'https://res.cloudinary.com/dc0ouozcd/video/upload/' + clId + '.mp4';
+    } else {
+      preview.style.display = 'none';
+      vid.src = '';
+    }
+  });
+  // 유튜브 입력 시 미리보기 (fallback)
   document.getElementById('s-ytid').addEventListener('input', function() {
     const vid = extractYtId(this.value.trim());
     const preview = document.getElementById('s-yt-preview');
@@ -6749,8 +6797,13 @@ function _shortsAdminModalHtml() {
         '<div><label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">네이버 예약링크</label>' +
         '<input id="s-place" placeholder="https://naver.me/xxxxx" style="'+adminInputStyle()+'"/>' +
         '<div style="font-size:10px;color:#475569;margin-top:4px">입력하면 예약하기 버튼이 활성화됩니다</div></div>' +
-        '<div><label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">유튜브 숏츠 링크 또는 ID *</label>' +
+        '<div><label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">Cloudinary Public ID</label>' +
+        '<input id="s-clid" placeholder="mybeautymap/shorts/영상ID" style="'+adminInputStyle()+'"/>' +
+        '<div style="font-size:10px;color:#475569;margin-top:4px">예: mybeautymap/shorts/zeoiZiOrzS0</div>' +
+        '<div id="s-cl-preview" style="margin-top:8px;border-radius:10px;overflow:hidden;display:none;aspect-ratio:9/16;max-height:280px;background:#000"><video id="s-cl-vid" width="100%" height="100%" style="object-fit:cover" controls muted playsinline></video></div></div>' +
+        '<div><label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">유튜브 숏츠 ID (기존/백업용)</label>' +
         '<input id="s-ytid" placeholder="https://youtube.com/shorts/xxxxx" style="'+adminInputStyle()+'"/>' +
+        '<div style="font-size:10px;color:#475569;margin-top:4px">Cloudinary 없을 때 fallback으로 사용</div>' +
         '<div id="s-yt-preview" style="margin-top:8px;border-radius:10px;overflow:hidden;display:none;aspect-ratio:9/16;max-height:280px;background:#000"><iframe id="s-yt-frame" width="100%" height="100%" style="border:none"></iframe></div></div>' +
         '<div><label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">정렬 순서 (숫자 작을수록 앞)</label>' +
         '<input id="s-order" type="number" value="0" style="'+adminInputStyle()+'"/></div>' +
@@ -7249,23 +7302,35 @@ function openShortsModal(id) {
   _shortsAdminEditId = id;
   const item = id ? _shortsAdminItems.find(x=>x.id===id) : null;
   document.getElementById('shortsModalTitle').textContent = id ? '숏폼 수정' : '숏폼 추가';
-  document.getElementById('s-name').value   = item?.name            || '';
-  document.getElementById('s-addr').value   = item?.address         || '';
-  document.getElementById('s-place').value  = item?.smart_place_url || '';
-  document.getElementById('s-ytid').value   = item?.youtube_id      || '';
+  document.getElementById('s-name').value   = item?.name                    || '';
+  document.getElementById('s-addr').value   = item?.address                 || '';
+  document.getElementById('s-place').value  = item?.smart_place_url         || '';
+  document.getElementById('s-clid').value   = item?.cloudinary_public_id    || '';
+  document.getElementById('s-ytid').value   = item?.youtube_id              || '';
   document.getElementById('s-order').value  = item?.sort_order ?? 0;
   document.getElementById('s-active').checked = item ? item.active : true;
-  // 카테고리 select 옵션을 직접 채움 (option 배경색 포함)
+  // 카테고리 select
   const sCat = document.getElementById('s-cat');
   sCat.innerHTML = '<option value="" style="background:#1b1b1b;color:#fff">선택 안함</option>' +
     CAT_OPTIONS.map(c => '<option value="'+c+'" style="background:#1b1b1b;color:#fff"'+(item?.category===c?' selected':'')+'>'+c+'</option>').join('');
   if (!id) sCat.value = '';
-  // 유튜브 미리보기
-  const ytId = item?.youtube_id || '';
-  const preview = document.getElementById('s-yt-preview');
-  const frame   = document.getElementById('s-yt-frame');
-  if (ytId) { preview.style.display='block'; frame.src='https://www.youtube.com/embed/'+ytId+'?rel=0'; }
-  else { preview.style.display='none'; frame.src=''; }
+  // Cloudinary 미리보기
+  const clId = item?.cloudinary_public_id || '';
+  const clPreview = document.getElementById('s-cl-preview');
+  const clVid     = document.getElementById('s-cl-vid');
+  if (clId) {
+    clPreview.style.display = 'block';
+    clVid.src = 'https://res.cloudinary.com/dc0ouozcd/video/upload/' + clId + '.mp4';
+  } else {
+    clPreview.style.display = 'none';
+    clVid.src = '';
+  }
+  // YouTube 미리보기 (fallback)
+  const ytId   = item?.youtube_id || '';
+  const ytPrev = document.getElementById('s-yt-preview');
+  const frame  = document.getElementById('s-yt-frame');
+  if (ytId && !clId) { ytPrev.style.display='block'; frame.src='https://www.youtube.com/embed/'+ytId+'?rel=0'; }
+  else { ytPrev.style.display='none'; frame.src=''; }
   document.getElementById('shortsModalBg').style.display = 'flex';
 }
 
@@ -7297,17 +7362,19 @@ function extractYtId(raw) {
 async function saveShorts() {
   const name = document.getElementById('s-name').value.trim();
   if (!name) { toast('업체명을 입력하세요'); return; }
+  const clId  = document.getElementById('s-clid').value.trim();
   const rawYt = document.getElementById('s-ytid').value.trim();
   const ytId  = extractYtId(rawYt) || rawYt;
-  if (!ytId) { toast('유튜브 링크를 입력하세요'); return; }
+  if (!clId && !ytId) { toast('Cloudinary ID 또는 유튜브 링크를 입력하세요'); return; }
   const body = {
     name,
-    category:       document.getElementById('s-cat').value,
-    address:        document.getElementById('s-addr').value.trim(),
-    smartPlaceUrl:  document.getElementById('s-place').value.trim(),
-    youtubeId:      ytId,
-    sortOrder:      parseInt(document.getElementById('s-order').value)||0,
-    active:         document.getElementById('s-active').checked,
+    category:             document.getElementById('s-cat').value,
+    address:              document.getElementById('s-addr').value.trim(),
+    smartPlaceUrl:        document.getElementById('s-place').value.trim(),
+    cloudinaryPublicId:   clId,
+    youtubeId:            ytId,
+    sortOrder:            parseInt(document.getElementById('s-order').value)||0,
+    active:               document.getElementById('s-active').checked,
   };
   const url    = _shortsAdminEditId ? '/api/admin/shorts/'+_shortsAdminEditId : '/api/admin/shorts';
   const method = _shortsAdminEditId ? 'PUT' : 'POST';
