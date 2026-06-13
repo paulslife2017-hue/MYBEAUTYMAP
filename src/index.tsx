@@ -2228,15 +2228,64 @@ html,body{height:100%;background:var(--bg);color:#fff;
 #mapScreen.active{display:block;}
 /* 쇼츠 릴스 스타일 */
 /* 숏폼: 헤더+카탈로그바 아래 ~ 탭바 바로 위 */
+/* ── 릴스 스크린: 모바일 기본 ── */
 #shortsScreen{position:fixed;
   top:calc(var(--hd) + 44px);
-  left:50%;transform:translateX(-50%);
-  width:min(100vw, calc((100dvh - var(--hd) - 44px - var(--nav) - var(--safe)) * 9 / 16));
+  left:0;right:0;
   bottom:calc(var(--nav) + var(--safe));
   display:none;overflow-y:scroll;scroll-snap-type:y mandatory;
   background:#000;-webkit-overflow-scrolling:touch;}
 #shortsScreen::-webkit-scrollbar{display:none;}
 #shortsScreen.active{display:block;}
+/* ── 릴스 스크린: PC(768px+) — 왼쪽 9:16 영상 + 오른쪽 정보패널 ── */
+@media(min-width:768px){
+  #shortsScreen{
+    left:0;right:0;
+    overflow-y:hidden; /* PC는 슬라이드 전체가 보임 */
+    background:#0a0a0a;
+  }
+  .shorts-slide{
+    display:flex;flex-direction:row;
+    height:calc(100dvh - var(--hd) - 44px - var(--nav) - var(--safe))!important;
+    min-height:unset!important;max-height:unset!important;
+  }
+  /* 왼쪽: 9:16 영상 박스 */
+  .shorts-iframe-wrap,.shorts-no-video{
+    position:relative!important;
+    flex-shrink:0;
+    /* 높이 기준으로 9:16 너비 계산 */
+    width:calc((100dvh - var(--hd) - 44px - var(--nav) - var(--safe)) * 9 / 16);
+    height:100%;
+    top:auto!important;left:auto!important;right:auto!important;bottom:auto!important;
+  }
+  /* 오른쪽: 업체정보 패널 */
+  .shorts-overlay{
+    position:relative!important;
+    flex:1;
+    background:linear-gradient(160deg,#111 0%,#0d0d0d 100%);
+    border-left:1px solid rgba(255,255,255,.06);
+    display:flex;flex-direction:column;justify-content:center;
+    padding:40px 32px;
+    bottom:auto!important;
+  }
+  .shorts-info-row{
+    flex-direction:column;align-items:flex-start;gap:20px;
+  }
+  .shorts-info-body{width:100%;}
+  .shorts-cat{font-size:12px;padding:4px 12px;border-radius:20px;}
+  .shorts-name{
+    font-size:26px;font-weight:900;line-height:1.3;
+    white-space:normal;-webkit-line-clamp:2;
+    overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;
+    word-break:keep-all;
+    margin-bottom:8px;
+  }
+  .shorts-addr{font-size:13px;margin-top:4px;}
+  .shorts-book-btn{
+    width:100%;padding:16px;font-size:15px;
+    border-radius:16px;justify-content:center;
+  }
+}
 /* 숏폼 모드: 광고만 숨김 (헤더·검색바는 유지) */
 body.shorts-mode #coupang-ad{ display:none!important; }
 body.shorts-mode #shortsCatBar{ display:block!important; }
