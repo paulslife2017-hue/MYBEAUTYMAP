@@ -2240,12 +2240,12 @@ html,body{height:100%;background:var(--bg);color:#fff;
 /* ── 릴스 스크린: PC(768px+) — 9:16영상 + 오른쪽 정보패널, 중앙정렬 ── */
 @media(min-width:768px){
   #shortsScreen{
-    /* 슬라이드 높이 기준 9:16 너비 + 오른쪽패널 300px, 최대 900px, 중앙정렬 */
+    /* 슬라이드 높이 기준 9:16 너비 + 오른쪽패널 240px, 중앙정렬 */
     --sv: calc(100dvh - var(--hd) - 44px - var(--nav) - var(--safe));
     left: 50%;
     right: auto;
     transform: translateX(-50%);
-    width: min(100vw, calc(var(--sv) * 9 / 16 + 300px));
+    width: min(100vw, calc(var(--sv) * 9 / 16 + 240px));
     overflow-y:hidden;
     background:#0a0a0a;
   }
@@ -2256,11 +2256,11 @@ html,body{height:100%;background:var(--bg);color:#fff;
   }
   .shorts-overlay{
     position:relative!important;
-    width:300px;flex-shrink:0;
+    width:240px;flex-shrink:0;
     background:#111;
     border-left:1px solid rgba(255,255,255,.08);
     display:flex;flex-direction:column;justify-content:center;
-    padding:36px 28px;
+    padding:28px 22px;
     bottom:auto!important;
   }
   .shorts-info-row{ flex-direction:column;align-items:flex-start;gap:20px; }
@@ -3717,15 +3717,13 @@ async function loadShorts(cat) {
         if (vid) vid.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;display:block;pointer-events:none;background:#000';
       }
 
-      // 3) overlay: flex item으로 300px 패널, absolute 완전 해제
+      // 3) overlay: 240px 고정 패널, absolute 완전 해제
       const ov = slide.querySelector('.shorts-overlay');
       if (ov) {
         ov.style.cssText = [
           'position:relative',
-          'flex:1',
-          'min-width:0',
-          'flex-shrink:0',
-          'width:300px',
+          'flex:none',
+          'width:240px',
           'height:100%',
           'top:auto','left:auto','right:auto','bottom:auto',
           'background:#111',
@@ -3733,7 +3731,7 @@ async function loadShorts(cat) {
           'display:flex',
           'flex-direction:column',
           'justify-content:center',
-          'padding:36px 28px',
+          'padding:28px 22px',
           'overflow-y:auto',
           'z-index:1',
         ].join(';');
