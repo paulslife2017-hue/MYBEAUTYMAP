@@ -2240,40 +2240,55 @@ html,body{height:100%;background:var(--bg);color:#fff;
 /* ── 릴스 스크린: PC(768px+) — 9:16영상 + 오른쪽 정보패널, 중앙정렬 ── */
 @media(min-width:768px){
   #shortsScreen{
-    /* 슬라이드 높이 기준 9:16 너비 + 오른쪽패널 240px, 중앙정렬 */
     --sv: calc(100dvh - var(--hd) - 44px - var(--nav) - var(--safe));
     left: 50%;
     right: auto;
     transform: translateX(-50%);
-    width: min(100vw, calc(var(--sv) * 9 / 16 + 240px));
-    overflow-y:hidden;
+    /* 영상 너비(9:16) + 패널 260px */
+    width: min(100vw, calc(var(--sv) * 9 / 16 + 260px));
+    /* 스크롤 유지 — wheel 핸들러가 프로그래매틱으로 넘김 */
+    overflow-y: scroll;
+    scroll-snap-type: y mandatory;
     background:#0a0a0a;
   }
+  /* slide: flex-row, overflow:hidden 유지 (scroll-snap 정상 동작) */
   .shorts-slide{
-    display:flex;flex-direction:row;
-    height:calc(100dvh - var(--hd) - 44px - var(--nav) - var(--safe))!important;
-    min-height:unset!important;max-height:unset!important;
+    display:flex !important;
+    flex-direction:row !important;
+    overflow:hidden !important;
   }
+  /* wrap: absolute 해제, flex item으로 9:16 너비 */
+  .shorts-iframe-wrap, .shorts-no-video{
+    position:relative !important;
+    flex:none !important;
+    width: calc(var(--sv) * 9 / 16) !important;
+    height:100% !important;
+    top:auto !important; left:auto !important;
+    right:auto !important; bottom:auto !important;
+  }
+  /* overlay: absolute 완전 해제, 260px 고정 패널 */
   .shorts-overlay{
-    position:relative!important;
-    width:240px;flex-shrink:0;
-    background:#111;
-    border-left:1px solid rgba(255,255,255,.08);
-    display:flex;flex-direction:column;justify-content:center;
-    padding:28px 22px;
-    bottom:auto!important;
+    position:relative !important;
+    flex:none !important;
+    width:260px !important;
+    height:100% !important;
+    top:auto !important; left:auto !important;
+    right:auto !important; bottom:auto !important;
+    background:#111 !important;
+    border-left:1px solid rgba(255,255,255,.1) !important;
+    display:flex !important;
+    flex-direction:column !important;
+    justify-content:center !important;
+    padding:32px 24px !important;
+    overflow-y:auto !important;
+    z-index:2 !important;
   }
-  .shorts-info-row{ flex-direction:column;align-items:flex-start;gap:20px; }
-  .shorts-info-body{ width:100%; }
-  .shorts-cat{ font-size:12px;padding:4px 12px;border-radius:20px; }
-  .shorts-name{
-    font-size:24px;font-weight:900;line-height:1.3;
-    white-space:normal;overflow:hidden;
-    display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;
-    word-break:keep-all;margin-bottom:8px;
-  }
-  .shorts-addr{ font-size:13px;margin-top:4px; }
-  .shorts-book-btn{ width:100%;padding:16px;font-size:15px;border-radius:16px;justify-content:center; }
+  .shorts-info-row{ flex-direction:column !important; align-items:flex-start !important; gap:0 !important; }
+  .shorts-info-body{ width:100% !important; }
+  .shorts-cat{ font-size:11px !important; padding:3px 10px !important; border-radius:20px !important; margin-bottom:10px !important; display:inline-block !important; }
+  .shorts-name{ font-size:20px !important; font-weight:900 !important; line-height:1.3 !important; white-space:normal !important; word-break:keep-all !important; margin-bottom:6px !important; text-shadow:none !important; overflow:visible !important; text-overflow:unset !important; }
+  .shorts-addr{ font-size:12px !important; margin-top:4px !important; margin-bottom:20px !important; }
+  .shorts-book-btn{ width:100% !important; padding:14px !important; font-size:14px !important; font-weight:800 !important; border-radius:14px !important; justify-content:center !important; }
 }
 /* 숏폼 모드: 광고만 숨김 (헤더·검색바는 유지) */
 body.shorts-mode #coupang-ad{ display:none!important; }
@@ -3680,74 +3695,9 @@ async function loadShorts(cat) {
   _shortsTotal = items.length;
   _shortsActiveIdx = -1;
   screen.scrollTop = 0;
-  // PC(768px+)에서 2단 레이아웃: slide/wrap/overlay 모두 직접 주입 (CSS specificity + overflow:hidden 우회)
+  // PC(768px+): wheel로 슬라이드 넘기기 등록 (CSS !important로 레이아웃 처리)
   if (window.innerWidth >= 768) {
-    const sv = 'calc(100dvh - var(--hd) - 44px - var(--nav) - var(--safe))';
-    el.querySelectorAll('.shorts-slide').forEach(slide => {
-      // 1) slide 자체: flex-row + overflow:visible (기본 overflow:hidden 제거)
-      slide.style.cssText = [
-        'display:flex',
-        'flex-direction:row',
-        'flex-shrink:0',
-        'width:100%',
-        'height:' + sv,
-        'min-height:' + sv,
-        'max-height:' + sv,
-        'overflow:visible',
-        'background:#000',
-        'scroll-snap-align:start',
-        'scroll-snap-stop:always',
-        'position:relative',
-      ].join(';');
-
-      // 2) wrap: flex item으로 9:16 너비 차지, absolute 해제
-      const wrap = slide.querySelector('.shorts-iframe-wrap, .shorts-no-video');
-      if (wrap) {
-        wrap.style.cssText = [
-          'position:relative',
-          'flex-shrink:0',
-          'width:' + sv + ' * 9 / 16',  // fallback
-          'width:calc(' + sv + ' * 9 / 16)',
-          'height:100%',
-          'top:auto','left:auto','right:auto','bottom:auto',
-          'overflow:hidden',
-          'background:#000',
-        ].join(';');
-        const vid = wrap.querySelector('.shorts-cl-video');
-        if (vid) vid.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;display:block;pointer-events:none;background:#000';
-      }
-
-      // 3) overlay: 240px 고정 패널, absolute 완전 해제
-      const ov = slide.querySelector('.shorts-overlay');
-      if (ov) {
-        ov.style.cssText = [
-          'position:relative',
-          'flex:none',
-          'width:240px',
-          'height:100%',
-          'top:auto','left:auto','right:auto','bottom:auto',
-          'background:#111',
-          'border-left:1px solid rgba(255,255,255,.08)',
-          'display:flex',
-          'flex-direction:column',
-          'justify-content:center',
-          'padding:28px 22px',
-          'overflow-y:auto',
-          'z-index:1',
-        ].join(';');
-        // 내부 텍스트/버튼 크기
-        const nm   = ov.querySelector('.shorts-name');
-        const addr = ov.querySelector('.shorts-addr');
-        const cat  = ov.querySelector('.shorts-cat');
-        const btn  = ov.querySelector('.shorts-book-btn');
-        const row  = ov.querySelector('.shorts-info-row');
-        if (row)  row.style.cssText  = 'display:flex;flex-direction:column;align-items:flex-start;gap:20px;width:100%';
-        if (nm)   nm.style.cssText   = 'font-size:24px;font-weight:900;line-height:1.3;white-space:normal;word-break:keep-all;margin-bottom:8px;color:#fff;text-shadow:none';
-        if (addr) addr.style.cssText = 'font-size:13px;margin-top:4px;color:rgba(255,255,255,0.7)';
-        if (cat)  cat.style.cssText  = 'font-size:12px;padding:4px 12px;border-radius:20px;display:inline-block;margin-bottom:4px;color:var(--pink);background:rgba(255,77,125,.12);border:1px solid rgba(255,77,125,.25)';
-        if (btn)  btn.style.cssText  = 'width:100%;font-size:15px;font-weight:800;padding:16px;border-radius:16px;background:var(--pink);color:#fff;border:none;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px;margin-top:20px';
-      }
-    });
+    _initPcShortsWheel(screen);
   }
   // 레이아웃 그려진 후 Observer 등록 → 첫 슬라이드 자동 감지·재생
   // 모바일 Safari: display:block 전환 후 layout 확정까지 200ms 대기
@@ -4121,6 +4071,31 @@ function initShortsObserver(screen) {
     screen.scrollTop = cur + 1;
     requestAnimationFrame(() => { screen.scrollTop = cur; });
   });
+}
+
+// PC wheel → 슬라이드 프로그래매틱 스크롤
+function _initPcShortsWheel(screen) {
+  // 기존 핸들러 제거
+  if (screen._pcWheelHandler) {
+    screen.removeEventListener('wheel', screen._pcWheelHandler);
+    screen._pcWheelHandler = null;
+  }
+  let _wheelLock = false;
+  screen._pcWheelHandler = function(e) {
+    e.preventDefault();
+    if (_wheelLock) return;
+    _wheelLock = true;
+    const slides = Array.from(screen.querySelectorAll('.shorts-slide'));
+    if (!slides.length) { _wheelLock = false; return; }
+    const slideH = screen.clientHeight;
+    const cur = Math.round(screen.scrollTop / slideH);
+    const next = e.deltaY > 0
+      ? Math.min(cur + 1, slides.length - 1)
+      : Math.max(cur - 1, 0);
+    screen.scrollTo({ top: next * slideH, behavior: 'smooth' });
+    setTimeout(() => { _wheelLock = false; }, 600);
+  };
+  screen.addEventListener('wheel', screen._pcWheelHandler, { passive: false });
 }
 
 function showAdminPicker() {
