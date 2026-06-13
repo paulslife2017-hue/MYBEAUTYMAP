@@ -3653,13 +3653,13 @@ function shortsSlide(shop, idx) {
   const cat  = shop.category || '';
   const name = shop.name || '';
   const addr = shop.address || '';
-  // Cloudinary 영상 URL 생성 (9:16 세로 변환 + 중앙 크롭)
+  // Cloudinary 영상 URL 생성 (원본 9:16 세로 그대로 사용)
   const clUrl = clId
-    ? 'https://res.cloudinary.com/dc0ouozcd/video/upload/ar_9:16,c_fill,g_center/' + clId + '.mp4'
+    ? 'https://res.cloudinary.com/dc0ouozcd/video/upload/' + clId + '.mp4'
     : '';
-  // Cloudinary 썸네일 URL (poster) - 9:16 세로 변환
+  // Cloudinary 썸네일 URL (poster) - 0초 프레임
   const clPoster = clId
-    ? 'https://res.cloudinary.com/dc0ouozcd/video/upload/ar_9:16,c_fill,g_center,so_0/' + clId + '.jpg'
+    ? 'https://res.cloudinary.com/dc0ouozcd/video/upload/so_0/' + clId + '.jpg'
     : '';
   const hasVideo = clUrl || ytId;
   return (
@@ -6779,7 +6779,7 @@ function renderShortsAdminShell() {
     const vid     = document.getElementById('s-cl-vid');
     if (clId) {
       preview.style.display = 'block';
-      vid.src = 'https://res.cloudinary.com/dc0ouozcd/video/upload/ar_9:16,c_fill,g_center/' + clId + '.mp4';
+      vid.src = 'https://res.cloudinary.com/dc0ouozcd/video/upload/' + clId + '.mp4';
     } else {
       preview.style.display = 'none';
       vid.src = '';
@@ -7332,7 +7332,7 @@ function openShortsModal(id) {
   const clVid     = document.getElementById('s-cl-vid');
   if (clId) {
     clPreview.style.display = 'block';
-    clVid.src = 'https://res.cloudinary.com/dc0ouozcd/video/upload/ar_9:16,c_fill,g_center/' + clId + '.mp4';
+    clVid.src = 'https://res.cloudinary.com/dc0ouozcd/video/upload/' + clId + '.mp4';
   } else {
     clPreview.style.display = 'none';
     clVid.src = '';
