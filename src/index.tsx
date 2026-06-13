@@ -3692,6 +3692,15 @@ async function loadShorts(cat) {
       }
       if (ov) {
         ov.style.cssText = 'position:relative;width:300px;flex-shrink:0;bottom:auto;background:#111;border-left:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;justify-content:center;padding:36px 28px;overflow-y:auto';
+        // PC 패널 내부 텍스트/버튼 크기 직접 주입
+        const nm   = ov.querySelector('.shorts-name');
+        const addr = ov.querySelector('.shorts-addr');
+        const cat  = ov.querySelector('.shorts-cat');
+        const btn  = ov.querySelector('.shorts-book-btn');
+        if (nm)   nm.style.cssText   = 'font-size:24px;font-weight:900;line-height:1.3;white-space:normal;word-break:keep-all;margin-bottom:8px;color:#fff';
+        if (addr) addr.style.cssText = 'font-size:13px;margin-top:4px;color:rgba(255,255,255,0.7)';
+        if (cat)  cat.style.cssText  = 'font-size:12px;padding:4px 12px;border-radius:20px;display:inline-block;margin-bottom:12px';
+        if (btn)  btn.style.cssText  = 'width:100%;font-size:15px;font-weight:800;padding:16px;border-radius:16px;background:var(--pink);color:#fff;border:none;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px;margin-top:20px';
       }
     });
   }
