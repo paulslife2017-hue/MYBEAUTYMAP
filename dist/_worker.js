@@ -1064,21 +1064,19 @@ body.shorts-mode #shorts-mute-btn{ display:flex; }
   /* 높이: 헤더 + 카탈로그바 ~ 탭바 위까지 */
   height:calc(100dvh - var(--hd) - 44px - var(--nav) - var(--safe));
   min-height:calc(100dvh - var(--hd) - 44px - var(--nav) - var(--safe));
+  max-height:calc(100dvh - var(--hd) - 44px - var(--nav) - var(--safe));
   scroll-snap-align:start;
   scroll-snap-stop:always;
   flex-shrink:0;
   background:#000;
-  display:flex;
-  align-items:center;
-  justify-content:center;
   overflow:hidden;
+  /* 영상이 밖으로 튀어나오지 않도록 */
+  contain:strict;
 }
 .shorts-iframe-wrap{
-  position:absolute;inset:0;
+  position:absolute;
+  top:0;left:0;right:0;bottom:0;
   width:100%;height:100%;
-  display:flex;
-  align-items:center;
-  justify-content:center;
   background:#000;
   overflow:hidden;
 }
@@ -2320,7 +2318,7 @@ function shortsSlide(shop, idx) {
           '<video class="shorts-cl-video" id="cl-vid-' + idx + '" src="' + clUrl + '"' +
           ' poster="' + clPoster + '"' +
           ' playsinline loop muted preload="metadata"' +
-          ' style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center center;pointer-events:none;">' +
+          ' style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;object-position:center top;pointer-events:none;display:block;">'  +
           '</video>' +
         '</div>'
       : (ytId
