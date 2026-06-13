@@ -6779,7 +6779,7 @@ function renderShortsAdminShell() {
     const vid     = document.getElementById('s-cl-vid');
     if (clId) {
       preview.style.display = 'block';
-      vid.src = 'https://res.cloudinary.com/dc0ouozcd/video/upload/' + clId + '.mp4';
+      vid.src = 'https://res.cloudinary.com/dc0ouozcd/video/upload/ar_9:16,c_fill,g_center/' + clId + '.mp4';
     } else {
       preview.style.display = 'none';
       vid.src = '';
@@ -7332,7 +7332,7 @@ function openShortsModal(id) {
   const clVid     = document.getElementById('s-cl-vid');
   if (clId) {
     clPreview.style.display = 'block';
-    clVid.src = 'https://res.cloudinary.com/dc0ouozcd/video/upload/' + clId + '.mp4';
+    clVid.src = 'https://res.cloudinary.com/dc0ouozcd/video/upload/ar_9:16,c_fill,g_center/' + clId + '.mp4';
   } else {
     clPreview.style.display = 'none';
     clVid.src = '';
