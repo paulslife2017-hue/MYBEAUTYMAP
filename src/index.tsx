@@ -1099,8 +1099,9 @@ app.post('/api/admin/cloudinary-sign', async (c) => {
     const timestamp = Math.floor(Date.now() / 1000).toString()
 
     // SHA-1 서명: 알파벳 순 정렬 후 시크릿을 뒤에 붙임 (Cloudinary 규칙)
-    // folder < resource_type < timestamp 순
-    const paramsToSign = `folder=${uploadFolder}&resource_type=video&timestamp=${timestamp}${apiSecret}`
+    // resource_type 은 URL 경로 파라미터이므로 서명 대상에서 제외
+    // folder < timestamp 알파벳 순
+    const paramsToSign = `folder=${uploadFolder}&timestamp=${timestamp}${apiSecret}`
     const msgBuffer    = new TextEncoder().encode(paramsToSign)
     const hashBuffer   = await crypto.subtle.digest('SHA-1', msgBuffer)
     const hashArray    = Array.from(new Uint8Array(hashBuffer))
