@@ -1079,22 +1079,23 @@ app.post('/api/admin/upload-thumbnail', async (c) => {
 app.post('/api/admin/cloudinary-sign', async (c) => {
   try {
     const { folder } = await c.req.json()
-    const cloudName = c.env.CLOUDINARY_CLOUD_NAME
-    const apiKey    = c.env.CLOUDINARY_API_KEY
-    const apiSecret = c.env.CLOUDINARY_API_SECRET
+    const cloudName = (c.env?.CLOUDINARY_CLOUD_NAME) || process.env.CLOUDINARY_CLOUD_NAME
+    const apiKey    = (c.env?.CLOUDINARY_API_KEY)    || process.env.CLOUDINARY_API_KEY
+    const apiSecret = (c.env?.CLOUDINARY_API_SECRET) || process.env.CLOUDINARY_API_SECRET
     if (!cloudName || !apiKey || !apiSecret) return c.json({ error: 'Cloudinary env not set' }, 500)
 
     const uploadFolder = folder || 'mybeautymap/shorts'
     const timestamp = Math.floor(Date.now() / 1000).toString()
 
-    // SHA-1 서명 (Web Crypto API)
+    // SHA-1 서명: 알파벳 순 정렬 후 시크릿을 뒤에 붙임 (Cloudinary 규칙)
+    // folder < resource_type < timestamp 순
     const paramsToSign = `folder=${uploadFolder}&resource_type=video&timestamp=${timestamp}${apiSecret}`
     const msgBuffer    = new TextEncoder().encode(paramsToSign)
     const hashBuffer   = await crypto.subtle.digest('SHA-1', msgBuffer)
     const hashArray    = Array.from(new Uint8Array(hashBuffer))
     const signature    = hashArray.map(b => b.toString(16).padStart(2,'0')).join('')
 
-    return c.json({ cloudName, apiKey, timestamp, signature, folder: uploadFolder })
+    return c.json({ ok: true, cloudName, apiKey, timestamp, signature, folder: uploadFolder })
   } catch(e: any) {
     return c.json({ error: e.message }, 500)
   }
@@ -7768,8 +7769,9 @@ async function uploadShortsVideo(file) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ folder: 'mybeautymap/shorts' })
     });
-    if (!signRes.ok) throw new Error('서명 발급 실패');
-    const sign = await signRes.json();
+    const signJson = await signRes.json();
+    if (!signRes.ok || signJson.error) throw new Error(signJson.error || '서명 발급 실패');
+    const sign = signJson;
 
     if (status) status.textContent = 'Cloudinary 업로드 중... (파일 크기에 따라 30초~2분 소요)';
 
