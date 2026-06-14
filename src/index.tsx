@@ -7065,10 +7065,10 @@ function renderShortsAdminShell() {
   const vidFile = document.getElementById('s-vid-file');
   if (vidFile) {
     vidFile.addEventListener('change', function() {
-      const file = (this as HTMLInputElement).files?.[0];
+      const file = (this).files?.[0];
       if (!file) return;
       const preview  = document.getElementById('s-vid-preview');
-      const localVid = document.getElementById('s-vid-local') as HTMLVideoElement;
+      const localVid = document.getElementById('s-vid-local');
       const fname    = document.getElementById('s-vid-filename');
       const label    = document.getElementById('s-vid-label');
       preview.style.display = 'flex';
@@ -7678,23 +7678,23 @@ function openShortsModal(id) {
   document.getElementById('shortsModalTitle').textContent = id ? '숏폼 수정' : '숏폼 추가';
 
   // 기본 필드
-  (document.getElementById('s-name')  as HTMLInputElement).value = item?.name             || '';
-  (document.getElementById('s-addr')  as HTMLInputElement).value = item?.address          || '';
-  (document.getElementById('s-place') as HTMLInputElement).value = item?.smart_place_url  || '';
-  (document.getElementById('s-ytid')  as HTMLInputElement).value = item?.youtube_id       || '';
-  (document.getElementById('s-order') as HTMLInputElement).value = String(item?.sort_order ?? 0);
-  (document.getElementById('s-active') as HTMLInputElement).checked = item ? item.active : true;
+  (document.getElementById('s-name')).value = item?.name             || '';
+  (document.getElementById('s-addr')).value = item?.address          || '';
+  (document.getElementById('s-place')).value = item?.smart_place_url  || '';
+  (document.getElementById('s-ytid')).value = item?.youtube_id       || '';
+  (document.getElementById('s-order')).value = String(item?.sort_order ?? 0);
+  (document.getElementById('s-active')).checked = item ? item.active : true;
 
   // 카테고리
-  const sCat = document.getElementById('s-cat') as HTMLSelectElement;
+  const sCat = document.getElementById('s-cat');
   sCat.innerHTML = '<option value="" style="background:#1b1b1b;color:#fff">선택 안함</option>' +
     CAT_OPTIONS.map(c => '<option value="'+c+'" style="background:#1b1b1b;color:#fff"'+(item?.category===c?' selected':'')+'>'+c+'</option>').join('');
 
   // Cloudinary 영상 상태 초기화
   const clId      = item?.cloudinary_public_id || '';
   const clPreview = document.getElementById('s-cl-preview');
-  const clVid     = document.getElementById('s-cl-vid') as HTMLVideoElement;
-  const clIdInp   = document.getElementById('s-clid') as HTMLInputElement;
+  const clVid     = document.getElementById('s-cl-vid');
+  const clIdInp   = document.getElementById('s-clid');
   const vidPreview = document.getElementById('s-vid-preview');
   const naverSt   = document.getElementById('s-naver-status');
   if (clId) {
@@ -7713,7 +7713,7 @@ function openShortsModal(id) {
   if (naverSt) naverSt.style.display = 'none';
 
   // 수정 시 추가정보 펼치기
-  const details = document.getElementById('s-extra-details') as HTMLDetailsElement;
+  const details = document.getElementById('s-extra-details');
   if (details) details.open = !!id;
 
   document.getElementById('shortsModalBg').style.display = 'flex';
@@ -7732,23 +7732,23 @@ function autoFetchNaverInfo(val) {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ url: val.trim() })
       });
-      const d = await r.json() as any;
+      const d = await r.json();
       if (!r.ok || d.error) throw new Error(d.error || '조회 실패');
-      const nameEl = document.getElementById('s-name') as HTMLInputElement;
-      const addrEl = document.getElementById('s-addr') as HTMLInputElement;
+      const nameEl = document.getElementById('s-name');
+      const addrEl = document.getElementById('s-addr');
       if (d.name  && !nameEl.value) nameEl.value = d.name;
       if (d.address && !addrEl.value) addrEl.value = d.address;
       // 카테고리 자동 매핑
       if (d.category) {
-        const sCat = document.getElementById('s-cat') as HTMLSelectElement;
+        const sCat = document.getElementById('s-cat');
         const matched = CAT_OPTIONS.find(c => d.category.includes(c));
         if (matched && !sCat.value) sCat.value = matched;
       }
       if (st) { st.style.color='#22c55e'; st.textContent='✅ ' + (d.name||'') + (d.address?' · '+d.address:'') + ' 자동 입력됨'; }
       // 추가정보 자동 펼치기
-      const details = document.getElementById('s-extra-details') as HTMLDetailsElement;
+      const details = document.getElementById('s-extra-details');
       if (details) details.open = true;
-    } catch(e: any) {
+    } catch(e) {
       if (st) { st.style.color='#64748b'; st.textContent='직접 입력하세요 (자동추출 불가)'; }
     }
   }, 800);
@@ -7781,10 +7781,10 @@ function extractYtId(raw) {
 
 // Cloudinary 업로드 핸들러
 async function uploadShortsVideo() {
-  const file = (document.getElementById('s-vid-file') as HTMLInputElement).files?.[0];
+  const file = (document.getElementById('s-vid-file')).files?.[0];
   if (!file) { toast('파일을 먼저 선택하세요'); return; }
 
-  const btn    = document.getElementById('s-upload-btn') as HTMLButtonElement;
+  const btn    = document.getElementById('s-upload-btn');
   const status = document.getElementById('s-upload-status');
   btn.disabled = true;
   btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 업로드 중...';
@@ -7793,9 +7793,9 @@ async function uploadShortsVideo() {
 
   try {
     // File → base64 dataUrl
-    const dataUrl: string = await new Promise((res, rej) => {
+    const dataUrl = await new Promise((res, rej) => {
       const reader = new FileReader();
-      reader.onload = () => res(reader.result as string);
+      reader.onload = () => res(reader.result);
       reader.onerror = rej;
       reader.readAsDataURL(file);
     });
@@ -7807,20 +7807,20 @@ async function uploadShortsVideo() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ dataUrl, folder: 'mybeautymap/shorts' })
     });
-    const json = await r.json() as any;
+    const json = await r.json();
 
     if (!r.ok || !json.public_id) {
       throw new Error(json.error || '업로드 실패');
     }
 
     // 성공: ID 저장 + 완료 UI 표시
-    const clIdInp = document.getElementById('s-clid') as HTMLInputElement;
+    const clIdInp = document.getElementById('s-clid');
     if (clIdInp) clIdInp.value = json.public_id;
 
     // 로컬 미리보기 숨기고 완료 패널 표시
     const vidPreview = document.getElementById('s-vid-preview');
     const clPreview  = document.getElementById('s-cl-preview');
-    const clVid      = document.getElementById('s-cl-vid') as HTMLVideoElement;
+    const clVid      = document.getElementById('s-cl-vid');
     const lbl        = document.getElementById('s-cl-id-label');
     if (vidPreview) vidPreview.style.display = 'none';
     if (clPreview)  clPreview.style.display  = 'block';
@@ -7833,7 +7833,7 @@ async function uploadShortsVideo() {
 
     btn.innerHTML = '<i class="fas fa-check"></i> 완료';
     toast('영상 업로드 완료! 등록하기를 눌러 저장하세요 🎬');
-  } catch(e: any) {
+  } catch(e) {
     status.style.color = '#ef4444';
     status.textContent = '❌ ' + e.message;
     btn.disabled = false;
@@ -7842,16 +7842,16 @@ async function uploadShortsVideo() {
 }
 
 async function saveShorts() {
-  const clId  = (document.getElementById('s-clid') as HTMLInputElement)?.value.trim() || '';
-  const rawYt = (document.getElementById('s-ytid') as HTMLInputElement)?.value.trim() || '';
+  const clId  = (document.getElementById('s-clid'))?.value.trim() || '';
+  const rawYt = (document.getElementById('s-ytid'))?.value.trim() || '';
   const ytId  = extractYtId(rawYt) || rawYt;
-  const place = (document.getElementById('s-place') as HTMLInputElement)?.value.trim() || '';
+  const place = (document.getElementById('s-place'))?.value.trim() || '';
 
   // 영상 필수 체크
   if (!clId && !ytId) { toast('영상을 먼저 업로드하거나 유튜브 링크를 입력하세요'); return; }
 
   // 업체명 없으면 네이버 링크로 대체
-  let name = (document.getElementById('s-name') as HTMLInputElement)?.value.trim() || '';
+  let name = (document.getElementById('s-name'))?.value.trim() || '';
   if (!name && place) {
     // URL에서 마지막 경로를 임시 이름으로
     name = '미등록업체';
@@ -7860,13 +7860,13 @@ async function saveShorts() {
 
   const body = {
     name,
-    category:           (document.getElementById('s-cat') as HTMLSelectElement)?.value || '',
-    address:            (document.getElementById('s-addr') as HTMLInputElement)?.value.trim() || '',
+    category:           (document.getElementById('s-cat'))?.value || '',
+    address:            (document.getElementById('s-addr'))?.value.trim() || '',
     smartPlaceUrl:      place,
     cloudinaryPublicId: clId,
     youtubeId:          ytId,
-    sortOrder:          parseInt((document.getElementById('s-order') as HTMLInputElement)?.value) || 0,
-    active:             (document.getElementById('s-active') as HTMLInputElement)?.checked ?? true,
+    sortOrder:          parseInt((document.getElementById('s-order'))?.value) || 0,
+    active:             (document.getElementById('s-active'))?.checked ?? true,
   };
   const url    = _shortsAdminEditId ? '/api/admin/shorts/'+_shortsAdminEditId : '/api/admin/shorts';
   const method = _shortsAdminEditId ? 'PUT' : 'POST';
