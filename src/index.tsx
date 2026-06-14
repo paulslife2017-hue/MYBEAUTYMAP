@@ -1074,12 +1074,11 @@ app.post('/api/admin/upload-thumbnail', async (c) => {
   return c.json({ ok: true, url: dataUrl })
 })
 
-// Cloudinary 영상 직접 업로드 (base64 → Cloudinary)
-app.post('/api/admin/upload-shorts-video', async (c) => {
+// Cloudinary 업로드 서명 발급 (프론트에서 직접 업로드용)
+// 파일 자체는 브라우저 → Cloudinary 직접 전송 (서버 경유 없음)
+app.post('/api/admin/cloudinary-sign', async (c) => {
   try {
-    const { dataUrl, folder } = await c.req.json()
-    if (!dataUrl) return c.json({ error: 'dataUrl required' }, 400)
-
+    const { folder } = await c.req.json()
     const cloudName = c.env.CLOUDINARY_CLOUD_NAME
     const apiKey    = c.env.CLOUDINARY_API_KEY
     const apiSecret = c.env.CLOUDINARY_API_SECRET
@@ -1088,26 +1087,14 @@ app.post('/api/admin/upload-shorts-video', async (c) => {
     const uploadFolder = folder || 'mybeautymap/shorts'
     const timestamp = Math.floor(Date.now() / 1000).toString()
 
-    // 서명 생성 (SHA-1 via Web Crypto)
+    // SHA-1 서명 (Web Crypto API)
     const paramsToSign = `folder=${uploadFolder}&resource_type=video&timestamp=${timestamp}${apiSecret}`
     const msgBuffer    = new TextEncoder().encode(paramsToSign)
     const hashBuffer   = await crypto.subtle.digest('SHA-1', msgBuffer)
     const hashArray    = Array.from(new Uint8Array(hashBuffer))
     const signature    = hashArray.map(b => b.toString(16).padStart(2,'0')).join('')
 
-    const formData = new FormData()
-    formData.append('file', dataUrl)
-    formData.append('api_key', apiKey)
-    formData.append('timestamp', timestamp)
-    formData.append('signature', signature)
-    formData.append('folder', uploadFolder)
-    formData.append('resource_type', 'video')
-
-    const res  = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/video/upload`, { method:'POST', body: formData })
-    const json = await res.json() as any
-    if (!res.ok) return c.json({ error: json.error?.message || 'upload failed' }, 500)
-
-    return c.json({ ok: true, public_id: json.public_id, url: json.secure_url })
+    return c.json({ cloudName, apiKey, timestamp, signature, folder: uploadFolder })
   } catch(e: any) {
     return c.json({ error: e.message }, 500)
   }
@@ -7061,23 +7048,13 @@ function renderShortsAdminShell() {
     // 모달
     _shortsAdminModalHtml();
 
-  // 파일 선택 → 로컬 미리보기
+  // 파일 선택 → 즉시 자동 업로드
   const vidFile = document.getElementById('s-vid-file');
   if (vidFile) {
     vidFile.addEventListener('change', function() {
       const file = (this).files?.[0];
       if (!file) return;
-      const preview  = document.getElementById('s-vid-preview');
-      const localVid = document.getElementById('s-vid-local');
-      const fname    = document.getElementById('s-vid-filename');
-      const label    = document.getElementById('s-vid-label');
-      preview.style.display = 'flex';
-      localVid.src = URL.createObjectURL(file);
-      fname.textContent = file.name + ' (' + (file.size/1024/1024).toFixed(1) + 'MB)';
-      if (label) label.innerHTML =
-        '<i class="fas fa-check-circle" style="font-size:20px;color:#22c55e"></i>' +
-        '<span style="font-size:12px;font-weight:700;color:#22c55e">선택됨</span>' +
-        '<span style="font-size:11px;color:#475569">' + file.name + '</span>';
+      uploadShortsVideo(file);
     });
   }
 }
@@ -7105,20 +7082,8 @@ function _shortsAdminModalHtml() {
         '</label>' +
         '<input id="s-vid-file" type="file" accept="video/mp4,video/quicktime,video/*" style="display:none"/>' +
         // 선택 후 미리보기 + 업로드 버튼
-        '<div id="s-vid-preview" style="display:none;margin-top:12px">' +
-          '<div style="display:flex;gap:12px;align-items:center">' +
-            '<div style="width:72px;height:128px;border-radius:10px;overflow:hidden;background:#000;flex-shrink:0;position:relative">' +
-              '<video id="s-vid-local" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover" muted playsinline></video>' +
-            '</div>' +
-            '<div style="flex:1;min-width:0">' +
-              '<div id="s-vid-filename" style="font-size:11px;color:#64748b;margin-bottom:8px;word-break:break-all"></div>' +
-              '<button id="s-upload-btn" onclick="uploadShortsVideo()" style="width:100%;padding:11px;background:linear-gradient(135deg,#c026d3,#e879f9);color:#fff;border:none;border-radius:12px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px">' +
-                '<i class="fas fa-upload"></i> Cloudinary 업로드' +
-              '</button>' +
-              '<div id="s-upload-status" style="display:none;font-size:11px;color:#94a3b8;margin-top:6px;text-align:center"></div>' +
-            '</div>' +
-          '</div>' +
-        '</div>' +
+        // 업로드 진행 상태 (파일 선택 즉시 표시)
+        '<div id="s-upload-status" style="display:none;font-size:12px;color:#94a3b8;margin-top:10px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,.04);text-align:center"></div>' +
         // 업로드 완료 후 영상 미리보기
         '<div id="s-cl-preview" style="display:none;margin-top:12px">' +
           '<div style="display:flex;align-items:center;gap:10px;background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.2);border-radius:12px;padding:10px 12px">' +
@@ -7780,64 +7745,73 @@ function extractYtId(raw) {
 }
 
 // Cloudinary 업로드 핸들러
-async function uploadShortsVideo() {
-  const file = (document.getElementById('s-vid-file')).files?.[0];
-  if (!file) { toast('파일을 먼저 선택하세요'); return; }
+// 파일 선택 즉시 자동 호출 (file 파라미터로 받음)
+async function uploadShortsVideo(file) {
+  if (!file) return;
 
-  const btn    = document.getElementById('s-upload-btn');
+  // UI 상태: 업로드 중
+  const label  = document.getElementById('s-vid-label');
   const status = document.getElementById('s-upload-status');
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 업로드 중...';
-  status.style.display = 'block';
-  status.textContent = '파일 읽는 중...';
+  const vidPreview = document.getElementById('s-vid-preview');
+
+  if (label) label.innerHTML =
+    '<i class="fas fa-spinner fa-spin" style="font-size:20px;color:#e879f9"></i>' +
+    '<span style="font-size:12px;font-weight:700;color:#e879f9">업로드 중...</span>' +
+    '<span style="font-size:11px;color:#475569">' + file.name + '</span>';
+  if (status) { status.style.display = 'block'; status.style.color = '#94a3b8'; status.textContent = '서버에서 서명 받는 중...'; }
+  if (vidPreview) vidPreview.style.display = 'none';
 
   try {
-    // File → base64 dataUrl
-    const dataUrl = await new Promise((res, rej) => {
-      const reader = new FileReader();
-      reader.onload = () => res(reader.result);
-      reader.onerror = rej;
-      reader.readAsDataURL(file);
-    });
-
-    status.textContent = 'Cloudinary 업로드 중... (영상 크기에 따라 30초~2분 소요)';
-
-    const r = await fetch('/api/admin/upload-shorts-video', {
+    // 1) 서버에서 서명만 받기 (파일 전송 없음)
+    const signRes = await fetch('/api/admin/cloudinary-sign', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dataUrl, folder: 'mybeautymap/shorts' })
+      body: JSON.stringify({ folder: 'mybeautymap/shorts' })
     });
-    const json = await r.json();
+    if (!signRes.ok) throw new Error('서명 발급 실패');
+    const sign = await signRes.json();
 
-    if (!r.ok || !json.public_id) {
-      throw new Error(json.error || '업로드 실패');
-    }
+    if (status) status.textContent = 'Cloudinary 업로드 중... (파일 크기에 따라 30초~2분 소요)';
 
-    // 성공: ID 저장 + 완료 UI 표시
+    // 2) 브라우저에서 Cloudinary로 직접 업로드 (multipart)
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('api_key', sign.apiKey);
+    fd.append('timestamp', sign.timestamp);
+    fd.append('signature', sign.signature);
+    fd.append('folder', sign.folder);
+    fd.append('resource_type', 'video');
+
+    const upRes = await fetch('https://api.cloudinary.com/v1_1/' + sign.cloudName + '/video/upload', {
+      method: 'POST', body: fd
+    });
+    const json = await upRes.json();
+    if (!upRes.ok || !json.public_id) throw new Error(json.error?.message || '업로드 실패');
+
+    // 3) 성공 UI
     const clIdInp = document.getElementById('s-clid');
     if (clIdInp) clIdInp.value = json.public_id;
 
-    // 로컬 미리보기 숨기고 완료 패널 표시
-    const vidPreview = document.getElementById('s-vid-preview');
-    const clPreview  = document.getElementById('s-cl-preview');
-    const clVid      = document.getElementById('s-cl-vid');
-    const lbl        = document.getElementById('s-cl-id-label');
-    if (vidPreview) vidPreview.style.display = 'none';
-    if (clPreview)  clPreview.style.display  = 'block';
-    if (clVid)      clVid.src = 'https://res.cloudinary.com/dc0ouozcd/video/upload/' + json.public_id + '.mp4';
-    if (lbl)        lbl.textContent = json.public_id;
+    const clPreview = document.getElementById('s-cl-preview');
+    const clVid     = document.getElementById('s-cl-vid');
+    const lbl       = document.getElementById('s-cl-id-label');
+    if (clPreview) clPreview.style.display = 'block';
+    if (clVid)     clVid.src = 'https://res.cloudinary.com/dc0ouozcd/video/upload/' + json.public_id + '.mp4';
+    if (lbl)       lbl.textContent = json.public_id;
+    if (status)    { status.style.color = '#22c55e'; status.textContent = '✅ 업로드 완료!'; }
+    if (label) label.innerHTML =
+      '<i class="fas fa-circle-check" style="font-size:20px;color:#22c55e"></i>' +
+      '<span style="font-size:12px;font-weight:700;color:#22c55e">업로드 완료</span>' +
+      '<span style="font-size:11px;color:#475569">' + file.name + '</span>';
 
-    // 파일 업로드 라벨도 완료 표시
-    const label = document.getElementById('s-vid-label');
-    if (label) label.innerHTML = '<i class="fas fa-check-circle" style="font-size:20px;color:#22c55e"></i><span style="font-size:12px;font-weight:700;color:#22c55e">업로드 완료</span>';
-
-    btn.innerHTML = '<i class="fas fa-check"></i> 완료';
-    toast('영상 업로드 완료! 등록하기를 눌러 저장하세요 🎬');
+    toast('🎬 영상 업로드 완료! 등록하기를 눌러 저장하세요');
   } catch(e) {
-    status.style.color = '#ef4444';
-    status.textContent = '❌ ' + e.message;
-    btn.disabled = false;
-    btn.innerHTML = '<i class="fas fa-upload"></i> 다시 시도';
+    if (status) { status.style.color = '#ef4444'; status.textContent = '❌ ' + e.message; }
+    if (label) label.innerHTML =
+      '<i class="fas fa-cloud-upload-alt" style="font-size:26px;color:#e879f9"></i>' +
+      '<span style="font-size:13px;font-weight:700;color:#e879f9">다시 선택</span>' +
+      '<span style="font-size:11px;color:#475569">MP4 / MOV</span>';
+    toast('업로드 실패: ' + e.message);
   }
 }
 
