@@ -3,7 +3,18 @@ import { neon } from '@neondatabase/serverless'
 import fs from 'fs'
 import path from 'path'
 
-const app = new Hono()
+type Bindings = {
+  DATABASE_URL: string
+  CLOUDINARY_CLOUD_NAME: string
+  CLOUDINARY_API_KEY: string
+  CLOUDINARY_API_SECRET: string
+  GOOGLE_PLACES_KEY: string
+  GA4_PROPERTY_ID: string
+  GA4_SERVICE_ACCOUNT_KEY: string
+  GSK_TOKEN: string
+}
+
+const app = new Hono<{ Bindings: Bindings }>()
 
 // ══════════════════════════════════════════════════════════════════════════
 // Neon DB 연결
@@ -1079,10 +1090,10 @@ app.post('/api/admin/upload-thumbnail', async (c) => {
 app.post('/api/admin/cloudinary-sign', async (c) => {
   try {
     const { folder } = await c.req.json()
-    const cloudName = (c.env?.CLOUDINARY_CLOUD_NAME) || process.env.CLOUDINARY_CLOUD_NAME
-    const apiKey    = (c.env?.CLOUDINARY_API_KEY)    || process.env.CLOUDINARY_API_KEY
-    const apiSecret = (c.env?.CLOUDINARY_API_SECRET) || process.env.CLOUDINARY_API_SECRET
-    if (!cloudName || !apiKey || !apiSecret) return c.json({ error: 'Cloudinary env not set' }, 500)
+    const cloudName = c.env?.CLOUDINARY_CLOUD_NAME || (globalThis as any).process?.env?.CLOUDINARY_CLOUD_NAME
+    const apiKey    = c.env?.CLOUDINARY_API_KEY    || (globalThis as any).process?.env?.CLOUDINARY_API_KEY
+    const apiSecret = c.env?.CLOUDINARY_API_SECRET || (globalThis as any).process?.env?.CLOUDINARY_API_SECRET
+    if (!cloudName || !apiKey || !apiSecret) return c.json({ error: 'Cloudinary env not set', debug: { hasEnv: !!c.env, keys: Object.keys(c.env||{}) } }, 500)
 
     const uploadFolder = folder || 'mybeautymap/shorts'
     const timestamp = Math.floor(Date.now() / 1000).toString()
