@@ -7681,6 +7681,15 @@ function openShortsModal(id) {
   const clVid     = document.getElementById('s-cl-vid');
   const clIdInp   = document.getElementById('s-clid');
   const naverSt   = document.getElementById('s-naver-status');
+  // 업로드 상태 div 항상 초기화 (이전 에러 메시지 제거)
+  const uploadSt  = document.getElementById('s-upload-status');
+  if (uploadSt) { uploadSt.style.display = 'none'; uploadSt.textContent = ''; }
+  // 파일 선택 라벨 초기화
+  const vidLabel = document.getElementById('s-vid-label');
+  if (vidLabel) vidLabel.innerHTML =
+    '<i class="fas fa-cloud-upload-alt" style="font-size:26px;color:#e879f9"></i>' +
+    '<span style="font-size:13px;font-weight:700;color:#e879f9">영상 파일 선택</span>' +
+    '<span style="font-size:11px;color:#475569">MP4 / MOV</span>';
   if (clId) {
     clIdInp.value = clId;
     clVid.src = 'https://res.cloudinary.com/dc0ouozcd/video/upload/' + clId + '.mp4';
