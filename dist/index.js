@@ -326,22 +326,22 @@ buffer/index.js:
     ORDER BY visit_date ASC
   `,y={};h.forEach(x=>{y[x.visit_date]=parseInt(x.visit_cnt)||0});const g=h.reduce((x,d)=>x+(parseInt(d.visit_cnt)||0),0);return e.json({year:t,month:s,monthTotal:{views:parseInt(f.views)||0,feedSP:parseInt(f.feed_sp)||0,mapSP:parseInt(f.map_sp)||0,visits:g},daily:a.map(x=>({date:x.stat_date,visits:y[x.stat_date]||0,views:parseInt(x.views)||0,feedSP:parseInt(x.feed_sp)||0,mapSP:parseInt(x.map_sp)||0,activeShops:parseInt(x.active_shops)||0})),shopDetail:o.map(x=>({id:x.id,name:x.name,category:x.category,thumbnail:x.thumbnail,views:parseInt(x.views)||0,feedSP:parseInt(x.feed_sp)||0,mapSP:parseInt(x.map_sp)||0}))})});j.get("/api/admin/inquiries",async e=>{const t=await B`SELECT * FROM inquiries ORDER BY created_at DESC`;return e.json(t)});j.get("/favicon.ico",e=>Qr());j.get("/favicon.svg",e=>Qr());function Qr(e){return new Response('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#FF4D7D"/><text x="16" y="23" font-size="18" text-anchor="middle">💄</text></svg>',{headers:{"Content-Type":"image/svg+xml","Cache-Control":"public,max-age=86400"}})}j.get("/og-image.jpg",e=>{try{const t=da.join(process.cwd(),"public","og-image.jpg"),s=na.readFileSync(t);return new Response(s,{headers:{"Content-Type":"image/jpeg","Cache-Control":"public,max-age=86400"}})}catch{return e.notFound()}});j.post("/api/admin/upload-thumbnail",async e=>{const t=await e.req.json(),{shopId:s,dataUrl:i}=t;return!i||!s?e.json({error:"required"},400):(await B`UPDATE shops SET thumbnail = ${i} WHERE id = ${s}`,e.json({ok:!0,url:i}))});j.post("/api/admin/cloudinary-sign",async e=>{var t,s,i;try{const{folder:r}=await e.req.json(),a=((t=e.env)==null?void 0:t.CLOUDINARY_CLOUD_NAME)||process.env.CLOUDINARY_CLOUD_NAME,l=((s=e.env)==null?void 0:s.CLOUDINARY_API_KEY)||process.env.CLOUDINARY_API_KEY,o=((i=e.env)==null?void 0:i.CLOUDINARY_API_SECRET)||process.env.CLOUDINARY_API_SECRET;if(!a||!l||!o)return e.json({error:"Cloudinary env not set"},500);const p=r||"mybeautymap/shorts",f=Math.floor(Date.now()/1e3).toString(),h=`folder=${p}&resource_type=video&timestamp=${f}${o}`,y=new TextEncoder().encode(h),g=await crypto.subtle.digest("SHA-1",y),d=Array.from(new Uint8Array(g)).map(u=>u.toString(16).padStart(2,"0")).join("");return e.json({ok:!0,cloudName:a,apiKey:l,timestamp:f,signature:d,folder:p})}catch(r){return e.json({error:r.message},500)}});j.post("/api/admin/fetch-naver-info",async e=>{try{const{url:t}=await e.req.json();if(!t)return e.json({error:"url required"},400);const i=await(await fetch(t,{redirect:"follow",headers:{"User-Agent":"Mozilla/5.0 (compatible; bot)"}})).text();let r="";const a=i.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i),l=i.match(/<title[^>]*>([^<]+)<\/title>/i);r=((a==null?void 0:a[1])||(l==null?void 0:l[1])||"").replace(/\s*[\|｜]\s*네이버.*$/i,"").replace(/\s*-\s*네이버.*$/i,"").trim();let p="";const f=i.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i),h=(f==null?void 0:f[1])||"",y=h.match(/(서울|경기|인천|부산|대구|광주|대전|울산|세종|강원|충북|충남|전북|전남|경북|경남|제주)[^\|,·]+/);y&&(p=y[0].trim());let g="";const x=["마사지","헤드스파","피부관리","헤어","메이크업","왁싱","반영구","병원"];for(const d of x)if(i.includes(d)||h.includes(d)){g=d;break}return r?e.json({name:r,address:p,category:g}):e.json({error:"업체 정보를 찾을 수 없습니다"},404)}catch(t){return e.json({error:t.message},500)}});j.get("/api/shorts",async e=>{try{const t=await B`
       SELECT * FROM shorts_items WHERE active = true ORDER BY sort_order ASC, id DESC
-    `;return e.json(t)}catch(t){return console.error("[/api/shorts] DB error:",t),e.json([],200)}});j.get("/api/admin/shorts",async e=>{const t=await B`SELECT * FROM shorts_items ORDER BY sort_order ASC, id DESC`;return e.json(t)});j.post("/api/admin/shorts",async e=>{const t=await e.req.json(),s=await B`
-    INSERT INTO shorts_items (name, category, address, youtube_id, cloudinary_public_id, smart_place_url, sort_order, active)
-    VALUES (${t.name||""}, ${t.category||""}, ${t.address||""}, ${t.youtubeId||""}, ${t.cloudinaryPublicId||""}, ${t.smartPlaceUrl||""}, ${t.sortOrder||0}, ${t.active!==!1})
-    RETURNING *
-  `;return e.json(s[0])});j.put("/api/admin/shorts/:id",async e=>{const t=+e.req.param("id"),s=await e.req.json(),i=await B`
-    UPDATE shorts_items SET
-      name                 = ${s.name||""},
-      category             = ${s.category||""},
-      address              = ${s.address||""},
-      youtube_id           = ${s.youtubeId||""},
-      cloudinary_public_id = ${s.cloudinaryPublicId||""},
-      smart_place_url      = ${s.smartPlaceUrl||""},
-      sort_order           = ${s.sortOrder||0},
-      active               = ${s.active!==!1}
-    WHERE id = ${t} RETURNING *
-  `;return e.json(i[0])});j.delete("/api/admin/shorts/:id",async e=>{const t=+e.req.param("id");return await B`DELETE FROM shorts_items WHERE id = ${t}`,e.json({ok:!0})});let ki=!1;async function wt(){ki||(await B`
+    `;return e.json(t)}catch(t){return console.error("[/api/shorts] DB error:",t),e.json([],200)}});j.get("/api/admin/shorts",async e=>{const t=await B`SELECT * FROM shorts_items ORDER BY sort_order ASC, id DESC`;return e.json(t)});j.post("/api/admin/shorts",async e=>{try{const t=await e.req.json(),s=await B`
+      INSERT INTO shorts_items (name, category, address, youtube_id, cloudinary_public_id, smart_place_url, sort_order, active)
+      VALUES (${t.name||"미등록업체"}, ${t.category||""}, ${t.address||""}, ${t.youtubeId||""}, ${t.cloudinaryPublicId||""}, ${t.smartPlaceUrl||""}, ${t.sortOrder||0}, ${t.active!==!1})
+      RETURNING *
+    `;return e.json(s[0])}catch(t){return e.json({error:(t==null?void 0:t.message)||"DB 오류"},500)}});j.put("/api/admin/shorts/:id",async e=>{try{const t=+e.req.param("id"),s=await e.req.json(),i=await B`
+      UPDATE shorts_items SET
+        name                 = ${s.name||"미등록업체"},
+        category             = ${s.category||""},
+        address              = ${s.address||""},
+        youtube_id           = ${s.youtubeId||""},
+        cloudinary_public_id = ${s.cloudinaryPublicId||""},
+        smart_place_url      = ${s.smartPlaceUrl||""},
+        sort_order           = ${s.sortOrder||0},
+        active               = ${s.active!==!1}
+      WHERE id = ${t} RETURNING *
+    `;return e.json(i[0])}catch(t){return e.json({error:(t==null?void 0:t.message)||"DB 오류"},500)}});j.delete("/api/admin/shorts/:id",async e=>{const t=+e.req.param("id");return await B`DELETE FROM shorts_items WHERE id = ${t}`,e.json({ok:!0})});let ki=!1;async function wt(){ki||(await B`
     CREATE TABLE IF NOT EXISTS shorts_daily_stats (
       shorts_id  INTEGER NOT NULL,
       stat_date  DATE    NOT NULL,
@@ -6260,16 +6260,16 @@ async function saveShorts() {
   const ytId  = extractYtId(rawYt) || rawYt;
   const place = (document.getElementById('s-place'))?.value.trim() || '';
 
-  // 영상 필수 체크
-  if (!clId && !ytId) { toast('영상을 먼저 업로드하거나 유튜브 링크를 입력하세요'); return; }
-
-  // 업체명 없으면 네이버 링크로 대체
-  let name = (document.getElementById('s-name'))?.value.trim() || '';
-  if (!name && place) {
-    // URL에서 마지막 경로를 임시 이름으로
-    name = '미등록업체';
+  // 영상(Cloudinary) 또는 네이버링크 중 하나는 필수
+  if (!clId && !ytId && !place) {
+    toast('영상을 업로드하거나 네이버 링크를 입력하세요'); return;
   }
-  if (!name) { toast('업체명을 입력하세요 (추가 정보에서 입력)'); return; }
+
+  // 업체명: 자동입력 → 네이버링크 있으면 임시명 → 기본값
+  let name = (document.getElementById('s-name'))?.value.trim() || '';
+  if (!name && place) name = '미등록업체';
+  if (!name && clId)  name = '미등록업체';
+  if (!name) name = '미등록업체'; // 어떤 경우도 통과
 
   const body = {
     name,
@@ -6283,13 +6283,19 @@ async function saveShorts() {
   };
   const url    = _shortsAdminEditId ? '/api/admin/shorts/'+_shortsAdminEditId : '/api/admin/shorts';
   const method = _shortsAdminEditId ? 'PUT' : 'POST';
-  const r = await fetch(url, {method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
-  if (r.ok) {
-    closeShortsModal();
-    toast(_shortsAdminEditId ? '✅ 수정 완료!' : '🎬 숏폼 등록 완료!');
-    await loadShortsAdmin();
-  } else {
-    toast('저장 실패');
+  try {
+    const r = await fetch(url, {method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+    if (r.ok) {
+      closeShortsModal();
+      toast(_shortsAdminEditId ? '✅ 수정 완료!' : '🎬 숏폼 등록 완료!');
+      await loadShortsAdmin();
+    } else {
+      let errMsg = '저장 실패';
+      try { const ej = await r.json(); errMsg = ej.error || ej.message || errMsg; } catch(_) {}
+      toast('❌ ' + errMsg);
+    }
+  } catch(e) {
+    toast('❌ 네트워크 오류: ' + e.message);
   }
 }
 

@@ -1169,32 +1169,40 @@ app.get('/api/admin/shorts', async (c) => {
 
 // 등록
 app.post('/api/admin/shorts', async (c) => {
-  const b = await c.req.json()
-  const rows = await sql`
-    INSERT INTO shorts_items (name, category, address, youtube_id, cloudinary_public_id, smart_place_url, sort_order, active)
-    VALUES (${b.name||''}, ${b.category||''}, ${b.address||''}, ${b.youtubeId||''}, ${b.cloudinaryPublicId||''}, ${b.smartPlaceUrl||''}, ${b.sortOrder||0}, ${b.active!==false})
-    RETURNING *
-  `
-  return c.json(rows[0])
+  try {
+    const b = await c.req.json()
+    const rows = await sql`
+      INSERT INTO shorts_items (name, category, address, youtube_id, cloudinary_public_id, smart_place_url, sort_order, active)
+      VALUES (${b.name||'미등록업체'}, ${b.category||''}, ${b.address||''}, ${b.youtubeId||''}, ${b.cloudinaryPublicId||''}, ${b.smartPlaceUrl||''}, ${b.sortOrder||0}, ${b.active!==false})
+      RETURNING *
+    `
+    return c.json(rows[0])
+  } catch(e: any) {
+    return c.json({ error: e?.message || 'DB 오류' }, 500)
+  }
 })
 
 // 수정
 app.put('/api/admin/shorts/:id', async (c) => {
-  const id = +c.req.param('id')
-  const b  = await c.req.json()
-  const rows = await sql`
-    UPDATE shorts_items SET
-      name                 = ${b.name||''},
-      category             = ${b.category||''},
-      address              = ${b.address||''},
-      youtube_id           = ${b.youtubeId||''},
-      cloudinary_public_id = ${b.cloudinaryPublicId||''},
-      smart_place_url      = ${b.smartPlaceUrl||''},
-      sort_order           = ${b.sortOrder||0},
-      active               = ${b.active!==false}
-    WHERE id = ${id} RETURNING *
-  `
-  return c.json(rows[0])
+  try {
+    const id = +c.req.param('id')
+    const b  = await c.req.json()
+    const rows = await sql`
+      UPDATE shorts_items SET
+        name                 = ${b.name||'미등록업체'},
+        category             = ${b.category||''},
+        address              = ${b.address||''},
+        youtube_id           = ${b.youtubeId||''},
+        cloudinary_public_id = ${b.cloudinaryPublicId||''},
+        smart_place_url      = ${b.smartPlaceUrl||''},
+        sort_order           = ${b.sortOrder||0},
+        active               = ${b.active!==false}
+      WHERE id = ${id} RETURNING *
+    `
+    return c.json(rows[0])
+  } catch(e: any) {
+    return c.json({ error: e?.message || 'DB 오류' }, 500)
+  }
 })
 
 // 삭제
@@ -7823,16 +7831,16 @@ async function saveShorts() {
   const ytId  = extractYtId(rawYt) || rawYt;
   const place = (document.getElementById('s-place'))?.value.trim() || '';
 
-  // 영상 필수 체크
-  if (!clId && !ytId) { toast('영상을 먼저 업로드하거나 유튜브 링크를 입력하세요'); return; }
-
-  // 업체명 없으면 네이버 링크로 대체
-  let name = (document.getElementById('s-name'))?.value.trim() || '';
-  if (!name && place) {
-    // URL에서 마지막 경로를 임시 이름으로
-    name = '미등록업체';
+  // 영상(Cloudinary) 또는 네이버링크 중 하나는 필수
+  if (!clId && !ytId && !place) {
+    toast('영상을 업로드하거나 네이버 링크를 입력하세요'); return;
   }
-  if (!name) { toast('업체명을 입력하세요 (추가 정보에서 입력)'); return; }
+
+  // 업체명: 자동입력 → 네이버링크 있으면 임시명 → 기본값
+  let name = (document.getElementById('s-name'))?.value.trim() || '';
+  if (!name && place) name = '미등록업체';
+  if (!name && clId)  name = '미등록업체';
+  if (!name) name = '미등록업체'; // 어떤 경우도 통과
 
   const body = {
     name,
@@ -7846,13 +7854,19 @@ async function saveShorts() {
   };
   const url    = _shortsAdminEditId ? '/api/admin/shorts/'+_shortsAdminEditId : '/api/admin/shorts';
   const method = _shortsAdminEditId ? 'PUT' : 'POST';
-  const r = await fetch(url, {method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
-  if (r.ok) {
-    closeShortsModal();
-    toast(_shortsAdminEditId ? '✅ 수정 완료!' : '🎬 숏폼 등록 완료!');
-    await loadShortsAdmin();
-  } else {
-    toast('저장 실패');
+  try {
+    const r = await fetch(url, {method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+    if (r.ok) {
+      closeShortsModal();
+      toast(_shortsAdminEditId ? '✅ 수정 완료!' : '🎬 숏폼 등록 완료!');
+      await loadShortsAdmin();
+    } else {
+      let errMsg = '저장 실패';
+      try { const ej = await r.json(); errMsg = ej.error || ej.message || errMsg; } catch(_) {}
+      toast('❌ ' + errMsg);
+    }
+  } catch(e) {
+    toast('❌ 네트워크 오류: ' + e.message);
   }
 }
 
