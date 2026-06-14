@@ -7069,15 +7069,7 @@ function renderShortsAdminShell() {
     // 모달
     _shortsAdminModalHtml();
 
-  // 파일 선택 → 즉시 자동 업로드
-  const vidFile = document.getElementById('s-vid-file');
-  if (vidFile) {
-    vidFile.addEventListener('change', function() {
-      const file = (this).files?.[0];
-      if (!file) return;
-      uploadShortsVideo(file);
-    });
-  }
+  // 파일 onchange는 인라인으로 처리 (innerHTML 교체 시 리스너 유실 방지)
 }
 
 function _shortsAdminModalHtml() {
@@ -7101,7 +7093,7 @@ function _shortsAdminModalHtml() {
           '<span style="font-size:13px;font-weight:700;color:#e879f9">영상 파일 선택</span>' +
           '<span style="font-size:11px;color:#475569">MP4 / MOV</span>' +
         '</label>' +
-        '<input id="s-vid-file" type="file" accept="video/mp4,video/quicktime,video/*" style="display:none"/>' +
+        '<input id="s-vid-file" type="file" accept="video/mp4,video/quicktime,video/*" style="display:none" onchange="if(this.files&&this.files[0])uploadShortsVideo(this.files[0])"/>' +
         // 선택 후 미리보기 + 업로드 버튼
         // 업로드 진행 상태 (파일 선택 즉시 표시)
         '<div id="s-upload-status" style="display:none;font-size:12px;color:#94a3b8;margin-top:10px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,.04);text-align:center"></div>' +
