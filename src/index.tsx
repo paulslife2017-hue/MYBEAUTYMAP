@@ -1093,7 +1093,7 @@ app.post('/api/admin/cloudinary-sign', async (c) => {
     const cloudName = c.env?.CLOUDINARY_CLOUD_NAME || (globalThis as any).process?.env?.CLOUDINARY_CLOUD_NAME
     const apiKey    = c.env?.CLOUDINARY_API_KEY    || (globalThis as any).process?.env?.CLOUDINARY_API_KEY
     const apiSecret = c.env?.CLOUDINARY_API_SECRET || (globalThis as any).process?.env?.CLOUDINARY_API_SECRET
-    if (!cloudName || !apiKey || !apiSecret) return c.json({ error: 'Cloudinary env not set', debug: { hasEnv: !!c.env, keys: Object.keys(c.env||{}) } }, 500)
+    if (!cloudName || !apiKey || !apiSecret) return c.json({ error: 'Cloudinary env not set' }, 500)
 
     const uploadFolder = folder || 'mybeautymap/shorts'
     const timestamp = Math.floor(Date.now() / 1000).toString()
