@@ -7669,20 +7669,17 @@ function openShortsModal(id) {
   const clPreview = document.getElementById('s-cl-preview');
   const clVid     = document.getElementById('s-cl-vid');
   const clIdInp   = document.getElementById('s-clid');
-  const vidPreview = document.getElementById('s-vid-preview');
   const naverSt   = document.getElementById('s-naver-status');
   if (clId) {
     clIdInp.value = clId;
     clVid.src = 'https://res.cloudinary.com/dc0ouozcd/video/upload/' + clId + '.mp4';
     const lbl = document.getElementById('s-cl-id-label');
     if (lbl) lbl.textContent = clId;
-    clPreview.style.display = 'block';
-    vidPreview.style.display = 'none';
+    if (clPreview) clPreview.style.display = 'block';
   } else {
     clIdInp.value = '';
     clVid.src = '';
-    clPreview.style.display = 'none';
-    vidPreview.style.display = 'none';
+    if (clPreview) clPreview.style.display = 'none';
   }
   if (naverSt) naverSt.style.display = 'none';
 
@@ -7761,14 +7758,12 @@ async function uploadShortsVideo(file) {
   // UI 상태: 업로드 중
   const label  = document.getElementById('s-vid-label');
   const status = document.getElementById('s-upload-status');
-  const vidPreview = document.getElementById('s-vid-preview');
 
   if (label) label.innerHTML =
     '<i class="fas fa-spinner fa-spin" style="font-size:20px;color:#e879f9"></i>' +
     '<span style="font-size:12px;font-weight:700;color:#e879f9">업로드 중...</span>' +
     '<span style="font-size:11px;color:#475569">' + file.name + '</span>';
   if (status) { status.style.display = 'block'; status.style.color = '#94a3b8'; status.textContent = '서버에서 서명 받는 중...'; }
-  if (vidPreview) vidPreview.style.display = 'none';
 
   try {
     // 1) 서버에서 서명만 받기 (파일 전송 없음)
