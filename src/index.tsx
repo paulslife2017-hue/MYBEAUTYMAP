@@ -1074,6 +1074,88 @@ app.post('/api/admin/upload-thumbnail', async (c) => {
   return c.json({ ok: true, url: dataUrl })
 })
 
+// Cloudinary 영상 직접 업로드 (base64 → Cloudinary)
+app.post('/api/admin/upload-shorts-video', async (c) => {
+  try {
+    const { dataUrl, folder } = await c.req.json()
+    if (!dataUrl) return c.json({ error: 'dataUrl required' }, 400)
+
+    const cloudName = c.env.CLOUDINARY_CLOUD_NAME
+    const apiKey    = c.env.CLOUDINARY_API_KEY
+    const apiSecret = c.env.CLOUDINARY_API_SECRET
+    if (!cloudName || !apiKey || !apiSecret) return c.json({ error: 'Cloudinary env not set' }, 500)
+
+    const uploadFolder = folder || 'mybeautymap/shorts'
+    const timestamp = Math.floor(Date.now() / 1000).toString()
+
+    // 서명 생성 (SHA-1 via Web Crypto)
+    const paramsToSign = `folder=${uploadFolder}&resource_type=video&timestamp=${timestamp}${apiSecret}`
+    const msgBuffer    = new TextEncoder().encode(paramsToSign)
+    const hashBuffer   = await crypto.subtle.digest('SHA-1', msgBuffer)
+    const hashArray    = Array.from(new Uint8Array(hashBuffer))
+    const signature    = hashArray.map(b => b.toString(16).padStart(2,'0')).join('')
+
+    const formData = new FormData()
+    formData.append('file', dataUrl)
+    formData.append('api_key', apiKey)
+    formData.append('timestamp', timestamp)
+    formData.append('signature', signature)
+    formData.append('folder', uploadFolder)
+    formData.append('resource_type', 'video')
+
+    const res  = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/video/upload`, { method:'POST', body: formData })
+    const json = await res.json() as any
+    if (!res.ok) return c.json({ error: json.error?.message || 'upload failed' }, 500)
+
+    return c.json({ ok: true, public_id: json.public_id, url: json.secure_url })
+  } catch(e: any) {
+    return c.json({ error: e.message }, 500)
+  }
+})
+
+// 네이버 스마트플레이스 업체 정보 자동 추출
+app.post('/api/admin/fetch-naver-info', async (c) => {
+  try {
+    const { url } = await c.req.json()
+    if (!url) return c.json({ error: 'url required' }, 400)
+
+    // naver.me 단축URL → 실제 URL 리다이렉트 따라가기
+    const resp = await fetch(url, {
+      redirect: 'follow',
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; bot)' }
+    })
+    const html = await resp.text()
+
+    // 업체명 추출 (og:title 또는 <title>)
+    let name = ''
+    const ogTitle = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)
+    const titleTag = html.match(/<title[^>]*>([^<]+)<\/title>/i)
+    const rawTitle = ogTitle?.[1] || titleTag?.[1] || ''
+    // " | 네이버" 등 접미사 제거
+    name = rawTitle.replace(/\s*[\|｜]\s*네이버.*$/i, '').replace(/\s*-\s*네이버.*$/i, '').trim()
+
+    // 주소 추출 (og:description 또는 structured data)
+    let address = ''
+    const ogDesc = html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i)
+    const descRaw = ogDesc?.[1] || ''
+    // 주소 패턴: "서울" "경기" 등으로 시작하는 부분
+    const addrMatch = descRaw.match(/(서울|경기|인천|부산|대구|광주|대전|울산|세종|강원|충북|충남|전북|전남|경북|경남|제주)[^\|,·]+/)
+    if (addrMatch) address = addrMatch[0].trim()
+
+    // 카테고리 추출 (og:description에서 키워드 매칭)
+    let category = ''
+    const catKeywords = ['마사지','헤드스파','피부관리','헤어','메이크업','왁싱','반영구','병원']
+    for (const kw of catKeywords) {
+      if (html.includes(kw) || descRaw.includes(kw)) { category = kw; break }
+    }
+
+    if (!name) return c.json({ error: '업체 정보를 찾을 수 없습니다' }, 404)
+    return c.json({ name, address, category })
+  } catch(e: any) {
+    return c.json({ error: e.message }, 500)
+  }
+})
+
 // ══════════════════════════════════════════════════════════════════════════
 // ⚡ 숏폼 API
 // ══════════════════════════════════════════════════════════════════════════
@@ -2241,23 +2323,21 @@ html,body{height:100%;background:var(--bg);color:#fff;
 @media(min-width:768px){
   #shortsScreen{
     --sv: calc(100dvh - var(--hd) - 44px - var(--nav) - var(--safe));
+    --pw: 300px;
     left: 50%;
     right: auto;
     transform: translateX(-50%);
-    /* 영상 너비(9:16) + 패널 260px */
-    width: min(100vw, calc(var(--sv) * 9 / 16 + 260px));
-    /* 스크롤 유지 — wheel 핸들러가 프로그래매틱으로 넘김 */
+    width: min(100vw, calc(var(--sv) * 9 / 16 + var(--pw)));
     overflow-y: scroll;
     scroll-snap-type: y mandatory;
     background:#0a0a0a;
+    box-shadow: 0 0 80px rgba(0,0,0,.6);
   }
-  /* slide: flex-row, overflow:hidden 유지 (scroll-snap 정상 동작) */
   .shorts-slide{
     display:flex !important;
     flex-direction:row !important;
     overflow:hidden !important;
   }
-  /* wrap: absolute 해제, flex item으로 9:16 너비 */
   .shorts-iframe-wrap, .shorts-no-video{
     position:relative !important;
     flex:none !important;
@@ -2266,29 +2346,119 @@ html,body{height:100%;background:var(--bg);color:#fff;
     top:auto !important; left:auto !important;
     right:auto !important; bottom:auto !important;
   }
-  /* overlay: absolute 완전 해제, 260px 고정 패널 */
+  /* 오른쪽 정보 패널 */
   .shorts-overlay{
     position:relative !important;
     flex:none !important;
-    width:260px !important;
+    width:var(--pw) !important;
     height:100% !important;
     top:auto !important; left:auto !important;
     right:auto !important; bottom:auto !important;
-    background:#111 !important;
-    border-left:1px solid rgba(255,255,255,.1) !important;
+    background:linear-gradient(170deg,#141414 0%,#0e0e0e 60%,#0a0a0a 100%) !important;
+    border-left:1px solid rgba(255,255,255,.07) !important;
     display:flex !important;
     flex-direction:column !important;
     justify-content:center !important;
-    padding:32px 24px !important;
-    overflow-y:auto !important;
+    padding:0 !important;
+    overflow:hidden !important;
     z-index:2 !important;
   }
-  .shorts-info-row{ flex-direction:column !important; align-items:flex-start !important; gap:0 !important; }
-  .shorts-info-body{ width:100% !important; }
-  .shorts-cat{ font-size:11px !important; padding:3px 10px !important; border-radius:20px !important; margin-bottom:10px !important; display:inline-block !important; }
-  .shorts-name{ font-size:20px !important; font-weight:900 !important; line-height:1.3 !important; white-space:normal !important; word-break:keep-all !important; margin-bottom:6px !important; text-shadow:none !important; overflow:visible !important; text-overflow:unset !important; }
-  .shorts-addr{ font-size:12px !important; margin-top:4px !important; margin-bottom:20px !important; }
-  .shorts-book-btn{ width:100% !important; padding:14px !important; font-size:14px !important; font-weight:800 !important; border-radius:14px !important; justify-content:center !important; }
+  .shorts-info-row{ display:none !important; }
+  /* PC 패널 컨테이너 */
+  .shorts-panel-pc{
+    display:flex !important;
+    flex-direction:column !important;
+    justify-content:center !important;
+    flex:1 !important;
+    padding:36px 28px !important;
+    min-height:0 !important;
+    position:relative !important;
+    overflow:hidden !important;
+  }
+  /* 패널 상단 장식 라인 */
+  .shorts-panel-pc::before{
+    content:'' !important;
+    position:absolute !important;
+    top:0 !important; left:28px !important; right:28px !important;
+    height:2px !important;
+    background:linear-gradient(90deg,transparent,rgba(232,121,249,.5),transparent) !important;
+  }
+  /* 카테고리 뱃지 */
+  .shorts-cat{
+    font-size:10px !important;
+    font-weight:800 !important;
+    letter-spacing:.06em !important;
+    padding:4px 11px !important;
+    border-radius:20px !important;
+    margin-bottom:20px !important;
+    display:inline-flex !important;
+    align-items:center !important;
+    gap:5px !important;
+    width:fit-content !important;
+  }
+  /* 업체명 */
+  .shorts-panel-name{
+    font-size:24px !important;
+    font-weight:900 !important;
+    line-height:1.3 !important;
+    white-space:normal !important;
+    word-break:keep-all !important;
+    margin-bottom:10px !important;
+    text-shadow:none !important;
+    overflow:visible !important;
+    text-overflow:unset !important;
+    color:#fff !important;
+    letter-spacing:-.02em !important;
+  }
+  /* 주소 */
+  .shorts-panel-addr{
+    font-size:12px !important;
+    color:rgba(255,255,255,.45) !important;
+    margin-bottom:0 !important;
+    line-height:1.55 !important;
+    display:flex !important;
+    align-items:flex-start !important;
+    gap:5px !important;
+  }
+  .shorts-panel-addr i{ margin-top:2px !important; flex-shrink:0 !important; }
+  /* 구분선 */
+  .shorts-panel-divider{
+    width:100% !important;
+    height:1px !important;
+    background:linear-gradient(90deg,rgba(255,255,255,.1),rgba(255,255,255,.04)) !important;
+    margin:24px 0 !important;
+    flex-shrink:0 !important;
+  }
+  /* 예약 버튼 */
+  .shorts-panel-btn{
+    width:100% !important;
+    padding:15px !important;
+    font-size:14px !important;
+    font-weight:800 !important;
+    border-radius:16px !important;
+    justify-content:center !important;
+    gap:8px !important;
+    letter-spacing:.01em !important;
+    box-shadow:0 8px 24px rgba(3,199,90,.35) !important;
+    transition:transform .15s,box-shadow .15s !important;
+  }
+  .shorts-panel-btn:hover{
+    transform:translateY(-2px) !important;
+    box-shadow:0 12px 32px rgba(3,199,90,.45) !important;
+  }
+  .shorts-panel-btn:active{ transform:scale(.97) !important; }
+  /* 하단 힌트 */
+  .shorts-panel-hint{
+    font-size:11px !important;
+    color:rgba(255,255,255,.2) !important;
+    text-align:center !important;
+    margin-top:20px !important;
+    letter-spacing:.03em !important;
+    display:flex !important;
+    align-items:center !important;
+    justify-content:center !important;
+    gap:5px !important;
+  }
 }
 /* 숏폼 모드: 광고만 숨김 (헤더·검색바는 유지) */
 body.shorts-mode #coupang-ad{ display:none!important; }
@@ -2571,6 +2741,12 @@ body.shorts-mode #shorts-mute-btn{ display:flex; }
 .shorts-empty{
   height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;
   color:rgba(255,255,255,.4);font-size:15px;gap:12px;
+}
+/* PC 전용 패널 (모바일에서는 숨김) */
+.shorts-panel-pc{
+  display:none;
+  flex-direction:column;
+  width:100%;height:100%;
 }
 
 /* 피드 카드 */
@@ -3737,6 +3913,7 @@ function shortsSlide(shop, idx) {
           ? '<div class="shorts-iframe-wrap"><div class="shorts-yt-placeholder" id="yt-ph-' + idx + '"></div></div>'
           : '<div class="shorts-no-video"></div>')) +
     '<div class="shorts-overlay">' +
+      // 모바일: 기존 하단 오버레이
       '<div class="shorts-info-row">' +
         '<div class="shorts-info-body">' +
           (cat ? '<span class="shorts-cat">' + cat + '</span>' : '') +
@@ -3747,6 +3924,33 @@ function shortsSlide(shop, idx) {
           '<i class="fas fa-calendar-check"></i>' +
           '<span>예약하기</span>' +
         '</button>' +
+      '</div>' +
+      // PC 전용: 세련된 정보 패널
+      '<div class="shorts-panel-pc">' +
+        // 카테고리 뱃지
+        (cat ? '<span class="shorts-cat"><i class="fas fa-tag" style="font-size:9px;opacity:.7"></i>' + cat + '</span>' : '') +
+        // 업체명
+        '<div class="shorts-name shorts-panel-name">' + name + '</div>' +
+        // 주소
+        (addr ? '<div class="shorts-addr shorts-panel-addr"><i class="fas fa-location-dot" style="color:var(--pink);font-size:11px"></i><span>' + addr + '</span></div>' : '') +
+        // 구분선
+        '<div class="shorts-panel-divider"></div>' +
+        // 예약 버튼
+        (shop.smart_place_url
+          ? '<button class="shorts-book-btn shorts-panel-btn" onclick="event.stopPropagation();shortsOpenBook(' + JSON.stringify(shop).replace(/"/g,'&quot;') + ')">' +
+              '<i class="fas fa-calendar-check"></i>' +
+              '<span>네이버 예약하기</span>' +
+            '</button>'
+          : '<button class="shorts-panel-btn" style="width:100%;padding:15px;font-size:14px;font-weight:800;border-radius:16px;background:rgba(255,255,255,.06);color:rgba(255,255,255,.35);border:1.5px solid rgba(255,255,255,.08);cursor:default;display:flex;align-items:center;justify-content:center;gap:8px" disabled>' +
+              '<i class="fas fa-calendar-xmark"></i>' +
+              '<span>예약 정보 없음</span>' +
+            '</button>'
+        ) +
+        // 하단 힌트
+        '<div class="shorts-panel-hint">' +
+          '<i class="fas fa-computer-mouse" style="opacity:.4;font-size:13px"></i>' +
+          '<span>스크롤로 다음 영상</span>' +
+        '</div>' +
       '</div>' +
     '</div>' +
     '</div>'
@@ -6857,71 +7061,134 @@ function renderShortsAdminShell() {
     // 모달
     _shortsAdminModalHtml();
 
-  // Cloudinary ID 입력 시 미리보기
-  document.getElementById('s-clid').addEventListener('input', function() {
-    const clId    = this.value.trim();
-    const preview = document.getElementById('s-cl-preview');
-    const vid     = document.getElementById('s-cl-vid');
-    if (clId) {
-      preview.style.display = 'block';
-      vid.src = 'https://res.cloudinary.com/dc0ouozcd/video/upload/' + clId + '.mp4';
-    } else {
-      preview.style.display = 'none';
-      vid.src = '';
-    }
-  });
-  // 유튜브 입력 시 미리보기 (fallback)
-  document.getElementById('s-ytid').addEventListener('input', function() {
-    const vid = extractYtId(this.value.trim());
-    const preview = document.getElementById('s-yt-preview');
-    const frame   = document.getElementById('s-yt-frame');
-    if (vid) { preview.style.display='block'; frame.src='https://www.youtube.com/embed/'+vid+'?rel=0'; }
-    else { preview.style.display='none'; frame.src=''; }
-  });
+  // 파일 선택 → 로컬 미리보기
+  const vidFile = document.getElementById('s-vid-file');
+  if (vidFile) {
+    vidFile.addEventListener('change', function() {
+      const file = (this as HTMLInputElement).files?.[0];
+      if (!file) return;
+      const preview  = document.getElementById('s-vid-preview');
+      const localVid = document.getElementById('s-vid-local') as HTMLVideoElement;
+      const fname    = document.getElementById('s-vid-filename');
+      const label    = document.getElementById('s-vid-label');
+      preview.style.display = 'flex';
+      localVid.src = URL.createObjectURL(file);
+      fname.textContent = file.name + ' (' + (file.size/1024/1024).toFixed(1) + 'MB)';
+      if (label) label.innerHTML =
+        '<i class="fas fa-check-circle" style="font-size:20px;color:#22c55e"></i>' +
+        '<span style="font-size:12px;font-weight:700;color:#22c55e">선택됨</span>' +
+        '<span style="font-size:11px;color:#475569">' + file.name + '</span>';
+    });
+  }
 }
 
 function _shortsAdminModalHtml() {
-  return '<div id="shortsModalBg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:flex-end" onclick="if(event.target===this)closeShortsModal()">' +
-    '<div id="shortsAdminModal" style="background:#161616;border-radius:20px 20px 0 0;padding:20px;width:100%;max-height:90vh;overflow-y:auto">' +
-      '<div style="font-size:15px;font-weight:800;margin-bottom:16px" id="shortsModalTitle">숏폼 추가</div>' +
-      '<div style="display:flex;flex-direction:column;gap:14px">' +
-        '<div><label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">업체명 *</label>' +
-        '<input id="s-name" placeholder="예: 강남 힐링 마사지" style="'+adminInputStyle()+'"/></div>' +
-        '<div><label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">카테고리</label>' +
-        '<select id="s-cat" style="'+adminInputStyle()+'background:#1b1b1b;color:#fff;appearance:auto"><option value="" style="background:#1b1b1b;color:#fff">선택 안함</option></select></div>' +
-        '<div><label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">주소</label>' +
-        '<input id="s-addr" placeholder="예: 서울 강남구 역삼동" style="'+adminInputStyle()+'"/></div>' +
-        '<div><label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">네이버 예약링크</label>' +
-        '<input id="s-place" placeholder="https://naver.me/xxxxx" style="'+adminInputStyle()+'"/>' +
-        '<div style="font-size:10px;color:#475569;margin-top:4px">입력하면 예약하기 버튼이 활성화됩니다</div></div>' +
-        '<div><label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">Cloudinary Public ID</label>' +
-        '<input id="s-clid" placeholder="mybeautymap/shorts/영상ID" style="'+adminInputStyle()+'"/>' +
-        '<div style="font-size:10px;color:#475569;margin-top:4px">예: mybeautymap/shorts/zeoiZiOrzS0</div>' +
-        '<div id="s-cl-preview" style="display:none;margin-top:8px">' +
-          '<div style="width:140px;height:249px;border-radius:10px;overflow:hidden;background:#000;position:relative">' +
-            '<video id="s-cl-vid" style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover" controls muted playsinline></video>' +
-          '</div>' +
-        '</div></div>' +
-        '<div><label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">유튜브 숏츠 ID (기존/백업용)</label>' +
-        '<input id="s-ytid" placeholder="https://youtube.com/shorts/xxxxx" style="'+adminInputStyle()+'"/>' +
-        '<div style="font-size:10px;color:#475569;margin-top:4px">Cloudinary 없을 때 fallback으로 사용</div>' +
-        '<div id="s-yt-preview" style="display:none;margin-top:8px">' +
-          '<div style="width:140px;height:249px;border-radius:10px;overflow:hidden;background:#000">' +
-            '<iframe id="s-yt-frame" src="" style="width:100%;height:100%;border:none;display:block"></iframe>' +
-          '</div>' +
-        '</div></div>' +
-        '<div><label style="font-size:11px;color:#94a3b8;font-weight:700;display:block;margin-bottom:6px">정렬 순서 (숫자 작을수록 앞)</label>' +
-        '<input id="s-order" type="number" value="0" style="'+adminInputStyle()+'"/></div>' +
-        '<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0">' +
-        '<label style="font-size:14px;font-weight:700;color:#f1f5f9">노출</label>' +
-        '<input id="s-active" type="checkbox" checked style="width:20px;height:20px;cursor:pointer;accent-color:#c026d3"/></div>' +
+  const inp = adminInputStyle();
+  return (
+    '<div id="shortsModalBg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;align-items:flex-end;backdrop-filter:blur(4px)" onclick="if(event.target===this)closeShortsModal()">' +
+    '<div id="shortsAdminModal" style="background:#161616;border-radius:24px 24px 0 0;padding:22px 20px 32px;width:100%;max-height:92vh;overflow-y:auto">' +
+
+      // ── 헤더
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">' +
+        '<div id="shortsModalTitle" style="font-size:16px;font-weight:900;color:#fff">숏폼 추가</div>' +
+        '<button onclick="closeShortsModal()" style="background:rgba(255,255,255,.08);border:none;color:#94a3b8;border-radius:50%;width:30px;height:30px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit">✕</button>' +
       '</div>' +
-      '<div style="display:flex;gap:10px;margin-top:18px">' +
-        '<button onclick="saveShorts()" style="flex:1;background:linear-gradient(135deg,#c026d3,#e879f9);color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit">저장</button>' +
-        '<button onclick="closeShortsModal()" style="background:rgba(255,255,255,.06);color:#94a3b8;border:1.5px solid rgba(255,255,255,.09);border-radius:12px;padding:14px 18px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">취소</button>' +
+
+      // ── STEP 1: 영상
+      '<div style="margin-bottom:16px">' +
+        '<div style="font-size:11px;font-weight:800;color:#e879f9;letter-spacing:.05em;margin-bottom:8px">STEP 1 · 영상 선택</div>' +
+        // 파일 업로드 드롭존
+        '<label for="s-vid-file" id="s-vid-label" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;width:100%;padding:20px 12px;border:2px dashed rgba(232,121,249,.35);border-radius:16px;cursor:pointer;background:rgba(232,121,249,.04);transition:all .2s;box-sizing:border-box">' +
+          '<i class="fas fa-cloud-upload-alt" style="font-size:26px;color:#e879f9"></i>' +
+          '<span style="font-size:13px;font-weight:700;color:#e879f9">영상 파일 선택</span>' +
+          '<span style="font-size:11px;color:#475569">MP4 / MOV</span>' +
+        '</label>' +
+        '<input id="s-vid-file" type="file" accept="video/mp4,video/quicktime,video/*" style="display:none"/>' +
+        // 선택 후 미리보기 + 업로드 버튼
+        '<div id="s-vid-preview" style="display:none;margin-top:12px">' +
+          '<div style="display:flex;gap:12px;align-items:center">' +
+            '<div style="width:72px;height:128px;border-radius:10px;overflow:hidden;background:#000;flex-shrink:0;position:relative">' +
+              '<video id="s-vid-local" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover" muted playsinline></video>' +
+            '</div>' +
+            '<div style="flex:1;min-width:0">' +
+              '<div id="s-vid-filename" style="font-size:11px;color:#64748b;margin-bottom:8px;word-break:break-all"></div>' +
+              '<button id="s-upload-btn" onclick="uploadShortsVideo()" style="width:100%;padding:11px;background:linear-gradient(135deg,#c026d3,#e879f9);color:#fff;border:none;border-radius:12px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px">' +
+                '<i class="fas fa-upload"></i> Cloudinary 업로드' +
+              '</button>' +
+              '<div id="s-upload-status" style="display:none;font-size:11px;color:#94a3b8;margin-top:6px;text-align:center"></div>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+        // 업로드 완료 후 영상 미리보기
+        '<div id="s-cl-preview" style="display:none;margin-top:12px">' +
+          '<div style="display:flex;align-items:center;gap:10px;background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.2);border-radius:12px;padding:10px 12px">' +
+            '<i class="fas fa-circle-check" style="color:#22c55e;font-size:18px;flex-shrink:0"></i>' +
+            '<div style="flex:1;min-width:0">' +
+              '<div style="font-size:11px;font-weight:700;color:#22c55e;margin-bottom:2px">영상 등록됨</div>' +
+              '<div id="s-cl-id-label" style="font-size:10px;color:#475569;word-break:break-all"></div>' +
+            '</div>' +
+            '<video id="s-cl-vid" style="width:44px;height:78px;border-radius:6px;object-fit:cover;flex-shrink:0" muted playsinline></video>' +
+          '</div>' +
+          // 숨겨진 실제 ID input (saveShorts에서 읽음)
+          '<input id="s-clid" style="display:none"/>' +
+        '</div>' +
       '</div>' +
+
+      // ── STEP 2: 네이버 예약링크
+      '<div style="margin-bottom:16px">' +
+        '<div style="font-size:11px;font-weight:800;color:#e879f9;letter-spacing:.05em;margin-bottom:8px">STEP 2 · 네이버 예약링크</div>' +
+        '<input id="s-place" placeholder="https://naver.me/xxxxx  또는  스마트플레이스 URL" style="'+inp+'" oninput="autoFetchNaverInfo(this.value)"/>' +
+        // 자동 추출 상태
+        '<div id="s-naver-status" style="display:none;font-size:11px;margin-top:6px;padding:8px 12px;border-radius:10px;background:rgba(255,255,255,.04)"></div>' +
+      '</div>' +
+
+      // ── 추가 정보 (접기 가능)
+      '<details id="s-extra-details" style="border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:12px 14px;margin-bottom:16px">' +
+        '<summary style="font-size:12px;font-weight:700;color:#64748b;cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between">' +
+          '<span><i class="fas fa-sliders" style="margin-right:6px;opacity:.6"></i>추가 정보 (선택)</span>' +
+          '<i class="fas fa-chevron-down" style="font-size:10px;opacity:.4"></i>' +
+        '</summary>' +
+        '<div style="display:flex;flex-direction:column;gap:12px;margin-top:14px">' +
+          // 업체명
+          '<div>' +
+            '<label style="font-size:11px;color:#64748b;font-weight:700;display:block;margin-bottom:5px">업체명</label>' +
+            '<input id="s-name" placeholder="자동 입력 또는 직접 입력" style="'+inp+'"/>' +
+          '</div>' +
+          // 카테고리
+          '<div>' +
+            '<label style="font-size:11px;color:#64748b;font-weight:700;display:block;margin-bottom:5px">카테고리</label>' +
+            '<select id="s-cat" style="'+inp+'background:#1b1b1b;color:#fff;appearance:auto"><option value="" style="background:#1b1b1b;color:#fff">선택 안함</option></select>' +
+          '</div>' +
+          // 주소
+          '<div>' +
+            '<label style="font-size:11px;color:#64748b;font-weight:700;display:block;margin-bottom:5px">주소</label>' +
+            '<input id="s-addr" placeholder="자동 입력 또는 직접 입력" style="'+inp+'"/>' +
+          '</div>' +
+          // 유튜브 fallback
+          '<div>' +
+            '<label style="font-size:11px;color:#64748b;font-weight:700;display:block;margin-bottom:5px">유튜브 링크 (Cloudinary 없을 때 대체)</label>' +
+            '<input id="s-ytid" placeholder="https://youtube.com/shorts/xxxxx" style="'+inp+'"/>' +
+          '</div>' +
+          // 순서 + 노출
+          '<div style="display:flex;gap:10px;align-items:center">' +
+            '<div style="flex:1">' +
+              '<label style="font-size:11px;color:#64748b;font-weight:700;display:block;margin-bottom:5px">정렬 순서</label>' +
+              '<input id="s-order" type="number" value="0" style="'+inp+'"/>' +
+            '</div>' +
+            '<div style="display:flex;flex-direction:column;align-items:center;gap:4px;padding-top:16px">' +
+              '<label style="font-size:11px;color:#64748b;font-weight:700">노출</label>' +
+              '<input id="s-active" type="checkbox" checked style="width:22px;height:22px;cursor:pointer;accent-color:#c026d3"/>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+      '</details>' +
+
+      // ── 저장 버튼
+      '<button onclick="saveShorts()" style="width:100%;background:linear-gradient(135deg,#c026d3,#e879f9);color:#fff;border:none;border-radius:16px;padding:16px;font-size:15px;font-weight:900;cursor:pointer;font-family:inherit;letter-spacing:.01em">등록하기</button>' +
+
     '</div>' +
-  '</div>';
+  '</div>'
+  );
 }
 
 // ── 탭 전환 ──────────────────────────────────────────────────────────────
@@ -7406,37 +7673,85 @@ function adminInputStyle() {
 function openShortsModal(id) {
   _shortsAdminEditId = id;
   const item = id ? _shortsAdminItems.find(x=>x.id===id) : null;
+
+  // 제목
   document.getElementById('shortsModalTitle').textContent = id ? '숏폼 수정' : '숏폼 추가';
-  document.getElementById('s-name').value   = item?.name                    || '';
-  document.getElementById('s-addr').value   = item?.address                 || '';
-  document.getElementById('s-place').value  = item?.smart_place_url         || '';
-  document.getElementById('s-clid').value   = item?.cloudinary_public_id    || '';
-  document.getElementById('s-ytid').value   = item?.youtube_id              || '';
-  document.getElementById('s-order').value  = item?.sort_order ?? 0;
-  document.getElementById('s-active').checked = item ? item.active : true;
-  // 카테고리 select
-  const sCat = document.getElementById('s-cat');
+
+  // 기본 필드
+  (document.getElementById('s-name')  as HTMLInputElement).value = item?.name             || '';
+  (document.getElementById('s-addr')  as HTMLInputElement).value = item?.address          || '';
+  (document.getElementById('s-place') as HTMLInputElement).value = item?.smart_place_url  || '';
+  (document.getElementById('s-ytid')  as HTMLInputElement).value = item?.youtube_id       || '';
+  (document.getElementById('s-order') as HTMLInputElement).value = String(item?.sort_order ?? 0);
+  (document.getElementById('s-active') as HTMLInputElement).checked = item ? item.active : true;
+
+  // 카테고리
+  const sCat = document.getElementById('s-cat') as HTMLSelectElement;
   sCat.innerHTML = '<option value="" style="background:#1b1b1b;color:#fff">선택 안함</option>' +
     CAT_OPTIONS.map(c => '<option value="'+c+'" style="background:#1b1b1b;color:#fff"'+(item?.category===c?' selected':'')+'>'+c+'</option>').join('');
-  if (!id) sCat.value = '';
-  // Cloudinary 미리보기
-  const clId = item?.cloudinary_public_id || '';
+
+  // Cloudinary 영상 상태 초기화
+  const clId      = item?.cloudinary_public_id || '';
   const clPreview = document.getElementById('s-cl-preview');
-  const clVid     = document.getElementById('s-cl-vid');
+  const clVid     = document.getElementById('s-cl-vid') as HTMLVideoElement;
+  const clIdInp   = document.getElementById('s-clid') as HTMLInputElement;
+  const vidPreview = document.getElementById('s-vid-preview');
+  const naverSt   = document.getElementById('s-naver-status');
   if (clId) {
-    clPreview.style.display = 'block';
+    clIdInp.value = clId;
     clVid.src = 'https://res.cloudinary.com/dc0ouozcd/video/upload/' + clId + '.mp4';
+    const lbl = document.getElementById('s-cl-id-label');
+    if (lbl) lbl.textContent = clId;
+    clPreview.style.display = 'block';
+    vidPreview.style.display = 'none';
   } else {
-    clPreview.style.display = 'none';
+    clIdInp.value = '';
     clVid.src = '';
+    clPreview.style.display = 'none';
+    vidPreview.style.display = 'none';
   }
-  // YouTube 미리보기 (fallback)
-  const ytId   = item?.youtube_id || '';
-  const ytPrev = document.getElementById('s-yt-preview');
-  const frame  = document.getElementById('s-yt-frame');
-  if (ytId && !clId) { ytPrev.style.display='block'; frame.src='https://www.youtube.com/embed/'+ytId+'?rel=0'; }
-  else { ytPrev.style.display='none'; frame.src=''; }
+  if (naverSt) naverSt.style.display = 'none';
+
+  // 수정 시 추가정보 펼치기
+  const details = document.getElementById('s-extra-details') as HTMLDetailsElement;
+  if (details) details.open = !!id;
+
   document.getElementById('shortsModalBg').style.display = 'flex';
+}
+
+// 네이버 링크 입력 → 업체명/주소 자동추출 시도
+let _naverFetchTimer;
+function autoFetchNaverInfo(val) {
+  clearTimeout(_naverFetchTimer);
+  const st = document.getElementById('s-naver-status');
+  if (!val.trim()) { if(st) st.style.display='none'; return; }
+  if (st) { st.style.display='block'; st.style.color='#94a3b8'; st.textContent='🔍 업체 정보 조회 중...'; }
+  _naverFetchTimer = setTimeout(async () => {
+    try {
+      const r = await fetch('/api/admin/fetch-naver-info', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ url: val.trim() })
+      });
+      const d = await r.json() as any;
+      if (!r.ok || d.error) throw new Error(d.error || '조회 실패');
+      const nameEl = document.getElementById('s-name') as HTMLInputElement;
+      const addrEl = document.getElementById('s-addr') as HTMLInputElement;
+      if (d.name  && !nameEl.value) nameEl.value = d.name;
+      if (d.address && !addrEl.value) addrEl.value = d.address;
+      // 카테고리 자동 매핑
+      if (d.category) {
+        const sCat = document.getElementById('s-cat') as HTMLSelectElement;
+        const matched = CAT_OPTIONS.find(c => d.category.includes(c));
+        if (matched && !sCat.value) sCat.value = matched;
+      }
+      if (st) { st.style.color='#22c55e'; st.textContent='✅ ' + (d.name||'') + (d.address?' · '+d.address:'') + ' 자동 입력됨'; }
+      // 추가정보 자동 펼치기
+      const details = document.getElementById('s-extra-details') as HTMLDetailsElement;
+      if (details) details.open = true;
+    } catch(e: any) {
+      if (st) { st.style.color='#64748b'; st.textContent='직접 입력하세요 (자동추출 불가)'; }
+    }
+  }, 800);
 }
 
 function closeShortsModal() {
@@ -7464,29 +7779,101 @@ function extractYtId(raw) {
   return '';
 }
 
+// Cloudinary 업로드 핸들러
+async function uploadShortsVideo() {
+  const file = (document.getElementById('s-vid-file') as HTMLInputElement).files?.[0];
+  if (!file) { toast('파일을 먼저 선택하세요'); return; }
+
+  const btn    = document.getElementById('s-upload-btn') as HTMLButtonElement;
+  const status = document.getElementById('s-upload-status');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 업로드 중...';
+  status.style.display = 'block';
+  status.textContent = '파일 읽는 중...';
+
+  try {
+    // File → base64 dataUrl
+    const dataUrl: string = await new Promise((res, rej) => {
+      const reader = new FileReader();
+      reader.onload = () => res(reader.result as string);
+      reader.onerror = rej;
+      reader.readAsDataURL(file);
+    });
+
+    status.textContent = 'Cloudinary 업로드 중... (영상 크기에 따라 30초~2분 소요)';
+
+    const r = await fetch('/api/admin/upload-shorts-video', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dataUrl, folder: 'mybeautymap/shorts' })
+    });
+    const json = await r.json() as any;
+
+    if (!r.ok || !json.public_id) {
+      throw new Error(json.error || '업로드 실패');
+    }
+
+    // 성공: ID 저장 + 완료 UI 표시
+    const clIdInp = document.getElementById('s-clid') as HTMLInputElement;
+    if (clIdInp) clIdInp.value = json.public_id;
+
+    // 로컬 미리보기 숨기고 완료 패널 표시
+    const vidPreview = document.getElementById('s-vid-preview');
+    const clPreview  = document.getElementById('s-cl-preview');
+    const clVid      = document.getElementById('s-cl-vid') as HTMLVideoElement;
+    const lbl        = document.getElementById('s-cl-id-label');
+    if (vidPreview) vidPreview.style.display = 'none';
+    if (clPreview)  clPreview.style.display  = 'block';
+    if (clVid)      clVid.src = 'https://res.cloudinary.com/dc0ouozcd/video/upload/' + json.public_id + '.mp4';
+    if (lbl)        lbl.textContent = json.public_id;
+
+    // 파일 업로드 라벨도 완료 표시
+    const label = document.getElementById('s-vid-label');
+    if (label) label.innerHTML = '<i class="fas fa-check-circle" style="font-size:20px;color:#22c55e"></i><span style="font-size:12px;font-weight:700;color:#22c55e">업로드 완료</span>';
+
+    btn.innerHTML = '<i class="fas fa-check"></i> 완료';
+    toast('영상 업로드 완료! 등록하기를 눌러 저장하세요 🎬');
+  } catch(e: any) {
+    status.style.color = '#ef4444';
+    status.textContent = '❌ ' + e.message;
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-upload"></i> 다시 시도';
+  }
+}
+
 async function saveShorts() {
-  const name = document.getElementById('s-name').value.trim();
-  if (!name) { toast('업체명을 입력하세요'); return; }
-  const clId  = document.getElementById('s-clid').value.trim();
-  const rawYt = document.getElementById('s-ytid').value.trim();
+  const clId  = (document.getElementById('s-clid') as HTMLInputElement)?.value.trim() || '';
+  const rawYt = (document.getElementById('s-ytid') as HTMLInputElement)?.value.trim() || '';
   const ytId  = extractYtId(rawYt) || rawYt;
-  if (!clId && !ytId) { toast('Cloudinary ID 또는 유튜브 링크를 입력하세요'); return; }
+  const place = (document.getElementById('s-place') as HTMLInputElement)?.value.trim() || '';
+
+  // 영상 필수 체크
+  if (!clId && !ytId) { toast('영상을 먼저 업로드하거나 유튜브 링크를 입력하세요'); return; }
+
+  // 업체명 없으면 네이버 링크로 대체
+  let name = (document.getElementById('s-name') as HTMLInputElement)?.value.trim() || '';
+  if (!name && place) {
+    // URL에서 마지막 경로를 임시 이름으로
+    name = '미등록업체';
+  }
+  if (!name) { toast('업체명을 입력하세요 (추가 정보에서 입력)'); return; }
+
   const body = {
     name,
-    category:             document.getElementById('s-cat').value,
-    address:              document.getElementById('s-addr').value.trim(),
-    smartPlaceUrl:        document.getElementById('s-place').value.trim(),
-    cloudinaryPublicId:   clId,
-    youtubeId:            ytId,
-    sortOrder:            parseInt(document.getElementById('s-order').value)||0,
-    active:               document.getElementById('s-active').checked,
+    category:           (document.getElementById('s-cat') as HTMLSelectElement)?.value || '',
+    address:            (document.getElementById('s-addr') as HTMLInputElement)?.value.trim() || '',
+    smartPlaceUrl:      place,
+    cloudinaryPublicId: clId,
+    youtubeId:          ytId,
+    sortOrder:          parseInt((document.getElementById('s-order') as HTMLInputElement)?.value) || 0,
+    active:             (document.getElementById('s-active') as HTMLInputElement)?.checked ?? true,
   };
   const url    = _shortsAdminEditId ? '/api/admin/shorts/'+_shortsAdminEditId : '/api/admin/shorts';
   const method = _shortsAdminEditId ? 'PUT' : 'POST';
   const r = await fetch(url, {method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
   if (r.ok) {
     closeShortsModal();
-    toast(_shortsAdminEditId ? '숏폼 수정 완료!' : '숏폼 등록 완료!');
+    toast(_shortsAdminEditId ? '✅ 수정 완료!' : '🎬 숏폼 등록 완료!');
     await loadShortsAdmin();
   } else {
     toast('저장 실패');
