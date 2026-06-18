@@ -1119,38 +1119,95 @@ app.post('/api/admin/fetch-naver-info', async (c) => {
     const { url } = await c.req.json()
     if (!url) return c.json({ error: 'url required' }, 400)
 
-    // naver.me 단축URL → 실제 URL 리다이렉트 따라가기
-    const resp = await fetch(url, {
-      redirect: 'follow',
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; bot)' }
-    })
-    const html = await resp.text()
-
-    // 업체명 추출 (og:title 또는 <title>)
-    let name = ''
-    const ogTitle = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)
-    const titleTag = html.match(/<title[^>]*>([^<]+)<\/title>/i)
-    const rawTitle = ogTitle?.[1] || titleTag?.[1] || ''
-    // " | 네이버" 등 접미사 제거
-    name = rawTitle.replace(/\s*[\|｜]\s*네이버.*$/i, '').replace(/\s*-\s*네이버.*$/i, '').trim()
-
-    // 주소 추출 (og:description 또는 structured data)
-    let address = ''
-    const ogDesc = html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i)
-    const descRaw = ogDesc?.[1] || ''
-    // 주소 패턴: "서울" "경기" 등으로 시작하는 부분
-    const addrMatch = descRaw.match(/(서울|경기|인천|부산|대구|광주|대전|울산|세종|강원|충북|충남|전북|전남|경북|경남|제주)[^\|,·]+/)
-    if (addrMatch) address = addrMatch[0].trim()
-
-    // 카테고리 추출 (og:description에서 키워드 매칭)
-    let category = ''
-    const catKeywords = ['마사지','헤드스파','피부관리','헤어','메이크업','왁싱','반영구','병원']
-    for (const kw of catKeywords) {
-      if (html.includes(kw) || descRaw.includes(kw)) { category = kw; break }
+    // 1) naver.me 단축URL → place ID 추출
+    // https://naver.me/xxxx → https://map.naver.com/p/entry/place/2011143862
+    let placeId = ''
+    const directMatch = url.match(/place\/(\d+)/)
+    if (directMatch) {
+      placeId = directMatch[1]
+    } else {
+      // 단축URL 리다이렉트 따라가기
+      const r = await fetch(url, {
+        redirect: 'follow',
+        headers: { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15' }
+      })
+      const finalUrl = r.url
+      const m = finalUrl.match(/place\/(\d+)/)
+      if (m) placeId = m[1]
     }
 
-    if (!name) return c.json({ error: '업체 정보를 찾을 수 없습니다' }, 404)
-    return c.json({ name, address, category })
+    if (!placeId) return c.json({ error: '네이버 플레이스 링크에서 업체 ID를 찾을 수 없습니다' }, 404)
+
+    // 2) 네이버 플레이스 검색 API로 업체 정보 조회
+    const apiUrl = `https://map.naver.com/p/api/search/allSearch?query=${placeId}&type=place&searchCoord=&boundary=`
+    const apiRes = await fetch(apiUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
+        'Referer': 'https://map.naver.com/',
+        'Accept': 'application/json',
+      }
+    })
+
+    // 3) 네이버 모바일 플레이스 API (가장 신뢰도 높음)
+    const mobileUrl = `https://m.place.naver.com/place/${placeId}/home`
+    const mobileRes = await fetch(mobileUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
+        'Referer': 'https://m.place.naver.com/',
+        'Accept-Language': 'ko-KR,ko;q=0.9',
+      }
+    })
+    const html = await mobileRes.text()
+
+    // og:title, og:description 파싱
+    let name = ''
+    let address = ''
+    let category = ''
+
+    // og:title → 업체명 (\u001c 등 특수문자 포함 대응)
+    // 네이버 모바일은 content에 \u001c 같은 제어문자를 포함할 수 있음
+    const ogTitleM = html.match(/property="og:title"[^>]*content="([^"]+)"/i)
+                  || html.match(/content="([^"]+)"[^>]*property="og:title"/i)
+                  || html.match(/id="og:title"[^>]*content="([^"]+)"/i)
+    if (ogTitleM?.[1]) {
+      name = ogTitleM[1]
+        .replace(/[\u0000-\u001f\u007f]/g, '') // 제어문자 제거
+        .replace(/\s*[:|]\s*네이버.*$/i, '')
+        .trim()
+    }
+
+    // h1 태그에서 업체명 추출 (더 신뢰도 높음)
+    if (!name) {
+      const h1M = html.match(/<h1[^>]*>([^<]{2,30})<\/h1>/i)
+      if (h1M?.[1]) name = h1M[1].trim()
+    }
+
+    // 주소: 도로명주소 클래스에서 추출
+    const addrM = html.match(/<span[^>]*class="[^"]*주소[^"]*"[^>]*>([^<]+)<\/span>/i)
+               || html.match(/(서울|경기|인천|부산|대구|광주|대전|울산|세종|강원|충북|충남|전북|전남|경북|경남|제주)[^\s<"]{5,}(?:\s[^\s<"]{2,}){1,4}/g)?.[0]
+    if (addrM) address = (typeof addrM === 'string' ? addrM : addrM[1] || '').trim()
+
+    // 주소 못 찾으면 HTML 전체에서 광역시도 패턴 검색
+    if (!address) {
+      const addrAll = html.match(/(서울|경기|인천|부산|대구|광주|대전|울산|세종|강원)[^\s<"]{2,}(?:\s[^\s<"]{2,}){0,3}/g)
+      if (addrAll?.length) address = addrAll[0].replace(/[\u0000-\u001f]/g, '').trim()
+    }
+
+    // 카테고리: span 태그에서 추출 후 키워드 매칭
+    const catSpan = html.match(/<span[^>]*class="[^"]*dtDQt[^"]*"[^>]*>([^<]+)<\/span>/i)
+    if (catSpan?.[1]) {
+      const rawCat = catSpan[1].replace(/[\u0000-\u001f]/g, '').trim()
+      category = rawCat.split(/[,，]/)[0].trim()
+    }
+    if (!category) {
+      const catKeywords = ['마사지','헤드스파','피부관리','피부,체형관리','헤어','네일','메이크업','왁싱','반영구','피부','뷰티']
+      for (const kw of catKeywords) {
+        if (html.includes(kw)) { category = kw.split(',')[0]; break }
+      }
+    }
+
+    if (!name) return c.json({ error: '업체 정보를 찾을 수 없습니다. 네이버 플레이스 링크를 확인해주세요.' }, 404)
+    return c.json({ name, address, category, placeId })
   } catch(e: any) {
     return c.json({ error: e.message }, 500)
   }
