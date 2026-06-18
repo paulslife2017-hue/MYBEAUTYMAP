@@ -7682,7 +7682,8 @@ function openShortsModal(id) {
   if (vidLabel) vidLabel.innerHTML =
     '<i class="fas fa-cloud-upload-alt" style="font-size:26px;color:#e879f9"></i>' +
     '<span style="font-size:13px;font-weight:700;color:#e879f9">영상 파일 선택</span>' +
-    '<span style="font-size:11px;color:#475569">MP4 / MOV</span>';
+    '<span style="font-size:11px;color:#475569">MP4 / MOV</span>' +
+    '<input id="s-vid-file" type="file" accept="video/mp4,video/quicktime,video/*" style="display:none" onchange="if(this.files&&this.files[0])uploadShortsVideo(this.files[0])"/>';
   if (clId) {
     clIdInp.value = clId;
     clVid.src = 'https://res.cloudinary.com/dc0ouozcd/video/upload/' + clId + '.mp4';
@@ -7775,7 +7776,8 @@ async function uploadShortsVideo(file) {
   if (label) label.innerHTML =
     '<i class="fas fa-spinner fa-spin" style="font-size:20px;color:#e879f9"></i>' +
     '<span style="font-size:12px;font-weight:700;color:#e879f9">업로드 중...</span>' +
-    '<span style="font-size:11px;color:#475569">' + file.name + '</span>';
+    '<span style="font-size:11px;color:#475569">' + file.name + '</span>' +
+    '<input id="s-vid-file" type="file" accept="video/mp4,video/quicktime,video/*" style="display:none" onchange="if(this.files&&this.files[0])uploadShortsVideo(this.files[0])"/>';
   if (status) { status.style.display = 'block'; status.style.color = '#94a3b8'; status.textContent = '서버에서 서명 받는 중...'; }
 
   try {
@@ -7820,7 +7822,8 @@ async function uploadShortsVideo(file) {
     if (label) label.innerHTML =
       '<i class="fas fa-circle-check" style="font-size:20px;color:#22c55e"></i>' +
       '<span style="font-size:12px;font-weight:700;color:#22c55e">업로드 완료</span>' +
-      '<span style="font-size:11px;color:#475569">' + file.name + '</span>';
+      '<span style="font-size:11px;color:#475569">' + file.name + '</span>' +
+      '<input id="s-vid-file" type="file" accept="video/mp4,video/quicktime,video/*" style="display:none" onchange="if(this.files&&this.files[0])uploadShortsVideo(this.files[0])"/>';
 
     toast('🎬 영상 업로드 완료! 등록하기를 눌러 저장하세요');
   } catch(e) {
@@ -7828,7 +7831,8 @@ async function uploadShortsVideo(file) {
     if (label) label.innerHTML =
       '<i class="fas fa-cloud-upload-alt" style="font-size:26px;color:#e879f9"></i>' +
       '<span style="font-size:13px;font-weight:700;color:#e879f9">다시 선택</span>' +
-      '<span style="font-size:11px;color:#475569">MP4 / MOV</span>';
+      '<span style="font-size:11px;color:#475569">MP4 / MOV</span>' +
+      '<input id="s-vid-file" type="file" accept="video/mp4,video/quicktime,video/*" style="display:none" onchange="if(this.files&&this.files[0])uploadShortsVideo(this.files[0])"/>';
     toast('업로드 실패: ' + e.message);
   }
 }
