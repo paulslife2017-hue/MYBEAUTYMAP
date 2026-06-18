@@ -1,7 +1,7 @@
 {
   "version": 2,
   "framework": null,
-  "buildCommand": "npm run build",
+  "buildCommand": "vite build --config vite.config.node.ts",
   "installCommand": "npm install",
   "builds": [
     {
