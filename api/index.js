@@ -7949,6 +7949,7 @@ var export_types = ct.types;
 // src/index.tsx
 var import_fs = __toESM(require("fs"), 1);
 var import_path = __toESM(require("path"), 1);
+var import_crypto2 = require("crypto");
 var app = new Hono2();
 var DATABASE_URL = process.env.DATABASE_URL || "postgresql://neondb_owner:npg_1PBkOmAWRcf2@ep-round-recipe-aqdgkjfj-pooler.c-8.us-east-1.aws.neon.tech/neondb?sslmode=require";
 var sql = cs(DATABASE_URL);
@@ -8214,23 +8215,31 @@ async function runMigrations() {
 }
 runMigrations().catch(() => {
 });
+app.get("/api/admin/diag", (c) => {
+  return c.json({
+    ver: "v20250619-fix",
+    node: process.version,
+    env_cloud: !!process.env.CLOUDINARY_CLOUD_NAME,
+    env_key: !!process.env.CLOUDINARY_API_KEY,
+    env_secret: !!process.env.CLOUDINARY_API_SECRET
+  });
+});
 app.post("/api/admin/cloudinary-sign", async (c) => {
   try {
-    const { folder } = await c.req.json();
+    const body = await c.req.json().catch(() => ({}));
+    const folder = body?.folder || "mybeautymap/shorts";
     const cloudName = process.env.CLOUDINARY_CLOUD_NAME || c.env?.CLOUDINARY_CLOUD_NAME;
     const apiKey = process.env.CLOUDINARY_API_KEY || c.env?.CLOUDINARY_API_KEY;
     const apiSecret = process.env.CLOUDINARY_API_SECRET || c.env?.CLOUDINARY_API_SECRET;
-    if (!cloudName || !apiKey || !apiSecret) return c.json({ error: "Cloudinary env not set" }, 500);
-    const uploadFolder = folder || "mybeautymap/shorts";
+    if (!cloudName || !apiKey || !apiSecret) {
+      return c.json({ error: "Cloudinary env not set", cloud: !!cloudName, key: !!apiKey, secret: !!apiSecret }, 500);
+    }
     const timestamp = Math.floor(Date.now() / 1e3).toString();
-    const paramsToSign = `folder=${uploadFolder}&timestamp=${timestamp}${apiSecret}`;
-    const msgBuffer = new TextEncoder().encode(paramsToSign);
-    const hashBuffer = await crypto.subtle.digest("SHA-1", msgBuffer);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const signature = hashArray.map((b2) => b2.toString(16).padStart(2, "0")).join("");
-    return c.json({ ok: true, cloudName, apiKey, timestamp, signature, folder: uploadFolder });
+    const paramsToSign = `folder=${folder}&timestamp=${timestamp}${apiSecret}`;
+    const signature = (0, import_crypto2.createHash)("sha1").update(paramsToSign).digest("hex");
+    return c.json({ ok: true, cloudName, apiKey, timestamp, signature, folder });
   } catch (e) {
-    return c.json({ error: e.message }, 500);
+    return c.json({ error: e.message, stack: e.stack?.slice(0, 200) }, 500);
   }
 });
 app.post("/api/admin/fetch-naver-info", async (c) => {

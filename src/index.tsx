@@ -366,31 +366,37 @@ runMigrations().catch(() => {})
 // DB 불필요 라우트 — DB 연결 await 없이 즉시 응답
 // ══════════════════════════════════════════════════════════════════════════
 
-// Cloudinary 업로드 서명 발급 (프론트에서 직접 업로드용)
-// 파일 자체는 브라우저 → Cloudinary 직접 전송 (서버 경유 없음)
+// 진단용 — Vercel 실행 버전 및 env 확인
+app.get('/api/admin/diag', (c) => {
+  return c.json({
+    ver: 'v20250619-fix',
+    node: process.version,
+    env_cloud: !!process.env.CLOUDINARY_CLOUD_NAME,
+    env_key:   !!process.env.CLOUDINARY_API_KEY,
+    env_secret:!!process.env.CLOUDINARY_API_SECRET,
+  })
+})
+
+// Cloudinary 업로드 서명 발급
+// crypto.subtle 대신 Node.js crypto 모듈 사용 (Vercel Node.js 환경 호환)
+import { createHmac, createHash } from 'crypto'
 app.post('/api/admin/cloudinary-sign', async (c) => {
   try {
-    const { folder } = await c.req.json()
-    const cloudName = process.env.CLOUDINARY_CLOUD_NAME || c.env?.CLOUDINARY_CLOUD_NAME
-    const apiKey    = process.env.CLOUDINARY_API_KEY    || c.env?.CLOUDINARY_API_KEY
-    const apiSecret = process.env.CLOUDINARY_API_SECRET || c.env?.CLOUDINARY_API_SECRET
-    if (!cloudName || !apiKey || !apiSecret) return c.json({ error: 'Cloudinary env not set' }, 500)
-
-    const uploadFolder = folder || 'mybeautymap/shorts'
+    const body = await c.req.json().catch(() => ({}))
+    const folder = body?.folder || 'mybeautymap/shorts'
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME || (c.env as any)?.CLOUDINARY_CLOUD_NAME
+    const apiKey    = process.env.CLOUDINARY_API_KEY    || (c.env as any)?.CLOUDINARY_API_KEY
+    const apiSecret = process.env.CLOUDINARY_API_SECRET || (c.env as any)?.CLOUDINARY_API_SECRET
+    if (!cloudName || !apiKey || !apiSecret) {
+      return c.json({ error: 'Cloudinary env not set', cloud: !!cloudName, key: !!apiKey, secret: !!apiSecret }, 500)
+    }
     const timestamp = Math.floor(Date.now() / 1000).toString()
-
-    // SHA-1 서명: 알파벳 순 정렬 후 시크릿을 뒤에 붙임 (Cloudinary 규칙)
-    // resource_type 은 URL 경로 파라미터이므로 서명 대상에서 제외
-    // folder < timestamp 알파벳 순
-    const paramsToSign = `folder=${uploadFolder}&timestamp=${timestamp}${apiSecret}`
-    const msgBuffer    = new TextEncoder().encode(paramsToSign)
-    const hashBuffer   = await crypto.subtle.digest('SHA-1', msgBuffer)
-    const hashArray    = Array.from(new Uint8Array(hashBuffer))
-    const signature    = hashArray.map(b => b.toString(16).padStart(2,'0')).join('')
-
-    return c.json({ ok: true, cloudName, apiKey, timestamp, signature, folder: uploadFolder })
+    const paramsToSign = `folder=${folder}&timestamp=${timestamp}${apiSecret}`
+    // Node.js crypto 모듈로 SHA-1 (Vercel Node 환경)
+    const signature = createHash('sha1').update(paramsToSign).digest('hex')
+    return c.json({ ok: true, cloudName, apiKey, timestamp, signature, folder })
   } catch(e: any) {
-    return c.json({ error: e.message }, 500)
+    return c.json({ error: e.message, stack: e.stack?.slice(0,200) }, 500)
   }
 })
 
