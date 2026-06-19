@@ -1,3 +1,4 @@
+// VERCEL_BUILD_v20250619_FINAL
 // node_modules/hono/dist/compose.js
 var compose = (middleware, onError, onNotFound) => {
   return (context, next) => {

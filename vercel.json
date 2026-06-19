@@ -1,5 +1,7 @@
 {
   "version": 2,
+  "buildCommand": "echo 'skip build - using pre-built api/index.js'",
+  "installCommand": "npm install --omit=dev",
   "rewrites": [
     { "source": "/api/admin/cloudinary-sign", "destination": "/api/cloudinary-sign" },
     { "source": "/(.*)", "destination": "/api/index" }
