@@ -1,6 +1,7 @@
 {
   "version": 2,
   "rewrites": [
+    { "source": "/api/admin/cloudinary-sign", "destination": "/api/cloudinary-sign" },
     { "source": "/(.*)", "destination": "/api/index" }
   ]
 }
