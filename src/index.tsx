@@ -480,10 +480,13 @@ app.post('/api/admin/fetch-naver-info', async (c) => {
       }
     }
 
-    // 5) 주소 fallback — HTML 전체에서 광역시도 패턴
+    // 5) 주소 fallback — 도로명 패턴 (시도+로/길+숫자 형태만 허용, 오탐 방지)
     if (!address) {
-      const addrAll = html.match(/(서울|경기|인천|부산|대구|광주|대전|울산|세종|강원|충북|충남|전북|전남|경북|경남|제주)[^\s<"]{2,}(?:\s[^\s<"]{2,}){0,3}/g)
-      if (addrAll?.length) address = addrAll[0].replace(/[\u0000-\u001f]/g, '').trim()
+      const addrAll = html.match(/(서울|경기|인천|부산|대구|광주|대전|울산|세종|강원|충북|충남|전북|전남|경북|경남|제주)[가-힣\s]{2,15}(?:로|길)\s*\d+[가-힣\d\-\s]{0,20}/g)
+      if (addrAll?.length) {
+        address = addrAll.reduce((a, b) => b.length > a.length ? b : a, '')
+          .replace(/[\u0000-\u001f]/g, '').trim().slice(0, 50)
+      }
     }
 
     // 6) 카테고리 키워드 fallback
