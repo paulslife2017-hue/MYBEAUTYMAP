@@ -1,8 +1,45 @@
+"use strict";
+var __create = Object.create;
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// api/_entry.ts
+var entry_exports = {};
+__export(entry_exports, {
+  config: () => config,
+  default: () => entry_default
+});
+module.exports = __toCommonJS(entry_exports);
+
 // node_modules/@hono/node-server/dist/vercel.mjs
-import { Http2ServerRequest as Http2ServerRequest2, constants as h2constants } from "http2";
-import { Http2ServerRequest } from "http2";
-import { Readable } from "stream";
-import crypto2 from "crypto";
+var import_http2 = require("http2");
+var import_http22 = require("http2");
+var import_stream = require("stream");
+var import_crypto = __toESM(require("crypto"), 1);
 var RequestError = class extends Error {
   constructor(message, options) {
     super(message, options);
@@ -70,7 +107,7 @@ var newRequestFromIncoming = (method, url, headers, incoming, abortController) =
       init.body = new ReadableStream({
         async pull(controller) {
           try {
-            reader ||= Readable.toWeb(incoming).getReader();
+            reader ||= import_stream.Readable.toWeb(incoming).getReader();
             const { done, value } = await reader.read();
             if (done) {
               controller.close();
@@ -83,7 +120,7 @@ var newRequestFromIncoming = (method, url, headers, incoming, abortController) =
         }
       });
     } else {
-      init.body = Readable.toWeb(incoming);
+      init.body = import_stream.Readable.toWeb(incoming);
     }
   }
   return new Request2(url, init);
@@ -165,7 +202,7 @@ var newRequest = (incoming, defaultHostname) => {
   const incomingUrl = incoming.url || "";
   if (incomingUrl[0] !== "/" && // short-circuit for performance. most requests are relative URL.
   (incomingUrl.startsWith("http://") || incomingUrl.startsWith("https://"))) {
-    if (incoming instanceof Http2ServerRequest) {
+    if (incoming instanceof import_http22.Http2ServerRequest) {
       throw new RequestError("Absolute URL for :path is not allowed in HTTP/2");
     }
     try {
@@ -176,12 +213,12 @@ var newRequest = (incoming, defaultHostname) => {
     }
     return req;
   }
-  const host = (incoming instanceof Http2ServerRequest ? incoming.authority : incoming.headers.host) || defaultHostname;
+  const host = (incoming instanceof import_http22.Http2ServerRequest ? incoming.authority : incoming.headers.host) || defaultHostname;
   if (!host) {
     throw new RequestError("Missing host header");
   }
   let scheme;
-  if (incoming instanceof Http2ServerRequest) {
+  if (incoming instanceof import_http22.Http2ServerRequest) {
     scheme = incoming.scheme;
     if (!(scheme === "http" || scheme === "https")) {
       throw new RequestError("Unsupported scheme");
@@ -341,7 +378,7 @@ var buildOutgoingHttpHeaders = (headers) => {
 };
 var X_ALREADY_SENT = "x-hono-already-sent";
 if (typeof global.crypto === "undefined") {
-  global.crypto = crypto2;
+  global.crypto = import_crypto.default;
 }
 var outgoingEnded = Symbol("outgoingEnded");
 var incomingDraining = Symbol("incomingDraining");
@@ -353,10 +390,10 @@ var drainIncoming = (incoming) => {
     return;
   }
   incomingWithDrainState[incomingDraining] = true;
-  if (incoming instanceof Http2ServerRequest2) {
+  if (incoming instanceof import_http2.Http2ServerRequest) {
     try {
       ;
-      incoming.stream?.close?.(h2constants.NGHTTP2_NO_ERROR);
+      incoming.stream?.close?.(import_http2.constants.NGHTTP2_NO_ERROR);
     } catch {
     }
     return;
@@ -552,7 +589,7 @@ var getRequestListener = (fetchCallback, options = {}) => {
         incoming.on("end", () => {
           incomingEnded = true;
         });
-        if (incoming instanceof Http2ServerRequest2) {
+        if (incoming instanceof import_http2.Http2ServerRequest) {
           ;
           outgoing[outgoingEnded] = () => {
             if (!incomingEnded) {
@@ -7910,8 +7947,8 @@ var export_escapeLiteral = ct.escapeLiteral;
 var export_types = ct.types;
 
 // src/index.tsx
-import fs from "fs";
-import path from "path";
+var import_fs = __toESM(require("fs"), 1);
+var import_path = __toESM(require("path"), 1);
 var app = new Hono2();
 var DATABASE_URL = process.env.DATABASE_URL || "postgresql://neondb_owner:npg_1PBkOmAWRcf2@ep-round-recipe-aqdgkjfj-pooler.c-8.us-east-1.aws.neon.tech/neondb?sslmode=require";
 var sql = cs(DATABASE_URL);
@@ -8175,6 +8212,8 @@ async function runMigrations() {
   })();
   return _migrationPromise;
 }
+runMigrations().catch(() => {
+});
 app.post("/api/admin/cloudinary-sign", async (c) => {
   try {
     const { folder } = await c.req.json();
@@ -8274,11 +8313,8 @@ app.post("/api/admin/fetch-naver-info", async (c) => {
     return c.json({ error: e.message }, 500);
   }
 });
-app.use("*", async (c, next) => {
-  await runMigrations();
-  return next();
-});
 app.get("/api/shops", async (c) => {
+  await runMigrations();
   const cat = c.req.query("category") ?? "";
   const q = (c.req.query("q") ?? "").toLowerCase();
   const lat = parseFloat(c.req.query("lat") ?? "");
@@ -8877,8 +8913,8 @@ function favicon(c) {
 }
 app.get("/og-image.jpg", (c) => {
   try {
-    const imgPath = path.join(process.cwd(), "public", "og-image.jpg");
-    const buf = fs.readFileSync(imgPath);
+    const imgPath = import_path.default.join(process.cwd(), "public", "og-image.jpg");
+    const buf = import_fs.default.readFileSync(imgPath);
     return new Response(buf, {
       headers: {
         "Content-Type": "image/jpeg",
@@ -17222,10 +17258,10 @@ var src_default = app;
 // api/_entry.ts
 var config = { maxDuration: 60 };
 var entry_default = handle(src_default);
-export {
-  config,
-  entry_default as default
-};
+// Annotate the CommonJS export names for ESM import in node:
+0 && (module.exports = {
+  config
+});
 /*! Bundled license information:
 
 @neondatabase/serverless/index.mjs:

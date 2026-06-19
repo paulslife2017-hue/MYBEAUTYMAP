@@ -358,8 +358,12 @@ async function runMigrations() {
   return _migrationPromise
 }
 
+// 모듈 로드 시 즉시 마이그레이션 백그라운드 실행
+// → cold start 동안 DB 준비 완료, 이후 요청에서는 즉시 리턴
+runMigrations().catch(() => {})
+
 // ══════════════════════════════════════════════════════════════════════════
-// DB 불필요 라우트 — 미들웨어보다 먼저 등록 (runMigrations await 없이 즉시 응답)
+// DB 불필요 라우트 — DB 연결 await 없이 즉시 응답
 // ══════════════════════════════════════════════════════════════════════════
 
 // Cloudinary 업로드 서명 발급 (프론트에서 직접 업로드용)
@@ -491,11 +495,9 @@ app.post('/api/admin/fetch-naver-info', async (c) => {
   }
 })
 
-// DB 필요 라우트 — 마이그레이션 미들웨어
-app.use('*', async (c, next) => {
-  await runMigrations()
-  return next()
-})
+// ⚠️ app.use('*') 미들웨어 제거 — Hono는 use()가 라우트보다 항상 먼저 실행됨
+// cloudinary-sign 등 DB 불필요 라우트까지 block됨
+// → 각 DB 라우트에서 필요 시 직접 runMigrations() 호출
 
 // ══════════════════════════════════════════════════════════════════════════
 // API 라우트
@@ -503,6 +505,7 @@ app.use('*', async (c, next) => {
 
 // 샵 목록
 app.get('/api/shops', async (c) => {
+  await runMigrations()
   const cat     = c.req.query('category') ?? ''
   const q       = (c.req.query('q') ?? '').toLowerCase()
   const lat     = parseFloat(c.req.query('lat') ?? '')
