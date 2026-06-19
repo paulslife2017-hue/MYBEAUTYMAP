@@ -390,7 +390,108 @@ app.post('/api/admin/cloudinary-sign', async (c) => {
   }
 })
 
-// DB 필요 라우트 — 마이그레이션 미들웨어 적용
+// fetch-naver-info — DB 불필요, 미들웨어보다 먼저 등록
+app.post('/api/admin/fetch-naver-info', async (c) => {
+  try {
+    const { url } = await c.req.json()
+    if (!url) return c.json({ error: 'url required' }, 400)
+
+    // 1) place ID 추출
+    let placeId = ''
+    const directMatch = url.match(/place\/([\d]+)/)
+    if (directMatch) {
+      placeId = directMatch[1]
+    } else {
+      // naver.me 단축URL → 리다이렉트 추적
+      const r = await fetch(url, {
+        redirect: 'follow',
+        headers: { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15' }
+      })
+      const finalUrl = r.url
+      const m = finalUrl.match(/place\/([\d]+)/)
+      if (m) placeId = m[1]
+    }
+    if (!placeId) return c.json({ error: '네이버 플레이스 링크에서 업체 ID를 찾을 수 없습니다' }, 404)
+
+    // 2) 네이버 플레이스 내부 JSON API (가장 신뢰도 높음)
+    //    m.place.naver.com은 Next.js SPA — __NEXT_DATA__ 블록에 데이터 있음
+    const mobileUrl = `https://m.place.naver.com/place/${placeId}/home`
+    const mobileRes = await fetch(mobileUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
+        'Accept-Language': 'ko-KR,ko;q=0.9',
+        'Referer': 'https://m.place.naver.com/',
+      }
+    })
+    const html = await mobileRes.text()
+
+    let name = ''
+    let address = ''
+    let category = ''
+
+    // 3) __NEXT_DATA__ JSON 블록 파싱 (Next.js SPA 방식)
+    const nextDataM = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/)
+    if (nextDataM?.[1]) {
+      try {
+        const nd = JSON.parse(nextDataM[1])
+        // pageProps.initialState.place.summary 또는 플레이스 데이터 탐색
+        const place = nd?.props?.pageProps?.initialState?.place
+          ?? nd?.props?.pageProps?.initialProps?.placeData
+          ?? nd?.props?.pageProps?.placeData
+
+        if (place) {
+          name     = place.name     || place.displayName  || ''
+          address  = place.roadAddress || place.address    || ''
+          category = place.category   || place.categoryName || ''
+        }
+
+        // fallback: query.params에서 name 탐색
+        if (!name) {
+          const findName = (obj: any, depth=0): string => {
+            if (depth > 8 || !obj || typeof obj !== 'object') return ''
+            if (obj.name && typeof obj.name === 'string' && obj.name.length > 1 && obj.name.length < 30) return obj.name
+            for (const v of Object.values(obj)) {
+              const r = findName(v, depth+1)
+              if (r) return r
+            }
+            return ''
+          }
+          name = findName(nd?.props?.pageProps)
+        }
+      } catch(_) {}
+    }
+
+    // 4) og:title fallback
+    if (!name) {
+      const ogM = html.match(/property=["']og:title["'][^>]*content=["']([^"']+)["']/i)
+               || html.match(/content=["']([^"']+)["'][^>]*property=["']og:title["']/i)
+      if (ogM?.[1]) {
+        name = ogM[1].replace(/[\u0000-\u001f]/g, '').replace(/\s*[:|]\s*네이버.*$/i, '').trim()
+      }
+    }
+
+    // 5) 주소 fallback — HTML 전체에서 광역시도 패턴
+    if (!address) {
+      const addrAll = html.match(/(서울|경기|인천|부산|대구|광주|대전|울산|세종|강원|충북|충남|전북|전남|경북|경남|제주)[^\s<"]{2,}(?:\s[^\s<"]{2,}){0,3}/g)
+      if (addrAll?.length) address = addrAll[0].replace(/[\u0000-\u001f]/g, '').trim()
+    }
+
+    // 6) 카테고리 키워드 fallback
+    if (!category) {
+      const catKeywords = ['마사지','헤드스파','피부관리','헤어','네일','메이크업','왁싱','반영구','뷰티']
+      for (const kw of catKeywords) {
+        if (html.includes(kw)) { category = kw; break }
+      }
+    }
+
+    if (!name) return c.json({ error: '업체 정보를 찾을 수 없습니다. 네이버 플레이스 링크를 확인해주세요.' }, 404)
+    return c.json({ name, address, category, placeId })
+  } catch(e: any) {
+    return c.json({ error: e.message }, 500)
+  }
+})
+
+// DB 필요 라우트 — 마이그레이션 미들웨어
 app.use('*', async (c, next) => {
   await runMigrations()
   return next()
@@ -1118,104 +1219,7 @@ app.post('/api/admin/upload-thumbnail', async (c) => {
 })
 
 // 네이버 스마트플레이스 업체 정보 자동 추출
-app.post('/api/admin/fetch-naver-info', async (c) => {
-  try {
-    const { url } = await c.req.json()
-    if (!url) return c.json({ error: 'url required' }, 400)
-
-    // 1) naver.me 단축URL → place ID 추출
-    // https://naver.me/xxxx → https://map.naver.com/p/entry/place/2011143862
-    let placeId = ''
-    const directMatch = url.match(/place\/(\d+)/)
-    if (directMatch) {
-      placeId = directMatch[1]
-    } else {
-      // 단축URL 리다이렉트 따라가기
-      const r = await fetch(url, {
-        redirect: 'follow',
-        headers: { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15' }
-      })
-      const finalUrl = r.url
-      const m = finalUrl.match(/place\/(\d+)/)
-      if (m) placeId = m[1]
-    }
-
-    if (!placeId) return c.json({ error: '네이버 플레이스 링크에서 업체 ID를 찾을 수 없습니다' }, 404)
-
-    // 2) 네이버 플레이스 검색 API로 업체 정보 조회
-    const apiUrl = `https://map.naver.com/p/api/search/allSearch?query=${placeId}&type=place&searchCoord=&boundary=`
-    const apiRes = await fetch(apiUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
-        'Referer': 'https://map.naver.com/',
-        'Accept': 'application/json',
-      }
-    })
-
-    // 3) 네이버 모바일 플레이스 API (가장 신뢰도 높음)
-    const mobileUrl = `https://m.place.naver.com/place/${placeId}/home`
-    const mobileRes = await fetch(mobileUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
-        'Referer': 'https://m.place.naver.com/',
-        'Accept-Language': 'ko-KR,ko;q=0.9',
-      }
-    })
-    const html = await mobileRes.text()
-
-    // og:title, og:description 파싱
-    let name = ''
-    let address = ''
-    let category = ''
-
-    // og:title → 업체명 (\u001c 등 특수문자 포함 대응)
-    // 네이버 모바일은 content에 \u001c 같은 제어문자를 포함할 수 있음
-    const ogTitleM = html.match(/property="og:title"[^>]*content="([^"]+)"/i)
-                  || html.match(/content="([^"]+)"[^>]*property="og:title"/i)
-                  || html.match(/id="og:title"[^>]*content="([^"]+)"/i)
-    if (ogTitleM?.[1]) {
-      name = ogTitleM[1]
-        .replace(/[\u0000-\u001f\u007f]/g, '') // 제어문자 제거
-        .replace(/\s*[:|]\s*네이버.*$/i, '')
-        .trim()
-    }
-
-    // h1 태그에서 업체명 추출 (더 신뢰도 높음)
-    if (!name) {
-      const h1M = html.match(/<h1[^>]*>([^<]{2,30})<\/h1>/i)
-      if (h1M?.[1]) name = h1M[1].trim()
-    }
-
-    // 주소: 도로명주소 클래스에서 추출
-    const addrM = html.match(/<span[^>]*class="[^"]*주소[^"]*"[^>]*>([^<]+)<\/span>/i)
-               || html.match(/(서울|경기|인천|부산|대구|광주|대전|울산|세종|강원|충북|충남|전북|전남|경북|경남|제주)[^\s<"]{5,}(?:\s[^\s<"]{2,}){1,4}/g)?.[0]
-    if (addrM) address = (typeof addrM === 'string' ? addrM : addrM[1] || '').trim()
-
-    // 주소 못 찾으면 HTML 전체에서 광역시도 패턴 검색
-    if (!address) {
-      const addrAll = html.match(/(서울|경기|인천|부산|대구|광주|대전|울산|세종|강원)[^\s<"]{2,}(?:\s[^\s<"]{2,}){0,3}/g)
-      if (addrAll?.length) address = addrAll[0].replace(/[\u0000-\u001f]/g, '').trim()
-    }
-
-    // 카테고리: span 태그에서 추출 후 키워드 매칭
-    const catSpan = html.match(/<span[^>]*class="[^"]*dtDQt[^"]*"[^>]*>([^<]+)<\/span>/i)
-    if (catSpan?.[1]) {
-      const rawCat = catSpan[1].replace(/[\u0000-\u001f]/g, '').trim()
-      category = rawCat.split(/[,，]/)[0].trim()
-    }
-    if (!category) {
-      const catKeywords = ['마사지','헤드스파','피부관리','피부,체형관리','헤어','네일','메이크업','왁싱','반영구','피부','뷰티']
-      for (const kw of catKeywords) {
-        if (html.includes(kw)) { category = kw.split(',')[0]; break }
-      }
-    }
-
-    if (!name) return c.json({ error: '업체 정보를 찾을 수 없습니다. 네이버 플레이스 링크를 확인해주세요.' }, 404)
-    return c.json({ name, address, category, placeId })
-  } catch(e: any) {
-    return c.json({ error: e.message }, 500)
-  }
-})
+// fetch-naver-info 는 위(미들웨어 전)로 이동됨 — 여기 중복 정의 제거
 
 // ══════════════════════════════════════════════════════════════════════════
 // ⚡ 숏폼 API

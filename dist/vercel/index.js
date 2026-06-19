@@ -285,6 +285,87 @@ app.post("/api/admin/cloudinary-sign", async (c) => {
     return c.json({ error: e.message }, 500);
   }
 });
+app.post("/api/admin/fetch-naver-info", async (c) => {
+  var _a, _b, _c, _d, _e, _f, _g, _h, _i;
+  try {
+    const { url } = await c.req.json();
+    if (!url) return c.json({ error: "url required" }, 400);
+    let placeId = "";
+    const directMatch = url.match(/place\/([\d]+)/);
+    if (directMatch) {
+      placeId = directMatch[1];
+    } else {
+      const r = await fetch(url, {
+        redirect: "follow",
+        headers: { "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15" }
+      });
+      const finalUrl = r.url;
+      const m = finalUrl.match(/place\/([\d]+)/);
+      if (m) placeId = m[1];
+    }
+    if (!placeId) return c.json({ error: "네이버 플레이스 링크에서 업체 ID를 찾을 수 없습니다" }, 404);
+    const mobileUrl = `https://m.place.naver.com/place/${placeId}/home`;
+    const mobileRes = await fetch(mobileUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
+        "Accept-Language": "ko-KR,ko;q=0.9",
+        "Referer": "https://m.place.naver.com/"
+      }
+    });
+    const html = await mobileRes.text();
+    let name = "";
+    let address = "";
+    let category = "";
+    const nextDataM = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
+    if (nextDataM == null ? void 0 : nextDataM[1]) {
+      try {
+        const nd = JSON.parse(nextDataM[1]);
+        const place = ((_c = (_b = (_a = nd == null ? void 0 : nd.props) == null ? void 0 : _a.pageProps) == null ? void 0 : _b.initialState) == null ? void 0 : _c.place) ?? ((_f = (_e = (_d = nd == null ? void 0 : nd.props) == null ? void 0 : _d.pageProps) == null ? void 0 : _e.initialProps) == null ? void 0 : _f.placeData) ?? ((_h = (_g = nd == null ? void 0 : nd.props) == null ? void 0 : _g.pageProps) == null ? void 0 : _h.placeData);
+        if (place) {
+          name = place.name || place.displayName || "";
+          address = place.roadAddress || place.address || "";
+          category = place.category || place.categoryName || "";
+        }
+        if (!name) {
+          const findName = (obj, depth = 0) => {
+            if (depth > 8 || !obj || typeof obj !== "object") return "";
+            if (obj.name && typeof obj.name === "string" && obj.name.length > 1 && obj.name.length < 30) return obj.name;
+            for (const v of Object.values(obj)) {
+              const r = findName(v, depth + 1);
+              if (r) return r;
+            }
+            return "";
+          };
+          name = findName((_i = nd == null ? void 0 : nd.props) == null ? void 0 : _i.pageProps);
+        }
+      } catch (_) {
+      }
+    }
+    if (!name) {
+      const ogM = html.match(/property=["']og:title["'][^>]*content=["']([^"']+)["']/i) || html.match(/content=["']([^"']+)["'][^>]*property=["']og:title["']/i);
+      if (ogM == null ? void 0 : ogM[1]) {
+        name = ogM[1].replace(/[\u0000-\u001f]/g, "").replace(/\s*[:|]\s*네이버.*$/i, "").trim();
+      }
+    }
+    if (!address) {
+      const addrAll = html.match(/(서울|경기|인천|부산|대구|광주|대전|울산|세종|강원|충북|충남|전북|전남|경북|경남|제주)[^\s<"]{2,}(?:\s[^\s<"]{2,}){0,3}/g);
+      if (addrAll == null ? void 0 : addrAll.length) address = addrAll[0].replace(/[\u0000-\u001f]/g, "").trim();
+    }
+    if (!category) {
+      const catKeywords = ["마사지", "헤드스파", "피부관리", "헤어", "네일", "메이크업", "왁싱", "반영구", "뷰티"];
+      for (const kw of catKeywords) {
+        if (html.includes(kw)) {
+          category = kw;
+          break;
+        }
+      }
+    }
+    if (!name) return c.json({ error: "업체 정보를 찾을 수 없습니다. 네이버 플레이스 링크를 확인해주세요." }, 404);
+    return c.json({ name, address, category, placeId });
+  } catch (e) {
+    return c.json({ error: e.message }, 500);
+  }
+});
 app.use("*", async (c, next) => {
   await runMigrations();
   return next();
@@ -919,79 +1000,6 @@ app.post("/api/admin/upload-thumbnail", async (c) => {
   if (!dataUrl || !shopId) return c.json({ error: "required" }, 400);
   await sql`UPDATE shops SET thumbnail = ${dataUrl} WHERE id = ${shopId}`;
   return c.json({ ok: true, url: dataUrl });
-});
-app.post("/api/admin/fetch-naver-info", async (c) => {
-  var _a;
-  try {
-    const { url } = await c.req.json();
-    if (!url) return c.json({ error: "url required" }, 400);
-    let placeId = "";
-    const directMatch = url.match(/place\/(\d+)/);
-    if (directMatch) {
-      placeId = directMatch[1];
-    } else {
-      const r = await fetch(url, {
-        redirect: "follow",
-        headers: { "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15" }
-      });
-      const finalUrl = r.url;
-      const m = finalUrl.match(/place\/(\d+)/);
-      if (m) placeId = m[1];
-    }
-    if (!placeId) return c.json({ error: "네이버 플레이스 링크에서 업체 ID를 찾을 수 없습니다" }, 404);
-    const apiUrl = `https://map.naver.com/p/api/search/allSearch?query=${placeId}&type=place&searchCoord=&boundary=`;
-    const apiRes = await fetch(apiUrl, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
-        "Referer": "https://map.naver.com/",
-        "Accept": "application/json"
-      }
-    });
-    const mobileUrl = `https://m.place.naver.com/place/${placeId}/home`;
-    const mobileRes = await fetch(mobileUrl, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
-        "Referer": "https://m.place.naver.com/",
-        "Accept-Language": "ko-KR,ko;q=0.9"
-      }
-    });
-    const html = await mobileRes.text();
-    let name = "";
-    let address = "";
-    let category = "";
-    const ogTitleM = html.match(/property="og:title"[^>]*content="([^"]+)"/i) || html.match(/content="([^"]+)"[^>]*property="og:title"/i) || html.match(/id="og:title"[^>]*content="([^"]+)"/i);
-    if (ogTitleM == null ? void 0 : ogTitleM[1]) {
-      name = ogTitleM[1].replace(/[\u0000-\u001f\u007f]/g, "").replace(/\s*[:|]\s*네이버.*$/i, "").trim();
-    }
-    if (!name) {
-      const h1M = html.match(/<h1[^>]*>([^<]{2,30})<\/h1>/i);
-      if (h1M == null ? void 0 : h1M[1]) name = h1M[1].trim();
-    }
-    const addrM = html.match(/<span[^>]*class="[^"]*주소[^"]*"[^>]*>([^<]+)<\/span>/i) || ((_a = html.match(/(서울|경기|인천|부산|대구|광주|대전|울산|세종|강원|충북|충남|전북|전남|경북|경남|제주)[^\s<"]{5,}(?:\s[^\s<"]{2,}){1,4}/g)) == null ? void 0 : _a[0]);
-    if (addrM) address = (typeof addrM === "string" ? addrM : addrM[1] || "").trim();
-    if (!address) {
-      const addrAll = html.match(/(서울|경기|인천|부산|대구|광주|대전|울산|세종|강원)[^\s<"]{2,}(?:\s[^\s<"]{2,}){0,3}/g);
-      if (addrAll == null ? void 0 : addrAll.length) address = addrAll[0].replace(/[\u0000-\u001f]/g, "").trim();
-    }
-    const catSpan = html.match(/<span[^>]*class="[^"]*dtDQt[^"]*"[^>]*>([^<]+)<\/span>/i);
-    if (catSpan == null ? void 0 : catSpan[1]) {
-      const rawCat = catSpan[1].replace(/[\u0000-\u001f]/g, "").trim();
-      category = rawCat.split(/[,，]/)[0].trim();
-    }
-    if (!category) {
-      const catKeywords = ["마사지", "헤드스파", "피부관리", "피부,체형관리", "헤어", "네일", "메이크업", "왁싱", "반영구", "피부", "뷰티"];
-      for (const kw of catKeywords) {
-        if (html.includes(kw)) {
-          category = kw.split(",")[0];
-          break;
-        }
-      }
-    }
-    if (!name) return c.json({ error: "업체 정보를 찾을 수 없습니다. 네이버 플레이스 링크를 확인해주세요." }, 404);
-    return c.json({ name, address, category, placeId });
-  } catch (e) {
-    return c.json({ error: e.message }, 500);
-  }
 });
 app.get("/api/shorts", async (c) => {
   try {
