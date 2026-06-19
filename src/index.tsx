@@ -7212,7 +7212,10 @@ function _shortsAdminModalHtml() {
           // 카테고리
           '<div>' +
             '<label style="font-size:11px;color:#64748b;font-weight:700;display:block;margin-bottom:5px">카테고리</label>' +
-            '<select id="s-cat" style="'+inp+'background:#1b1b1b;color:#fff;appearance:auto"><option value="" style="background:#1b1b1b;color:#fff">선택 안함</option></select>' +
+            '<select id="s-cat" style="'+inp+'background:#1b1b1b;color:#fff;appearance:auto">' +
+              '<option value="" style="background:#1b1b1b;color:#fff">선택 안함</option>' +
+              CAT_OPTIONS.map(c => '<option value="'+c+'" style="background:#1b1b1b;color:#fff">'+c+'</option>').join('') +
+            '</select>' +
           '</div>' +
           // 주소
           '<div>' +
