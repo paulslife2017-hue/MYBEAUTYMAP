@@ -3,28 +3,11 @@
   "framework": null,
   "buildCommand": "npx vite build --config vite.config.node.ts",
   "installCommand": "npm install",
-  "builds": [
-    {
-      "src": "dist/index.js",
-      "use": "@vercel/node"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/static/(.*)",
-      "dest": "/dist/static/$1"
-    },
-    {
-      "src": "/favicon.svg",
-      "dest": "/dist/favicon.svg"
-    },
-    {
-      "src": "/og-image.jpg",
-      "dest": "/dist/og-image.jpg"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/dist/index.js"
-    }
+  "outputDirectory": "dist",
+  "rewrites": [
+    { "source": "/static/(.*)", "destination": "/static/$1" },
+    { "source": "/favicon.svg", "destination": "/favicon.svg" },
+    { "source": "/og-image.jpg", "destination": "/og-image.jpg" },
+    { "source": "/(.*)", "destination": "/index.js" }
   ]
 }
