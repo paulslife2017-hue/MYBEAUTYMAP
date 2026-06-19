@@ -358,14 +358,41 @@ async function runMigrations() {
   return _migrationPromise
 }
 
-// 첫 요청에서만 마이그레이션 실행 (이후엔 _migrationDone=true로 즉시 리턴)
-// DB 안 쓰는 API는 기다리지 않음 (Vercel 타임아웃 방지)
-const NO_MIGRATION_PATHS = ['/api/admin/cloudinary-sign', '/static', '/favicon', '/og-image']
+// ══════════════════════════════════════════════════════════════════════════
+// DB 불필요 라우트 — 미들웨어보다 먼저 등록 (runMigrations await 없이 즉시 응답)
+// ══════════════════════════════════════════════════════════════════════════
+
+// Cloudinary 업로드 서명 발급 (프론트에서 직접 업로드용)
+// 파일 자체는 브라우저 → Cloudinary 직접 전송 (서버 경유 없음)
+app.post('/api/admin/cloudinary-sign', async (c) => {
+  try {
+    const { folder } = await c.req.json()
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME || c.env?.CLOUDINARY_CLOUD_NAME
+    const apiKey    = process.env.CLOUDINARY_API_KEY    || c.env?.CLOUDINARY_API_KEY
+    const apiSecret = process.env.CLOUDINARY_API_SECRET || c.env?.CLOUDINARY_API_SECRET
+    if (!cloudName || !apiKey || !apiSecret) return c.json({ error: 'Cloudinary env not set' }, 500)
+
+    const uploadFolder = folder || 'mybeautymap/shorts'
+    const timestamp = Math.floor(Date.now() / 1000).toString()
+
+    // SHA-1 서명: 알파벳 순 정렬 후 시크릿을 뒤에 붙임 (Cloudinary 규칙)
+    // resource_type 은 URL 경로 파라미터이므로 서명 대상에서 제외
+    // folder < timestamp 알파벳 순
+    const paramsToSign = `folder=${uploadFolder}&timestamp=${timestamp}${apiSecret}`
+    const msgBuffer    = new TextEncoder().encode(paramsToSign)
+    const hashBuffer   = await crypto.subtle.digest('SHA-1', msgBuffer)
+    const hashArray    = Array.from(new Uint8Array(hashBuffer))
+    const signature    = hashArray.map(b => b.toString(16).padStart(2,'0')).join('')
+
+    return c.json({ ok: true, cloudName, apiKey, timestamp, signature, folder: uploadFolder })
+  } catch(e: any) {
+    return c.json({ error: e.message }, 500)
+  }
+})
+
+// DB 필요 라우트 — 마이그레이션 미들웨어 적용
 app.use('*', async (c, next) => {
-  const path = c.req.path
-  const skip = NO_MIGRATION_PATHS.some(p => path.startsWith(p))
-  if (!skip) await runMigrations()
-  else runMigrations() // 백그라운드로만 실행
+  await runMigrations()
   return next()
 })
 
@@ -1088,34 +1115,6 @@ app.post('/api/admin/upload-thumbnail', async (c) => {
   if (!dataUrl || !shopId) return c.json({ error: 'required' }, 400)
   await sql`UPDATE shops SET thumbnail = ${dataUrl} WHERE id = ${shopId}`
   return c.json({ ok: true, url: dataUrl })
-})
-
-// Cloudinary 업로드 서명 발급 (프론트에서 직접 업로드용)
-// 파일 자체는 브라우저 → Cloudinary 직접 전송 (서버 경유 없음)
-app.post('/api/admin/cloudinary-sign', async (c) => {
-  try {
-    const { folder } = await c.req.json()
-    const cloudName = process.env.CLOUDINARY_CLOUD_NAME || c.env?.CLOUDINARY_CLOUD_NAME
-    const apiKey    = process.env.CLOUDINARY_API_KEY    || c.env?.CLOUDINARY_API_KEY
-    const apiSecret = process.env.CLOUDINARY_API_SECRET || c.env?.CLOUDINARY_API_SECRET
-    if (!cloudName || !apiKey || !apiSecret) return c.json({ error: 'Cloudinary env not set' }, 500)
-
-    const uploadFolder = folder || 'mybeautymap/shorts'
-    const timestamp = Math.floor(Date.now() / 1000).toString()
-
-    // SHA-1 서명: 알파벳 순 정렬 후 시크릿을 뒤에 붙임 (Cloudinary 규칙)
-    // resource_type 은 URL 경로 파라미터이므로 서명 대상에서 제외
-    // folder < timestamp 알파벳 순
-    const paramsToSign = `folder=${uploadFolder}&timestamp=${timestamp}${apiSecret}`
-    const msgBuffer    = new TextEncoder().encode(paramsToSign)
-    const hashBuffer   = await crypto.subtle.digest('SHA-1', msgBuffer)
-    const hashArray    = Array.from(new Uint8Array(hashBuffer))
-    const signature    = hashArray.map(b => b.toString(16).padStart(2,'0')).join('')
-
-    return c.json({ ok: true, cloudName, apiKey, timestamp, signature, folder: uploadFolder })
-  } catch(e: any) {
-    return c.json({ error: e.message }, 500)
-  }
 })
 
 // 네이버 스마트플레이스 업체 정보 자동 추출

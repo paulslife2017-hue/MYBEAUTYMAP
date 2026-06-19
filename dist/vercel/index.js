@@ -265,12 +265,28 @@ async function runMigrations() {
   })();
   return _migrationPromise;
 }
-const NO_MIGRATION_PATHS = ["/api/admin/cloudinary-sign", "/static", "/favicon", "/og-image"];
+app.post("/api/admin/cloudinary-sign", async (c) => {
+  var _a, _b, _c;
+  try {
+    const { folder } = await c.req.json();
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME || ((_a = c.env) == null ? void 0 : _a.CLOUDINARY_CLOUD_NAME);
+    const apiKey = process.env.CLOUDINARY_API_KEY || ((_b = c.env) == null ? void 0 : _b.CLOUDINARY_API_KEY);
+    const apiSecret = process.env.CLOUDINARY_API_SECRET || ((_c = c.env) == null ? void 0 : _c.CLOUDINARY_API_SECRET);
+    if (!cloudName || !apiKey || !apiSecret) return c.json({ error: "Cloudinary env not set" }, 500);
+    const uploadFolder = folder || "mybeautymap/shorts";
+    const timestamp = Math.floor(Date.now() / 1e3).toString();
+    const paramsToSign = `folder=${uploadFolder}&timestamp=${timestamp}${apiSecret}`;
+    const msgBuffer = new TextEncoder().encode(paramsToSign);
+    const hashBuffer = await crypto.subtle.digest("SHA-1", msgBuffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const signature = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+    return c.json({ ok: true, cloudName, apiKey, timestamp, signature, folder: uploadFolder });
+  } catch (e) {
+    return c.json({ error: e.message }, 500);
+  }
+});
 app.use("*", async (c, next) => {
-  const path2 = c.req.path;
-  const skip = NO_MIGRATION_PATHS.some((p) => path2.startsWith(p));
-  if (!skip) await runMigrations();
-  else runMigrations();
+  await runMigrations();
   return next();
 });
 app.get("/api/shops", async (c) => {
@@ -903,26 +919,6 @@ app.post("/api/admin/upload-thumbnail", async (c) => {
   if (!dataUrl || !shopId) return c.json({ error: "required" }, 400);
   await sql`UPDATE shops SET thumbnail = ${dataUrl} WHERE id = ${shopId}`;
   return c.json({ ok: true, url: dataUrl });
-});
-app.post("/api/admin/cloudinary-sign", async (c) => {
-  var _a, _b, _c;
-  try {
-    const { folder } = await c.req.json();
-    const cloudName = process.env.CLOUDINARY_CLOUD_NAME || ((_a = c.env) == null ? void 0 : _a.CLOUDINARY_CLOUD_NAME);
-    const apiKey = process.env.CLOUDINARY_API_KEY || ((_b = c.env) == null ? void 0 : _b.CLOUDINARY_API_KEY);
-    const apiSecret = process.env.CLOUDINARY_API_SECRET || ((_c = c.env) == null ? void 0 : _c.CLOUDINARY_API_SECRET);
-    if (!cloudName || !apiKey || !apiSecret) return c.json({ error: "Cloudinary env not set" }, 500);
-    const uploadFolder = folder || "mybeautymap/shorts";
-    const timestamp = Math.floor(Date.now() / 1e3).toString();
-    const paramsToSign = `folder=${uploadFolder}&timestamp=${timestamp}${apiSecret}`;
-    const msgBuffer = new TextEncoder().encode(paramsToSign);
-    const hashBuffer = await crypto.subtle.digest("SHA-1", msgBuffer);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const signature = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-    return c.json({ ok: true, cloudName, apiKey, timestamp, signature, folder: uploadFolder });
-  } catch (e) {
-    return c.json({ error: e.message }, 500);
-  }
 });
 app.post("/api/admin/fetch-naver-info", async (c) => {
   var _a;
