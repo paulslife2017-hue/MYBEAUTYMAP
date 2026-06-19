@@ -1,18 +1,17 @@
 {
   "version": 2,
+  "buildCommand": "npx vite build --config vite.config.vercel.ts",
+  "installCommand": "npm install",
   "builds": [
     {
-      "src": "api/index.ts",
-      "use": "@vercel/node",
-      "config": {
-        "tsconfig": "tsconfig.vercel.json"
-      }
+      "src": "api/index.js",
+      "use": "@vercel/node"
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "/api/index.ts"
+      "dest": "/api/index.js"
     }
   ]
 }
