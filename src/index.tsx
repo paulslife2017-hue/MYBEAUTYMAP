@@ -359,8 +359,13 @@ async function runMigrations() {
 }
 
 // 첫 요청에서만 마이그레이션 실행 (이후엔 _migrationDone=true로 즉시 리턴)
-app.use('*', async (_c, next) => {
-  await runMigrations()
+// DB 안 쓰는 API는 기다리지 않음 (Vercel 타임아웃 방지)
+const NO_MIGRATION_PATHS = ['/api/admin/cloudinary-sign', '/static', '/favicon', '/og-image']
+app.use('*', async (c, next) => {
+  const path = c.req.path
+  const skip = NO_MIGRATION_PATHS.some(p => path.startsWith(p))
+  if (!skip) await runMigrations()
+  else runMigrations() // 백그라운드로만 실행
   return next()
 })
 

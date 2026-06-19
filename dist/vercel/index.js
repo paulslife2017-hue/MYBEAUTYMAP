@@ -265,8 +265,12 @@ async function runMigrations() {
   })();
   return _migrationPromise;
 }
-app.use("*", async (_c, next) => {
-  await runMigrations();
+const NO_MIGRATION_PATHS = ["/api/admin/cloudinary-sign", "/static", "/favicon", "/og-image"];
+app.use("*", async (c, next) => {
+  const path2 = c.req.path;
+  const skip = NO_MIGRATION_PATHS.some((p) => path2.startsWith(p));
+  if (!skip) await runMigrations();
+  else runMigrations();
   return next();
 });
 app.get("/api/shops", async (c) => {
