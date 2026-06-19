@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "npx vite build --config vite.config.vercel.ts",
+  "buildCommand": "npx esbuild api/_entry.ts --bundle --platform=node --target=node20 --format=esm --outfile=api/index.js --external:fs --external:path --external:crypto --external:os --external:http --external:https --external:stream --external:util --external:net --external:tls --external:zlib --external:events --external:buffer --external:url --external:querystring --external:child_process --external:worker_threads",
   "installCommand": "npm install",
   "rewrites": [
     { "source": "/(.*)", "destination": "/api/index" }
