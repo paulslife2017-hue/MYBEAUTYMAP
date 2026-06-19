@@ -1,7 +1,7 @@
 {
   "version": 2,
-  "buildCommand": "echo 'skip build - using pre-built api/index.js'",
-  "installCommand": "npm install --omit=dev",
+  "installCommand": "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --omit=dev",
+  "buildCommand": "echo 'using pre-built api files'",
   "rewrites": [
     { "source": "/api/admin/cloudinary-sign", "destination": "/api/cloudinary-sign" },
     { "source": "/(.*)", "destination": "/api/index" }
