@@ -2318,12 +2318,20 @@ function mainPage(baseUrl = 'https://www.mybeautymap.co.kr') { return `<!DOCTYPE
 }
 html,body{height:100%;background:var(--bg);color:#fff;
   font-family:'Pretendard',-apple-system,sans-serif;overflow:hidden}
+@media(min-width:768px){
+  body{
+    background: radial-gradient(ellipse 60% 50% at 20% 50%, rgba(255,77,125,.04) 0%, transparent 70%),
+                radial-gradient(ellipse 60% 50% at 80% 50%, rgba(192,38,211,.04) 0%, transparent 70%),
+                #0a0a0a;
+  }
+}
 
 /* 헤더 */
 .hd{position:fixed;top:0;left:0;right:0;z-index:300;height:var(--hd);
   background:rgba(10,10,10,.97);backdrop-filter:blur(14px);
   border-bottom:1px solid rgba(255,255,255,.07);
-  display:flex;align-items:center;justify-content:space-between;padding:0 16px}
+  display:flex;align-items:center;justify-content:center;padding:0}
+.hd-inner{width:100%;max-width:900px;display:flex;align-items:center;justify-content:space-between;padding:0 20px}
 .logo{font-size:19px;font-weight:800;display:flex;align-items:center;gap:7px;cursor:pointer;user-select:none}
 .logo-icon{width:28px;height:28px;background:var(--pink);border-radius:8px;
   display:flex;align-items:center;justify-content:center;font-size:14px}
@@ -2362,10 +2370,11 @@ html,body{height:100%;background:var(--bg);color:#fff;
 /* 카탈로그 탭바 */
 .cat-bar{position:fixed;top:calc(var(--hd) + var(--sb,0px));left:0;right:0;z-index:299;height:var(--cat);
   background:rgba(10,10,10,.93);backdrop-filter:blur(10px);
-  border-bottom:1px solid rgba(255,255,255,.06);display:none}
-.cat-bar.show{display:block}
+  border-bottom:1px solid rgba(255,255,255,.06);display:none;justify-content:center}
+.cat-bar.show{display:flex}
 .cat-scroll{display:flex;align-items:center;gap:6px;
-  overflow-x:auto;padding:6px 12px;height:100%;scrollbar-width:none}
+  overflow-x:auto;padding:6px 12px;height:100%;scrollbar-width:none;
+  width:100%;max-width:900px}
 .cat-scroll::-webkit-scrollbar{display:none}
 .cp{flex-shrink:0;border:1.5px solid rgba(255,255,255,.15);border-radius:20px;
   padding:5px 14px;font-size:12px;font-weight:600;
@@ -2389,6 +2398,10 @@ html,body{height:100%;background:var(--bg);color:#fff;
   display:none;background:#000;}
 #feedScreen::-webkit-scrollbar{display:none;}
 #feedScreen.active{display:block;}
+@media(min-width:768px){
+  #feedScreen{left:50%;right:auto;transform:translateX(-50%);width:min(100vw,560px);background:#0a0a0a;}
+  #mapScreen{left:50%;right:auto;transform:translateX(-50%);width:min(100vw,900px);}
+}
 /* PC 전용 요소 — JS로 동적 삽입됨, CSS 기본값 불필요 */
 #mapScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:calc(var(--ad) + var(--nav));
   display:none;}
@@ -2408,15 +2421,17 @@ html,body{height:100%;background:var(--bg);color:#fff;
 @media(min-width:768px){
   #shortsScreen{
     --sv: calc(100dvh - var(--hd) - 44px - var(--nav) - var(--safe));
-    --pw: 300px;
+    --pw: 340px;
     left: 50%;
     right: auto;
     transform: translateX(-50%);
-    width: min(100vw, calc(var(--sv) * 9 / 16 + var(--pw)));
+    width: min(calc(100vw - 48px), calc(var(--sv) * 9 / 16 + var(--pw)));
+    max-width: 1100px;
     overflow-y: scroll;
     scroll-snap-type: y mandatory;
     background:#0a0a0a;
-    box-shadow: 0 0 80px rgba(0,0,0,.6);
+    box-shadow: 0 0 60px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.04);
+    border-radius: 0;
   }
   .shorts-slide{
     display:flex !important;
@@ -2547,7 +2562,24 @@ html,body{height:100%;background:var(--bg);color:#fff;
 }
 /* 숏폼 모드: 광고만 숨김 (헤더·검색바는 유지) */
 body.shorts-mode #coupang-ad{ display:none!important; }
-body.shorts-mode #shortsCatBar{ display:block!important; }
+body.shorts-mode #shortsCatBar{ display:flex!important; }
+
+/* ── PC 전역 개선 ── */
+@media(min-width:768px){
+  /* 헤더 inner 최대너비 적용 */
+  .hd{ padding:0; }
+  /* 카탈로그바 중앙 스크롤 */
+  .cat-bar{ display:none; justify-content:center; }
+  .cat-bar.show{ display:flex; }
+  /* 하단 탭바 중앙 */
+  .tabbar{ justify-content:center; }
+  .tab{ font-size:11px; gap:4px; }
+  .tab i{ font-size:20px; }
+  /* 숏폼 음소거 버튼 — 영상 오른쪽 상단 안쪽으로 (정보 패널 시작 직전) */
+  #shorts-mute-btn{
+    right: calc(var(--pw, 340px) + 14px);
+  }
+}
 /* 음소거 버튼 */
 #shorts-mute-btn{
   position:fixed;
@@ -2575,11 +2607,16 @@ body.shorts-mode #shorts-mute-btn{ display:flex; }
   backdrop-filter:blur(12px);
   border-bottom:1px solid rgba(255,255,255,.07);
   display:none;
+  justify-content:center;
 }
-#shortsCatBar.show{display:block;}
+#shortsCatBar.show{display:flex;}
 #shortsCatBar .cat-scroll{
   display:flex;align-items:center;gap:6px;
   overflow-x:auto;padding:6px 12px;height:100%;scrollbar-width:none;
+  width:100%;
+}
+@media(min-width:768px){
+  #shortsCatBar .cat-scroll{ max-width: min(calc(100vw - 48px), 1100px); }
 }
 #shortsCatBar .cat-scroll::-webkit-scrollbar{display:none;}
 /* 숏폼 전용 카탈로그 버튼 — .scp 독립 클래스 */
@@ -2701,7 +2738,8 @@ body.shorts-mode #shorts-mute-btn{ display:flex; }
 .tabbar{position:fixed;bottom:0;left:0;right:0;z-index:300;height:var(--nav);
   background:rgba(10,10,10,.98);backdrop-filter:blur(20px);
   border-top:1px solid rgba(255,255,255,.08);
-  display:flex;padding-bottom:var(--safe)}
+  display:flex;padding-bottom:var(--safe);justify-content:center}
+.tabbar-inner{display:flex;width:100%;max-width:600px}
 .tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:3px;font-size:10px;font-weight:700;color:rgba(255,255,255,.28);
   cursor:pointer;border:none;background:none;font-family:inherit;
@@ -3287,15 +3325,17 @@ body.shorts-mode #shorts-mute-btn{ display:flex; }
 <body class="shorts-mode">
 
 <header class="hd">
-  <div class="logo" id="logoBtn">
-    <div class="logo-icon">💄</div>
-    마이<em>뷰티</em>맵
-  </div>
-  <div class="hd-right">
-    <span class="hd-badge">BETA</span>
-    <button class="search-btn" id="searchToggleBtn" onclick="toggleSearch()" aria-label="검색">
-      <i class="fas fa-search" id="searchBtnIcon"></i>
-    </button>
+  <div class="hd-inner">
+    <div class="logo" id="logoBtn">
+      <div class="logo-icon">💄</div>
+      마이<em>뷰티</em>맵
+    </div>
+    <div class="hd-right">
+      <span class="hd-badge">BETA</span>
+      <button class="search-btn" id="searchToggleBtn" onclick="toggleSearch()" aria-label="검색">
+        <i class="fas fa-search" id="searchBtnIcon"></i>
+      </button>
+    </div>
   </div>
 </header>
 
@@ -3534,18 +3574,20 @@ body.shorts-mode #shorts-mute-btn{ display:flex; }
 
 <!-- 하단 탭바: 릴스 → 영상 → 지도 → 입점 -->
 <nav class="tabbar">
-  <button class="tab" id="tab-shorts" onclick="switchTab('shorts')">
-    <i class="fas fa-fire"></i>릴스
-  </button>
-  <button class="tab" id="tab-feed" onclick="switchTab('feed')">
-    <i class="fas fa-play-circle"></i>영상
-  </button>
-  <button class="tab" id="tab-map" onclick="switchTab('map')">
-    <i class="fas fa-map-marker-alt"></i>지도
-  </button>
-  <button class="tab" id="tab-inquiry" onclick="switchTab('inquiry')">
-    <i class="fas fa-store"></i>입점문의
-  </button>
+  <div class="tabbar-inner">
+    <button class="tab" id="tab-shorts" onclick="switchTab('shorts')">
+      <i class="fas fa-fire"></i>릴스
+    </button>
+    <button class="tab" id="tab-feed" onclick="switchTab('feed')">
+      <i class="fas fa-play-circle"></i>영상
+    </button>
+    <button class="tab" id="tab-map" onclick="switchTab('map')">
+      <i class="fas fa-map-marker-alt"></i>지도
+    </button>
+    <button class="tab" id="tab-inquiry" onclick="switchTab('inquiry')">
+      <i class="fas fa-store"></i>입점문의
+    </button>
+  </div>
 </nav>
 
 <!-- 피드 전용 딤 + 바텀시트 -->
