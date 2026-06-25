@@ -2458,22 +2458,40 @@ html,body{height:100%;background:var(--bg);color:#fff;
     border-left:1px solid rgba(255,255,255,.07) !important;
     display:flex !important;
     flex-direction:column !important;
-    justify-content:center !important;
+    justify-content:space-between !important;
     padding:0 !important;
     overflow:hidden !important;
     z-index:2 !important;
   }
   .shorts-info-row{ display:none !important; }
-  /* PC 패널 컨테이너 */
+  /* PC 패널 컨테이너 — deco(위) + 정보블록(아래) space-between */
   .shorts-panel-pc{
     display:flex !important;
     flex-direction:column !important;
-    justify-content:center !important;
+    justify-content:space-between !important;
     flex:1 !important;
-    padding:36px 28px !important;
+    padding:28px 28px 24px !important;
     min-height:0 !important;
     position:relative !important;
     overflow:hidden !important;
+  }
+  /* 상단 장식 블록 (빈 공간 — 미묘한 로고 워터마크) */
+  .shorts-panel-deco{
+    flex:1 !important;
+    min-height:0 !important;
+    display:flex !important;
+    align-items:center !important;
+    justify-content:center !important;
+    pointer-events:none !important;
+    user-select:none !important;
+    position:relative !important;
+  }
+  .shorts-panel-deco::before{
+    content:'💄' !important;
+    font-size:64px !important;
+    opacity:.04 !important;
+    display:block !important;
+    filter:grayscale(1) !important;
   }
   /* 패널 상단 장식 라인 */
   .shorts-panel-pc::before{
@@ -2490,7 +2508,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
     letter-spacing:.06em !important;
     padding:4px 11px !important;
     border-radius:20px !important;
-    margin-bottom:20px !important;
+    margin-bottom:14px !important;
     display:inline-flex !important;
     align-items:center !important;
     gap:5px !important;
@@ -2498,12 +2516,12 @@ html,body{height:100%;background:var(--bg);color:#fff;
   }
   /* 업체명 */
   .shorts-panel-name{
-    font-size:24px !important;
+    font-size:22px !important;
     font-weight:900 !important;
     line-height:1.3 !important;
     white-space:normal !important;
     word-break:keep-all !important;
-    margin-bottom:10px !important;
+    margin-bottom:8px !important;
     text-shadow:none !important;
     overflow:visible !important;
     text-overflow:unset !important;
@@ -2526,7 +2544,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
     width:100% !important;
     height:1px !important;
     background:linear-gradient(90deg,rgba(255,255,255,.1),rgba(255,255,255,.04)) !important;
-    margin:24px 0 !important;
+    margin:20px 0 !important;
     flex-shrink:0 !important;
   }
   /* 예약 버튼 */
@@ -2547,17 +2565,20 @@ html,body{height:100%;background:var(--bg);color:#fff;
     box-shadow:0 12px 32px rgba(3,199,90,.45) !important;
   }
   .shorts-panel-btn:active{ transform:scale(.97) !important; }
-  /* 하단 힌트 */
+  /* 하단 힌트 — shorts-overlay 직계 자식, 진짜 맨 아래 고정 */
   .shorts-panel-hint{
     font-size:11px !important;
-    color:rgba(255,255,255,.2) !important;
+    color:rgba(255,255,255,.22) !important;
     text-align:center !important;
-    margin-top:20px !important;
-    letter-spacing:.03em !important;
+    padding:12px 28px !important;
+    letter-spacing:.04em !important;
     display:flex !important;
     align-items:center !important;
     justify-content:center !important;
-    gap:5px !important;
+    gap:6px !important;
+    flex-shrink:0 !important;
+    border-top:1px solid rgba(255,255,255,.06) !important;
+    background:rgba(0,0,0,.15) !important;
   }
 }
 /* 숏폼 모드: 광고만 숨김 (헤더·검색바는 유지) */
@@ -4054,6 +4075,8 @@ function shortsSlide(shop, idx) {
       '</div>' +
       // PC 전용: 세련된 정보 패널
       '<div class="shorts-panel-pc">' +
+        // 상단 장식 영역 (빈 공간 채우기 — flex:1 로 밀어냄)
+        '<div class="shorts-panel-deco"></div>' +
         // 카테고리 뱃지
         (cat ? '<span class="shorts-cat"><i class="fas fa-tag" style="font-size:9px;opacity:.7"></i>' + cat + '</span>' : '') +
         // 업체명
@@ -4073,11 +4096,11 @@ function shortsSlide(shop, idx) {
               '<span>예약 정보 없음</span>' +
             '</button>'
         ) +
-        // 하단 힌트
-        '<div class="shorts-panel-hint">' +
-          '<i class="fas fa-computer-mouse" style="opacity:.4;font-size:13px"></i>' +
-          '<span>스크롤로 다음 영상</span>' +
-        '</div>' +
+      '</div>' +
+      // 하단 힌트 — shorts-overlay 직계 자식 (맨 아래 고정)
+      '<div class="shorts-panel-hint">' +
+        '<span style="opacity:.4;font-size:16px;line-height:1">&#8597;</span>' +
+        '<span>스크롤로 다음 영상</span>' +
       '</div>' +
     '</div>' +
     '</div>'
