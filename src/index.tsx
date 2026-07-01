@@ -183,6 +183,11 @@ function rowToShop(r: any) {
     mapSP:           parseInt(r.map_sp)   || 0,
     isPremium:       calcIsPremium(r),
     isRecommended:   r.is_recommended ?? false,
+    googlePlaceId:   r.google_place_id ?? '',
+    googleRating:    r.google_rating != null ? parseFloat(r.google_rating) : null,
+    googleReviewCount: r.google_review_count != null ? parseInt(r.google_review_count) : null,
+    googleHours:     r.google_hours ?? '',
+    googlePhotoUrl:  r.google_photo_url ?? '',
   }
 }
 
@@ -206,6 +211,11 @@ interface Shop {
   phone: string
   desc: string
   active: boolean
+  googlePlaceId: string
+  googleRating: number | null
+  googleReviewCount: number | null
+  googleHours: string
+  googlePhotoUrl: string
 }
 
 function calcDist(la1: number, lo1: number, la2: number, lo2: number) {
@@ -218,7 +228,7 @@ function calcDist(la1: number, lo1: number, la2: number, lo2: number) {
 // 자동 마이그레이션 — schema_migrations 버전 테이블로 1회만 실행
 // DB가 깨어있을 때 딱 1번만 쿼리 → Neon 컴퓨트 시간 낭비 방지
 // ══════════════════════════════════════════════════════════════════════════
-const MIGRATION_VERSION = 10  // 마이그레이션 추가 시 +1
+const MIGRATION_VERSION = 11  // 마이그레이션 추가 시 +1
 let _migrationDone = false
 let _migrationPromise: Promise<void> | null = null
 
@@ -333,6 +343,11 @@ async function runMigrations() {
       // ── 기존 테이블 컬럼 추가 (IF NOT EXISTS로 안전하게) ─────────────
       await sql`ALTER TABLE shops             ADD COLUMN IF NOT EXISTS report_token   TEXT`
       await sql`ALTER TABLE shops             ADD COLUMN IF NOT EXISTS is_recommended BOOLEAN NOT NULL DEFAULT false`
+      await sql`ALTER TABLE shops             ADD COLUMN IF NOT EXISTS google_place_id TEXT NOT NULL DEFAULT ''`
+      await sql`ALTER TABLE shops             ADD COLUMN IF NOT EXISTS google_rating    NUMERIC(2,1) DEFAULT NULL`
+      await sql`ALTER TABLE shops             ADD COLUMN IF NOT EXISTS google_review_count INTEGER DEFAULT NULL`
+      await sql`ALTER TABLE shops             ADD COLUMN IF NOT EXISTS google_hours   TEXT NOT NULL DEFAULT ''`
+      await sql`ALTER TABLE shops             ADD COLUMN IF NOT EXISTS google_photo_url TEXT NOT NULL DEFAULT ''`
       await sql`ALTER TABLE daily_stats       ADD COLUMN IF NOT EXISTS feed_view      INTEGER NOT NULL DEFAULT 0`
       await sql`ALTER TABLE daily_stats       ADD COLUMN IF NOT EXISTS catalog_view   INTEGER NOT NULL DEFAULT 0`
       await sql`ALTER TABLE daily_stats       ADD COLUMN IF NOT EXISTS map_view       INTEGER NOT NULL DEFAULT 0`
@@ -2128,6 +2143,98 @@ app.get('/api/resolve-naver', async (c) => {
   }
 })
 
+// ══════════════════════════════════════════════════════════════════════════
+// Google Places API 라우트
+// ══════════════════════════════════════════════════════════════════════════
+
+// 업체명 + 주소로 Google Place 검색 → place_id 목록 반환
+app.get('/api/places-search', async (c) => {
+  const apiKey = process.env.GOOGLE_PLACES_KEY || ''
+  if (!apiKey) return c.json({ error: 'GOOGLE_PLACES_KEY not set' }, 503)
+  const query = c.req.query('q') || ''
+  if (!query) return c.json({ error: 'q required' }, 400)
+  try {
+    const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&language=ko&region=kr&key=${apiKey}`
+    const res = await fetch(url)
+    const data: any = await res.json()
+    if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
+      return c.json({ error: data.status, message: data.error_message }, 400)
+    }
+    const results = (data.results || []).slice(0, 5).map((r: any) => ({
+      place_id: r.place_id,
+      name: r.name,
+      address: r.formatted_address,
+      rating: r.rating ?? null,
+      user_ratings_total: r.user_ratings_total ?? null,
+      location: r.geometry?.location,
+    }))
+    return c.json({ results })
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500)
+  }
+})
+
+// place_id로 상세 정보 조회 (전화번호·영업시간·사진·평점)
+app.get('/api/places-detail', async (c) => {
+  const apiKey = process.env.GOOGLE_PLACES_KEY || ''
+  if (!apiKey) return c.json({ error: 'GOOGLE_PLACES_KEY not set' }, 503)
+  const placeId = c.req.query('place_id') || ''
+  if (!placeId) return c.json({ error: 'place_id required' }, 400)
+  try {
+    const fields = 'name,formatted_address,formatted_phone_number,opening_hours,rating,user_ratings_total,photos,website,url'
+    const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=${fields}&language=ko&key=${apiKey}`
+    const res = await fetch(url)
+    const data: any = await res.json()
+    if (data.status !== 'OK') {
+      return c.json({ error: data.status, message: data.error_message }, 400)
+    }
+    const r = data.result
+    // 대표 사진 URL (있으면)
+    let photoUrl = ''
+    if (r.photos && r.photos.length > 0) {
+      const ref = r.photos[0].photo_reference
+      photoUrl = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${ref}&key=${apiKey}`
+    }
+    // 영업시간 (오늘 기준 간단 텍스트)
+    const hours = r.opening_hours?.weekday_text?.join('\n') || ''
+    return c.json({
+      place_id: placeId,
+      name: r.name,
+      address: r.formatted_address,
+      phone: r.formatted_phone_number || '',
+      hours,
+      hours_open_now: r.opening_hours?.open_now ?? null,
+      rating: r.rating ?? null,
+      review_count: r.user_ratings_total ?? null,
+      photo_url: photoUrl,
+      website: r.website || '',
+      google_url: r.url || '',
+    })
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500)
+  }
+})
+
+// 업체 DB에 Google Place 정보 저장
+app.post('/api/shops/:id/google-place', async (c) => {
+  const id = parseInt(c.req.param('id'))
+  if (isNaN(id)) return c.json({ error: 'invalid id' }, 400)
+  const body: any = await c.req.json()
+  const { place_id, rating, review_count, hours, phone, photo_url } = body
+  await runMigrations()
+  await sql`
+    UPDATE shops SET
+      google_place_id   = ${place_id || ''},
+      google_rating     = ${rating ?? null},
+      google_review_count = ${review_count ?? null},
+      google_hours      = ${hours || ''},
+      google_photo_url  = ${photo_url || ''},
+      phone             = CASE WHEN ${phone || ''} != '' THEN ${phone || ''} ELSE phone END
+    WHERE id = ${id}
+  `
+  return c.json({ ok: true })
+})
+
 app.get('/reserve', (c) => {
   const url  = c.req.query('url')  || ''
   const name = c.req.query('name') || ''
@@ -2312,41 +2419,141 @@ function mainPage(baseUrl = 'https://www.mybeautymap.co.kr') { return `<!DOCTYPE
 :root{
   --pink:#FF4D7D; --pink2:#FF8FA3;
   --green:#03C75A; --green2:#02a84e;
-  --bg:#0a0a0a;
-  --hd:50px; --cat:44px; --nav:60px; --ad:50px;
+  --bg:#080808;
+  --sidebar:70px;
+  --hd:52px; --cat:44px; --nav:62px; --ad:50px;
   --safe:env(safe-area-inset-bottom,0px);
 }
 html,body{height:100%;background:var(--bg);color:#fff;
   font-family:'Pretendard',-apple-system,sans-serif;overflow:hidden}
+
+/* ══════════════════════════════════
+   PC 레이아웃: 사이드바 기반 구조
+   ══════════════════════════════════ */
 @media(min-width:768px){
-  body{
-    background: radial-gradient(ellipse 60% 50% at 20% 50%, rgba(255,77,125,.04) 0%, transparent 70%),
-                radial-gradient(ellipse 60% 50% at 80% 50%, rgba(192,38,211,.04) 0%, transparent 70%),
-                #0a0a0a;
+  body{ background:#080808; }
+
+  /* PC에서 헤더 숨김 — 사이드바로 대체 */
+  .hd{ display:none !important; }
+  /* PC에서 하단 탭바 숨김 — 사이드바로 대체 */
+  .tabbar{ display:none !important; }
+  /* PC에서 shortsCatBar top 재조정 (헤더 없어서 top:0) */
+  #shortsCatBar{ top:0 !important; left:var(--sidebar) !important; right:0 !important; width:auto !important; }
+  /* PC에서 피드화면/지도/숏폼/문의 좌측 사이드바 만큼 밀기 */
+  #feedScreen{ left:var(--sidebar) !important; transform:none !important; top:calc(var(--cat) + 0px) !important;
+    height:calc(100dvh - var(--cat) - var(--ad) - 0px) !important; }
+  #mapScreen{ left:var(--sidebar) !important; top:0 !important; bottom:calc(var(--ad)) !important; }
+  #inquiryScreen{ left:var(--sidebar) !important; top:0 !important; bottom:calc(var(--ad)) !important; }
+  #shortsScreen{
+    --sv: calc(100dvh - 44px);
+    --pw: 320px;
+    left: calc(var(--sidebar) + 50%) !important;
+    right: auto !important;
+    transform: translateX(-50%) !important;
+    top: 44px !important;
+    bottom: 0 !important;
+    width: min(calc(100vw - var(--sidebar) - 48px), calc(var(--sv) * 9 / 16 + var(--pw)));
+    max-width: 1060px;
   }
+  #shorts-mute-btn{
+    top: calc(44px + 12px) !important;
+    right: calc(var(--pw, 320px) + 14px) !important;
+  }
+  .cat-bar{ display:none; justify-content:center; }
+  .cat-bar.show{ display:flex; }
 }
 
-/* 헤더 */
+/* ══════════════════════════════════
+   PC 사이드바
+   ══════════════════════════════════ */
+#pc-sidebar{
+  display:none;
+  position:fixed;
+  top:0;left:0;bottom:0;
+  width:var(--sidebar);
+  background:rgba(8,8,8,.98);
+  border-right:1px solid rgba(255,255,255,.06);
+  z-index:500;
+  flex-direction:column;
+  align-items:center;
+  padding:20px 0 24px;
+  gap:0;
+  backdrop-filter:blur(20px);
+}
+@media(min-width:768px){ #pc-sidebar{ display:flex; } }
+
+/* 사이드바 로고 */
+.sb-logo{
+  width:38px;height:38px;
+  background:var(--pink);
+  border-radius:11px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:18px;
+  margin-bottom:28px;
+  cursor:pointer;
+  box-shadow:0 4px 16px rgba(255,77,125,.35);
+  flex-shrink:0;
+  transition:transform .2s;
+}
+.sb-logo:hover{ transform:scale(1.07); }
+
+/* 사이드바 탭 */
+.sb-tabs{ display:flex;flex-direction:column;gap:4px;flex:1; }
+.sb-tab{
+  width:50px;height:50px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:3px;
+  border-radius:14px;
+  cursor:pointer;border:none;background:none;font-family:inherit;
+  color:rgba(255,255,255,.3);
+  font-size:9px;font-weight:700;letter-spacing:.3px;
+  transition:all .2s;
+  padding:0;
+}
+.sb-tab i{ font-size:19px; transition:transform .2s; }
+.sb-tab:hover{ background:rgba(255,255,255,.07); color:rgba(255,255,255,.7); }
+.sb-tab.active{
+  background:rgba(255,77,125,.12);
+  color:var(--pink);
+}
+.sb-tab.active i{ transform:scale(1.1); color:var(--pink); }
+
+/* 사이드바 하단 검색 버튼 */
+.sb-search{
+  width:40px;height:40px;
+  border-radius:12px;
+  background:rgba(255,255,255,.06);
+  border:1.5px solid rgba(255,255,255,.1);
+  color:rgba(255,255,255,.5);
+  font-size:15px;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;
+  transition:all .2s;
+  margin-top:8px;
+}
+.sb-search:hover{ background:rgba(255,255,255,.1); color:#fff; }
+
+/* 헤더 (모바일 전용) */
 .hd{position:fixed;top:0;left:0;right:0;z-index:300;height:var(--hd);
-  background:rgba(10,10,10,.97);backdrop-filter:blur(14px);
+  background:rgba(8,8,8,.97);backdrop-filter:blur(16px);
   border-bottom:1px solid rgba(255,255,255,.07);
   display:flex;align-items:center;justify-content:center;padding:0}
-.hd-inner{width:100%;max-width:900px;display:flex;align-items:center;justify-content:space-between;padding:0 20px}
-.logo{font-size:19px;font-weight:800;display:flex;align-items:center;gap:7px;cursor:pointer;user-select:none}
-.logo-icon{width:28px;height:28px;background:var(--pink);border-radius:8px;
-  display:flex;align-items:center;justify-content:center;font-size:14px}
+.hd-inner{width:100%;max-width:900px;display:flex;align-items:center;justify-content:space-between;padding:0 18px}
+.logo{font-size:18px;font-weight:800;display:flex;align-items:center;gap:7px;cursor:pointer;user-select:none}
+.logo-icon{width:26px;height:26px;background:var(--pink);border-radius:8px;
+  display:flex;align-items:center;justify-content:center;font-size:13px}
 .logo em{color:var(--pink);font-style:normal}
-.hd-badge{font-size:10px;font-weight:700;background:rgba(255,77,125,.15);
-  color:var(--pink);padding:3px 8px;border-radius:8px;border:1px solid rgba(255,77,125,.25)}
+.hd-badge{font-size:9px;font-weight:700;background:rgba(255,77,125,.12);
+  color:var(--pink);padding:2px 7px;border-radius:7px;border:1px solid rgba(255,77,125,.2)}
 .hd-right{display:flex;align-items:center;gap:8px}
-.search-btn{background:none;border:none;color:rgba(255,255,255,.6);font-size:18px;
+.search-btn{background:none;border:none;color:rgba(255,255,255,.5);font-size:17px;
   cursor:pointer;padding:6px;display:flex;align-items:center;justify-content:center;
   border-radius:10px;transition:color .2s}
 .search-btn:active{color:#fff}
 
 /* 검색바 */
 .search-bar{position:fixed;top:var(--hd);left:0;right:0;z-index:410;
-  background:rgba(10,10,10,.98);backdrop-filter:blur(20px);
+  background:rgba(8,8,8,.98);backdrop-filter:blur(20px);
   border-bottom:1px solid rgba(255,77,125,.2);
   padding:10px 12px;
   transform:translateY(-110%);opacity:0;
@@ -2357,6 +2564,9 @@ html,body{height:100%;background:var(--bg);color:#fff;
   background:rgba(255,255,255,.07);border:1.5px solid rgba(255,255,255,.12);
   border-radius:14px;padding:0 14px;height:42px}
 .search-bar.open .search-inner{border-color:rgba(255,77,125,.4)}
+@media(min-width:768px){
+  .search-bar{ top:0 !important; left:var(--sidebar) !important; right:0 !important; }
+}
 .search-inner i{color:rgba(255,255,255,.35);font-size:14px;flex-shrink:0}
 .search-input{flex:1;background:none;border:none;outline:none;
   color:#fff;font-size:15px;font-family:inherit;font-weight:500}
@@ -2369,20 +2579,21 @@ html,body{height:100%;background:var(--bg);color:#fff;
 
 /* 카탈로그 탭바 */
 .cat-bar{position:fixed;top:calc(var(--hd) + var(--sb,0px));left:0;right:0;z-index:299;height:var(--cat);
-  background:rgba(10,10,10,.93);backdrop-filter:blur(10px);
-  border-bottom:1px solid rgba(255,255,255,.06);display:none;justify-content:center}
+  background:rgba(8,8,8,.95);backdrop-filter:blur(12px);
+  border-bottom:1px solid rgba(255,255,255,.05);display:none;justify-content:center}
 .cat-bar.show{display:flex}
 .cat-scroll{display:flex;align-items:center;gap:6px;
   overflow-x:auto;padding:6px 12px;height:100%;scrollbar-width:none;
   width:100%;max-width:900px}
 .cat-scroll::-webkit-scrollbar{display:none}
-.cp{flex-shrink:0;border:1.5px solid rgba(255,255,255,.15);border-radius:20px;
-  padding:5px 14px;font-size:12px;font-weight:600;
-  background:rgba(255,255,255,.05);color:rgba(255,255,255,.6);
+.cp{flex-shrink:0;border:1.5px solid rgba(255,255,255,.12);border-radius:20px;
+  padding:5px 14px;font-size:11.5px;font-weight:600;
+  background:rgba(255,255,255,.04);color:rgba(255,255,255,.55);
   cursor:pointer;font-family:inherit;transition:all .2s;white-space:nowrap}
+.cp:hover{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.2);color:rgba(255,255,255,.8)}
 .cp.active{background:var(--pink);border-color:var(--pink);color:#fff;
-  box-shadow:0 2px 10px rgba(255,77,125,.35)}
-.cp-rec{background:rgba(251,191,36,.12);border-color:rgba(251,191,36,.4);color:#fbbf24;font-weight:700}
+  box-shadow:0 2px 12px rgba(255,77,125,.4)}
+.cp-rec{background:rgba(251,191,36,.1);border-color:rgba(251,191,36,.35);color:#fbbf24;font-weight:700}
 .cp-rec.active{background:#fbbf24;border-color:#fbbf24;color:#1a1a1a;box-shadow:0 2px 10px rgba(251,191,36,.45)}
 
 /* 피드 화면 */
@@ -2399,8 +2610,8 @@ html,body{height:100%;background:var(--bg);color:#fff;
 #feedScreen::-webkit-scrollbar{display:none;}
 #feedScreen.active{display:block;}
 @media(min-width:768px){
-  #feedScreen{left:50%;right:auto;transform:translateX(-50%);width:min(100vw,560px);background:#0a0a0a;}
-  #mapScreen{left:50%;right:auto;transform:translateX(-50%);width:min(100vw,900px);}
+  #feedScreen{width:min(calc(100vw - var(--sidebar)), 540px);background:#080808;}
+  #mapScreen{width:auto;}
 }
 /* PC 전용 요소 — JS로 동적 삽입됨, CSS 기본값 불필요 */
 #mapScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:calc(var(--ad) + var(--nav));
@@ -2420,17 +2631,12 @@ html,body{height:100%;background:var(--bg);color:#fff;
 /* ── 릴스 스크린: PC(768px+) — 9:16영상 + 오른쪽 정보패널, 중앙정렬 ── */
 @media(min-width:768px){
   #shortsScreen{
-    --sv: calc(100dvh - var(--hd) - 44px - var(--nav) - var(--safe));
-    --pw: 340px;
-    left: 50%;
-    right: auto;
-    transform: translateX(-50%);
-    width: min(calc(100vw - 48px), calc(var(--sv) * 9 / 16 + var(--pw)));
-    max-width: 1100px;
+    --sv: calc(100dvh - 44px);
+    --pw: 300px;
     overflow-y: scroll;
     scroll-snap-type: y mandatory;
-    background:#0a0a0a;
-    box-shadow: 0 0 60px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.04);
+    background:#0d0d0d;
+    box-shadow: none;
     border-radius: 0;
   }
   .shorts-slide{
@@ -2446,7 +2652,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
     top:auto !important; left:auto !important;
     right:auto !important; bottom:auto !important;
   }
-  /* 오른쪽 정보 패널 */
+  /* 오른쪽 정보 패널 — 재설계 */
   .shorts-overlay{
     position:relative !important;
     flex:none !important;
@@ -2454,8 +2660,8 @@ html,body{height:100%;background:var(--bg);color:#fff;
     height:100% !important;
     top:auto !important; left:auto !important;
     right:auto !important; bottom:auto !important;
-    background:linear-gradient(170deg,#141414 0%,#0e0e0e 60%,#0a0a0a 100%) !important;
-    border-left:1px solid rgba(255,255,255,.07) !important;
+    background:#0d0d0d !important;
+    border-left:1px solid rgba(255,255,255,.06) !important;
     display:flex !important;
     flex-direction:column !important;
     justify-content:space-between !important;
@@ -2464,51 +2670,53 @@ html,body{height:100%;background:var(--bg);color:#fff;
     z-index:2 !important;
   }
   .shorts-info-row{ display:none !important; }
-  /* PC 패널 컨테이너 — deco(위) + 정보블록(아래) space-between */
+  /* PC 패널 컨테이너 */
   .shorts-panel-pc{
     display:flex !important;
     flex-direction:column !important;
     justify-content:space-between !important;
     flex:1 !important;
-    padding:28px 28px 24px !important;
+    padding:32px 24px 24px !important;
     min-height:0 !important;
     position:relative !important;
     overflow:hidden !important;
   }
-  /* 상단 장식 블록 (빈 공간 — 미묘한 로고 워터마크) */
+  /* 상단 브랜드 워터마크 */
   .shorts-panel-deco{
     flex:1 !important;
     min-height:0 !important;
     display:flex !important;
+    flex-direction:column !important;
     align-items:center !important;
     justify-content:center !important;
     pointer-events:none !important;
     user-select:none !important;
     position:relative !important;
+    gap:10px !important;
   }
   .shorts-panel-deco::before{
     content:'💄' !important;
-    font-size:64px !important;
-    opacity:.04 !important;
+    font-size:52px !important;
+    opacity:.06 !important;
     display:block !important;
     filter:grayscale(1) !important;
   }
-  /* 패널 상단 장식 라인 */
-  .shorts-panel-pc::before{
-    content:'' !important;
-    position:absolute !important;
-    top:0 !important; left:28px !important; right:28px !important;
-    height:2px !important;
-    background:linear-gradient(90deg,transparent,rgba(232,121,249,.5),transparent) !important;
+  .shorts-panel-deco::after{
+    content:'마이뷰티맵' !important;
+    font-size:11px !important;
+    font-weight:700 !important;
+    letter-spacing:.15em !important;
+    color:rgba(255,255,255,.06) !important;
+    text-transform:uppercase !important;
   }
   /* 카테고리 뱃지 */
   .shorts-cat{
     font-size:10px !important;
     font-weight:800 !important;
     letter-spacing:.06em !important;
-    padding:4px 11px !important;
+    padding:4px 10px !important;
     border-radius:20px !important;
-    margin-bottom:14px !important;
+    margin-bottom:10px !important;
     display:inline-flex !important;
     align-items:center !important;
     gap:5px !important;
@@ -2516,7 +2724,7 @@ html,body{height:100%;background:var(--bg);color:#fff;
   }
   /* 업체명 */
   .shorts-panel-name{
-    font-size:22px !important;
+    font-size:20px !important;
     font-weight:900 !important;
     line-height:1.3 !important;
     white-space:normal !important;
@@ -2526,59 +2734,66 @@ html,body{height:100%;background:var(--bg);color:#fff;
     overflow:visible !important;
     text-overflow:unset !important;
     color:#fff !important;
-    letter-spacing:-.02em !important;
+    letter-spacing:-.025em !important;
   }
   /* 주소 */
   .shorts-panel-addr{
-    font-size:12px !important;
-    color:rgba(255,255,255,.45) !important;
+    font-size:11.5px !important;
+    color:rgba(255,255,255,.38) !important;
     margin-bottom:0 !important;
     line-height:1.55 !important;
     display:flex !important;
     align-items:flex-start !important;
     gap:5px !important;
   }
-  .shorts-panel-addr i{ margin-top:2px !important; flex-shrink:0 !important; }
+  .shorts-panel-addr i{ margin-top:2px !important; flex-shrink:0 !important; color:rgba(255,77,125,.5) !important; }
   /* 구분선 */
   .shorts-panel-divider{
     width:100% !important;
     height:1px !important;
-    background:linear-gradient(90deg,rgba(255,255,255,.1),rgba(255,255,255,.04)) !important;
-    margin:20px 0 !important;
+    background:rgba(255,255,255,.07) !important;
+    margin:18px 0 !important;
     flex-shrink:0 !important;
   }
   /* 예약 버튼 */
   .shorts-panel-btn{
     width:100% !important;
-    padding:15px !important;
-    font-size:14px !important;
+    padding:14px !important;
+    font-size:13.5px !important;
     font-weight:800 !important;
-    border-radius:16px !important;
+    border-radius:14px !important;
     justify-content:center !important;
     gap:8px !important;
     letter-spacing:.01em !important;
-    box-shadow:0 8px 24px rgba(3,199,90,.35) !important;
-    transition:transform .15s,box-shadow .15s !important;
+    background:var(--green) !important;
+    border:none !important;
+    color:#fff !important;
+    box-shadow:0 6px 20px rgba(3,199,90,.3) !important;
+    transition:transform .15s, box-shadow .15s, background .15s !important;
+    cursor:pointer !important;
+    font-family:inherit !important;
+    display:flex !important;
+    align-items:center !important;
   }
   .shorts-panel-btn:hover{
     transform:translateY(-2px) !important;
-    box-shadow:0 12px 32px rgba(3,199,90,.45) !important;
+    background:var(--green2) !important;
+    box-shadow:0 10px 28px rgba(3,199,90,.4) !important;
   }
   .shorts-panel-btn:active{ transform:scale(.97) !important; }
-  /* 하단 힌트 — shorts-overlay 직계 자식, 진짜 맨 아래 고정 */
+  /* 하단 힌트 */
   .shorts-panel-hint{
-    font-size:11px !important;
-    color:rgba(255,255,255,.22) !important;
+    font-size:10.5px !important;
+    color:rgba(255,255,255,.18) !important;
     text-align:center !important;
-    padding:12px 28px !important;
-    letter-spacing:.04em !important;
+    padding:11px 24px !important;
+    letter-spacing:.06em !important;
     display:flex !important;
     align-items:center !important;
     justify-content:center !important;
     gap:6px !important;
     flex-shrink:0 !important;
-    border-top:1px solid rgba(255,255,255,.06) !important;
-    background:rgba(0,0,0,.15) !important;
+    border-top:1px solid rgba(255,255,255,.05) !important;
   }
 }
 /* 숏폼 모드: 광고만 숨김 (헤더·검색바는 유지) */
@@ -2587,34 +2802,24 @@ body.shorts-mode #shortsCatBar{ display:flex!important; }
 
 /* ── PC 전역 개선 ── */
 @media(min-width:768px){
-  /* 헤더 inner 최대너비 적용 */
-  .hd{ padding:0; }
-  /* 카탈로그바 중앙 스크롤 */
-  .cat-bar{ display:none; justify-content:center; }
+  /* 카탈로그바 */
+  .cat-bar{ display:none; justify-content:center; left:var(--sidebar) !important; }
   .cat-bar.show{ display:flex; }
-  /* 하단 탭바 중앙 */
-  .tabbar{ justify-content:center; }
-  .tab{ font-size:11px; gap:4px; }
-  .tab i{ font-size:20px; }
-  /* 숏폼 음소거 버튼 — 영상 오른쪽 상단 안쪽으로 (정보 패널 시작 직전) */
-  #shorts-mute-btn{
-    right: calc(var(--pw, 340px) + 14px);
-  }
 }
 /* 음소거 버튼 */
 #shorts-mute-btn{
   position:fixed;
-  top:calc(var(--hd) + 44px + 12px);
+  top:calc(44px + 12px);
   right:14px;
   z-index:500;
-  width:38px;height:38px;
-  background:rgba(0,0,0,.55);
-  border:1.5px solid rgba(255,255,255,.25);
+  width:36px;height:36px;
+  background:rgba(0,0,0,.6);
+  border:1.5px solid rgba(255,255,255,.2);
   border-radius:50%;
-  color:#fff;font-size:16px;
+  color:#fff;font-size:14px;
   display:none;align-items:center;justify-content:center;
-  cursor:pointer;backdrop-filter:blur(6px);
-  transition:background .2s;
+  cursor:pointer;backdrop-filter:blur(8px);
+  transition:background .2s, border-color .2s;
 }
 body.shorts-mode #shorts-mute-btn{ display:flex; }
 /* 숏폼 전용 카탈로그 바 */
@@ -2624,9 +2829,9 @@ body.shorts-mode #shorts-mute-btn{ display:flex; }
   left:0;right:0;
   z-index:399;
   height:44px;
-  background:rgba(10,10,10,.96);
-  backdrop-filter:blur(12px);
-  border-bottom:1px solid rgba(255,255,255,.07);
+  background:rgba(8,8,8,.97);
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid rgba(255,255,255,.06);
   display:none;
   justify-content:center;
 }
@@ -2643,26 +2848,26 @@ body.shorts-mode #shorts-mute-btn{ display:flex; }
 /* 숏폼 전용 카탈로그 버튼 — .scp 독립 클래스 */
 .scp{
   flex-shrink:0;
-  border:1.5px solid #555;
+  border:1.5px solid rgba(255,255,255,.12);
   border-radius:20px;
   padding:5px 14px;
-  font-size:12px;
+  font-size:11.5px;
   font-weight:600;
-  background:#2a2a2a;
-  color:#e2e8f0;
+  background:rgba(255,255,255,.05);
+  color:rgba(255,255,255,.6);
   cursor:pointer;
   font-family:inherit;
   transition:all .2s;
   white-space:nowrap;
 }
-.scp:hover{background:#383838;border-color:#777;}
+.scp:hover{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.22);color:rgba(255,255,255,.85);}
 .scp.active{
   background:var(--pink);
   border-color:var(--pink);
   color:#fff;
-  box-shadow:0 2px 10px rgba(255,77,125,.35);
+  box-shadow:0 2px 12px rgba(255,77,125,.4);
 }
-#shortsCatBar{background:#0a0a0a;}
+#shortsCatBar{background:rgba(8,8,8,.97);}
 #inquiryScreen{position:fixed;top:var(--hd);left:0;right:0;bottom:calc(var(--ad) + var(--nav));
   overflow-y:auto;display:none;background:var(--bg);}
 #inquiryScreen.active{display:block;}
@@ -2757,22 +2962,21 @@ body.shorts-mode #shorts-mute-btn{ display:flex; }
 
 
 .tabbar{position:fixed;bottom:0;left:0;right:0;z-index:300;height:var(--nav);
-  background:rgba(10,10,10,.98);backdrop-filter:blur(20px);
-  border-top:1px solid rgba(255,255,255,.08);
+  background:rgba(6,6,6,.98);backdrop-filter:blur(24px);
+  border-top:1px solid rgba(255,255,255,.07);
   display:flex;padding-bottom:var(--safe);justify-content:center}
-.tabbar-inner{display:flex;width:100%;max-width:600px}
+.tabbar-inner{display:flex;width:100%;max-width:500px}
 .tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:3px;font-size:10px;font-weight:700;color:rgba(255,255,255,.28);
+  gap:3px;font-size:9.5px;font-weight:700;color:rgba(255,255,255,.25);
   cursor:pointer;border:none;background:none;font-family:inherit;
-  transition:color .2s;padding-top:4px}
-.tab i{font-size:22px;transition:transform .2s}
-.tab.active{color:#fff}
-.tab.active i{color:var(--pink);transform:scale(1.1)}
+  transition:color .2s;padding-top:4px;letter-spacing:.02em}
+.tab i{font-size:21px;transition:transform .2s, color .2s}
+.tab.active{color:rgba(255,255,255,.9)}
+.tab.active i{color:var(--pink);transform:scale(1.08)}
 /* ── 숏폼 탭 스타일 ── */
 .shorts-slide{
   position:relative;
   width:100%;
-  /* 높이: 헤더 + 카탈로그바 ~ 탭바 위까지 */
   height:calc(100dvh - var(--hd) - 44px - var(--nav) - var(--safe));
   min-height:calc(100dvh - var(--hd) - 44px - var(--nav) - var(--safe));
   max-height:calc(100dvh - var(--hd) - 44px - var(--nav) - var(--safe));
@@ -2781,8 +2985,14 @@ body.shorts-mode #shorts-mute-btn{ display:flex; }
   flex-shrink:0;
   background:#000;
   overflow:hidden;
-  /* PC에서 가로로 넘어가지 않도록 */
   max-width:100%;
+}
+@media(min-width:768px){
+  .shorts-slide{
+    height:calc(100dvh - 44px) !important;
+    min-height:calc(100dvh - 44px) !important;
+    max-height:calc(100dvh - 44px) !important;
+  }
 }
 .shorts-iframe-wrap{
   position:absolute;
@@ -2813,78 +3023,83 @@ body.shorts-mode #shorts-mute-btn{ display:flex; }
   border:none;
   pointer-events:none;
 }
-/* 숏폼 하단 오버레이 — 영상탭 shop-bar와 동일 구조 */
+/* ── 모바일 숏폼 하단 오버레이 ── */
 .shorts-overlay{
   position:absolute;bottom:0;left:0;right:0;
-  background:linear-gradient(transparent 0%,rgba(0,0,0,.55) 35%,rgba(10,10,10,.97) 100%);
-  padding:60px 14px 20px;
-  /* iOS safe area 확보 — 홈바 영역 위로 버튼 끌어올림 */
-  padding-bottom:max(20px, calc(20px + env(safe-area-inset-bottom)));
+  background:linear-gradient(
+    transparent 0%,
+    rgba(0,0,0,.3) 25%,
+    rgba(0,0,0,.75) 55%,
+    rgba(6,6,6,.97) 100%
+  );
+  padding:80px 16px 20px;
+  padding-bottom:max(22px, calc(18px + env(safe-area-inset-bottom)));
   z-index:10;
   pointer-events:auto;
 }
-/* 업체정보 + 예약버튼 한줄 배치 */
+/* 업체정보 + 예약버튼 한줄 */
 .shorts-info-row{
-  display:flex;align-items:center;gap:10px;
+  display:flex;align-items:flex-end;gap:12px;
   pointer-events:auto;
 }
 .shorts-info-body{flex:1;min-width:0;}
 /* 카테고리 뱃지 */
 .shorts-cat{
-  display:inline-block;
+  display:inline-flex;align-items:center;gap:4px;
   font-size:10px;font-weight:700;color:var(--pink);
-  background:rgba(255,77,125,.12);
-  border:1px solid rgba(255,77,125,.25);
-  padding:2px 7px;border-radius:6px;margin-bottom:5px;
+  background:rgba(255,77,125,.13);
+  border:1px solid rgba(255,77,125,.3);
+  padding:3px 8px;border-radius:99px;margin-bottom:6px;
+  letter-spacing:.03em;
   pointer-events:none;
 }
 /* 업체명 */
 .shorts-name{
-  font-size:17px;font-weight:800;color:#fff;
-  line-height:1.25;margin-bottom:3px;
+  font-size:18px;font-weight:900;color:#fff;
+  line-height:1.25;margin-bottom:4px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  text-shadow:0 2px 8px rgba(0,0,0,.7);
+  text-shadow:0 1px 12px rgba(0,0,0,.6);
+  letter-spacing:-.025em;
   pointer-events:none;
 }
 /* 주소 */
 .shorts-addr{
-  font-size:11px;color:rgba(255,255,255,.5);
+  font-size:11px;color:rgba(255,255,255,.45);
   display:flex;align-items:center;gap:4px;
   pointer-events:none;
 }
-.shorts-addr i{color:var(--pink);font-size:10px;flex-shrink:0;}
-/* 예약 버튼 — 영상탭 btn-book과 동일 스타일 */
+.shorts-addr i{color:rgba(255,77,125,.6);font-size:10px;flex-shrink:0;}
+/* 예약 버튼 */
 .shorts-book-btn{
   flex-shrink:0;
   display:flex;flex-direction:column;align-items:center;gap:3px;
   background:var(--pink);
-  color:#fff;border:none;border-radius:14px;
-  padding:12px 16px;
+  color:#fff;border:none;border-radius:16px;
+  padding:13px 17px;
   font-size:12px;font-weight:800;
   font-family:inherit;cursor:pointer;
   white-space:nowrap;
-  box-shadow:0 4px 16px rgba(255,77,125,.45);
-  min-width:68px;
-  min-height:48px; /* 모바일 최소 터치 영역 */
+  box-shadow:0 4px 20px rgba(255,77,125,.5);
+  min-width:70px;min-height:50px;
   pointer-events:auto;
-  touch-action:manipulation; /* 300ms 딜레이 제거 */
+  touch-action:manipulation;
   -webkit-tap-highlight-color:rgba(255,77,125,.2);
-  transition:transform .12s,background .12s;
-  position:relative;z-index:20; /* overlay z-index 10보다 위 */
+  transition:transform .12s,background .12s,box-shadow .12s;
+  position:relative;z-index:20;
 }
-.shorts-book-btn i{font-size:16px;}
-.shorts-book-btn span{font-size:10px;font-weight:700;}
-.shorts-book-btn:active{background:#e0365f;transform:scale(.96);}
+.shorts-book-btn i{font-size:15px;}
+.shorts-book-btn span{font-size:10px;font-weight:700;opacity:.9;}
+.shorts-book-btn:active{background:#e0365f;transform:scale(.95);box-shadow:0 2px 10px rgba(255,77,125,.4);}
 /* 영상 없는 슬라이드 배경 */
 .shorts-no-video{
   width:100%;height:100%;
-  background:linear-gradient(135deg,#1a1a1a,#2a1a2a);
+  background:linear-gradient(160deg,#111,#1a1020);
   display:flex;align-items:center;justify-content:center;
   font-size:48px;
 }
 .shorts-empty{
   height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;
-  color:rgba(255,255,255,.4);font-size:15px;gap:12px;
+  color:rgba(255,255,255,.3);font-size:15px;gap:12px;
 }
 /* PC 전용 패널 (모바일에서는 숨김) */
 .shorts-panel-pc{
@@ -3336,14 +3551,123 @@ body.shorts-mode #shorts-mute-btn{ display:flex; }
   background:linear-gradient(135deg,#FFC200,#FF7700)!important;
 }
 
-/* 프리미엄 마커 글로우 애니메이션 */
-@keyframes premGlow{
-  0%,100%{opacity:.6;transform:scale(1)}
-  50%{opacity:1;transform:scale(1.06)}
+
+/* ══════════════════════════════════
+   모바일 스플래시 화면
+   ══════════════════════════════════ */
+#splash{
+  position:fixed;inset:0;
+  background:#080808;
+  z-index:9999;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  gap:0;
+  transition:opacity .6s ease, transform .6s ease;
 }
+#splash.hide{
+  opacity:0;
+  pointer-events:none;
+  transform:scale(1.04);
+}
+.splash-eyebrow{
+  font-size:11px;font-weight:600;
+  letter-spacing:.25em;color:rgba(255,255,255,.35);
+  text-transform:uppercase;margin-bottom:16px;
+}
+.splash-logo-wrap{
+  display:flex;align-items:center;gap:14px;
+  margin-bottom:18px;
+}
+.splash-logo-icon{
+  width:52px;height:52px;
+  background:var(--pink);
+  border-radius:16px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:26px;
+  box-shadow:0 8px 32px rgba(255,77,125,.45);
+  animation:splashPop .6s cubic-bezier(.34,1.56,.64,1) .2s both;
+}
+@keyframes splashPop{
+  from{opacity:0;transform:scale(.5) rotate(-10deg)}
+  to{opacity:1;transform:scale(1) rotate(0)}
+}
+.splash-title{
+  font-size:32px;font-weight:900;
+  letter-spacing:-.03em;line-height:1;
+  animation:splashFadeUp .6s ease .35s both;
+}
+.splash-title em{color:var(--pink);font-style:normal;}
+@keyframes splashFadeUp{
+  from{opacity:0;transform:translateY(12px)}
+  to{opacity:1;transform:translateY(0)}
+}
+.splash-sub{
+  font-size:12px;font-weight:500;
+  letter-spacing:.18em;color:rgba(255,255,255,.28);
+  text-transform:uppercase;margin-top:6px;
+  animation:splashFadeUp .6s ease .5s both;
+}
+.splash-bar-wrap{
+  margin-top:48px;
+  width:160px;height:2px;
+  background:rgba(255,255,255,.08);
+  border-radius:99px;
+  overflow:hidden;
+  animation:splashFadeUp .4s ease .55s both;
+}
+.splash-bar{
+  height:100%;
+  background:linear-gradient(90deg,var(--pink),#c084fc);
+  border-radius:99px;
+  animation:splashProgress 1.4s cubic-bezier(.4,0,.2,1) .5s both;
+}
+@keyframes splashProgress{
+  from{width:0%}
+  to{width:100%}
+}
+/* PC에서 스플래시 숨김 */
+@media(min-width:768px){ #splash{ display:none !important; } }
+
 </style>
 </head>
 <body class="shorts-mode">
+
+<!-- ══ PC 사이드바 ══ -->
+<nav id="pc-sidebar">
+  <div class="sb-logo" onclick="sbGoHome()">💄</div>
+  <div class="sb-tabs">
+    <button class="sb-tab" id="sb-shorts" onclick="sbSwitchTab('shorts')">
+      <i class="fas fa-play-circle"></i>
+      <span>영상</span>
+    </button>
+    <button class="sb-tab" id="sb-feed" onclick="sbSwitchTab('feed')">
+      <i class="fas fa-th-large"></i>
+      <span>피드</span>
+    </button>
+    <button class="sb-tab" id="sb-map" onclick="sbSwitchTab('map')">
+      <i class="fas fa-map-marker-alt"></i>
+      <span>지도</span>
+    </button>
+    <button class="sb-tab" id="sb-inquiry" onclick="sbSwitchTab('inquiry')">
+      <i class="fas fa-store"></i>
+      <span>입점</span>
+    </button>
+  </div>
+  <button class="sb-search" onclick="toggleSearch()" aria-label="검색">
+    <i class="fas fa-search"></i>
+  </button>
+</nav>
+
+<!-- ══ 모바일 스플래시 ══ -->
+<div id="splash">
+  <p class="splash-eyebrow">WELCOME TO</p>
+  <div class="splash-logo-wrap">
+    <div class="splash-logo-icon">💄</div>
+  </div>
+  <h1 class="splash-title">마이<em>뷰티</em>맵</h1>
+  <p class="splash-sub">Korean Beauty Experience</p>
+  <div class="splash-bar-wrap"><div class="splash-bar"></div></div>
+</div>
 
 <header class="hd">
   <div class="hd-inner">
@@ -3701,6 +4025,12 @@ function switchTab(tab) {
   });
   document.getElementById('catBar').classList.toggle('show', tab==='feed');
 
+  // PC 사이드바 동기화
+  ['shorts','feed','map','inquiry'].forEach(t => {
+    const sb = document.getElementById('sb-'+t);
+    if (sb) sb.classList.toggle('active', t === tab);
+  });
+
   const pcWrapper = document.getElementById('feed-pc-wrapper');
   if (pcWrapper) pcWrapper.style.display = (tab === 'feed') ? '' : 'none';
 
@@ -3791,8 +4121,36 @@ let _shortsObserver = null;
 let _shortsItems    = [];   // 전체 업체 캐시
 let _shortsCat      = 'all'; // 현재 선택된 카테고리
 
-// 앱 진입 시 릴스 탭으로 시작 (switchTab이 body.shorts-mode + catBar + 로드 모두 처리)
+// ── PC 사이드바 탭 전환 ─────────────────────────────────────────────────
+function sbSwitchTab(tab) {
+  // 사이드바 버튼 active 표시
+  ['shorts','feed','map','inquiry'].forEach(t => {
+    const el = document.getElementById('sb-'+t);
+    if (el) el.classList.toggle('active', t === tab);
+  });
+  switchTab(tab);
+}
+function sbGoHome() { sbSwitchTab('shorts'); }
+
+// 앱 진입 시 릴스 탭으로 시작
 document.addEventListener('DOMContentLoaded', () => {
+  // 스플래시 (모바일만): 1.8초 후 닫기
+  const splash = document.getElementById('splash');
+  if (splash) {
+    const isMobile = window.innerWidth < 768;
+    if (isMobile) {
+      setTimeout(() => {
+        splash.classList.add('hide');
+        setTimeout(() => { splash.style.display = 'none'; }, 700);
+      }, 1900);
+    } else {
+      splash.style.display = 'none';
+    }
+  }
+  // 사이드바 초기 탭 활성화 (PC)
+  const sbShortsEl = document.getElementById('sb-shorts');
+  if (sbShortsEl) sbShortsEl.classList.add('active');
+
   switchTab('shorts');
   _sessionInit();
 });
@@ -4037,67 +4395,119 @@ function shortsSlide(shop, idx) {
   const cat  = shop.category || '';
   const name = shop.name || '';
   const addr = shop.address || '';
-  // Cloudinary 영상 URL 생성 (원본 9:16 세로 그대로 사용)
-  const clUrl = clId
+  const rating = shop.google_rating ? parseFloat(shop.google_rating) : null;
+  const reviewCnt = shop.google_review_count ? parseInt(shop.google_review_count) : null;
+  const hours = shop.google_hours || '';
+  const phone = shop.phone || '';
+  const hoursArr = hours ? hours.split('\n') : [];
+  // 오늘 요일(0=일,1=월...6=토) → 오늘 영업시간 한줄만
+  const todayIdx = new Date().getDay();
+  const dayMap = [6,0,1,2,3,4,5]; // weekday_text는 월~일 순서
+  const todayHours = hoursArr[dayMap[todayIdx]] || '';
+
+  // ytId 우선 — clId에 슬래시(/)가 있어야 진짜 Cloudinary public_id
+  const isRealCloudinary = clId && clId.includes('/') && !ytId;
+  const clUrl = isRealCloudinary
     ? 'https://res.cloudinary.com/dc0ouozcd/video/upload/' + clId + '.mp4'
     : '';
-  // Cloudinary 썸네일 URL (poster) - 0초 프레임
-  const clPoster = clId
+  const clPoster = isRealCloudinary
     ? 'https://res.cloudinary.com/dc0ouozcd/video/upload/so_0/' + clId + '.jpg'
     : '';
-  const hasVideo = clUrl || ytId;
+  const useYt = ytId || '';
+  const useCl = !useYt && clUrl;
+
+  // ── 별점 HTML ──
+  function starHtml(r) {
+    const full = Math.floor(r), half = r - full >= 0.5 ? 1 : 0;
+    let s = '';
+    for (let i=0;i<full;i++) s += '<i class="fas fa-star" style="color:#FBBF24;font-size:11px"></i>';
+    if (half) s += '<i class="fas fa-star-half-alt" style="color:#FBBF24;font-size:11px"></i>';
+    const empty = 5 - full - half;
+    for (let i=0;i<empty;i++) s += '<i class="far fa-star" style="color:rgba(251,191,36,.3);font-size:11px"></i>';
+    return s;
+  }
+
+  // ── Google 정보 블록 (PC 패널용) ──
+  const googleInfoPc = rating != null ? (
+    '<div class="shorts-google-info" style="display:flex;flex-direction:column;gap:8px;margin-bottom:0">' +
+      '<div style="display:flex;align-items:center;gap:7px">' +
+        '<div style="display:flex;gap:2px">' + starHtml(rating) + '</div>' +
+        '<span style="font-size:13px;font-weight:800;color:#FBBF24">' + rating.toFixed(1) + '</span>' +
+        (reviewCnt ? '<span style="font-size:11px;color:rgba(255,255,255,.3)">(' + reviewCnt.toLocaleString() + ')</span>' : '') +
+        '<span style="font-size:10px;color:rgba(255,255,255,.2);margin-left:2px">Google</span>' +
+      '</div>' +
+      (todayHours ? '<div style="display:flex;align-items:center;gap:5px;font-size:11px;color:rgba(255,255,255,.4)">' +
+        '<i class="fas fa-clock" style="font-size:10px;color:rgba(255,77,125,.5)"></i>' +
+        '<span>' + todayHours.replace(/^[^:]+:\s*/,'') + '</span>' +
+      '</div>' : '') +
+      (phone ? '<div style="display:flex;align-items:center;gap:5px;font-size:11px;color:rgba(255,255,255,.4)">' +
+        '<i class="fas fa-phone" style="font-size:10px;color:rgba(3,199,90,.5)"></i>' +
+        '<span>' + phone + '</span>' +
+      '</div>' : '') +
+    '</div>'
+  ) : (
+    (phone ? '<div style="display:flex;align-items:center;gap:5px;font-size:11px;color:rgba(255,255,255,.4);margin-bottom:0">' +
+      '<i class="fas fa-phone" style="font-size:10px;color:rgba(3,199,90,.5)"></i>' +
+      '<span>' + phone + '</span>' +
+    '</div>' : '')
+  );
+
+  // ── Google 정보 블록 (모바일 오버레이용) ──
+  const googleInfoMobile = rating != null ? (
+    '<div style="display:flex;align-items:center;gap:5px;margin-bottom:5px">' +
+      '<div style="display:flex;gap:1px">' + starHtml(rating) + '</div>' +
+      '<span style="font-size:12px;font-weight:800;color:#FBBF24">' + rating.toFixed(1) + '</span>' +
+      (reviewCnt ? '<span style="font-size:10px;color:rgba(255,255,255,.35)">(' + reviewCnt.toLocaleString() + ')</span>' : '') +
+    '</div>'
+  ) : '';
+
   return (
-    '<div class="shorts-slide" data-shop-id="' + shop.id + '" data-clid="' + clId + '" data-ytid="' + ytId + '" data-idx="' + idx + '"' +
+    '<div class="shorts-slide" data-shop-id="' + shop.id + '" data-clid="' + (useCl ? clId : '') + '" data-ytid="' + useYt + '" data-idx="' + idx + '"' +
     ' onclick="shortsSlideClick(event,this)">' +
-    (clUrl
+    (useCl
       ? '<div class="shorts-iframe-wrap">' +
           '<video class="shorts-cl-video" id="cl-vid-' + idx + '" src="' + clUrl + '"' +
           ' poster="' + clPoster + '"' +
-          ' playsinline loop muted preload="metadata"' +
-          ' style="">'  +
+          ' playsinline loop muted preload="metadata">' +
           '</video>' +
         '</div>'
-      : (ytId
+      : (useYt
           ? '<div class="shorts-iframe-wrap"><div class="shorts-yt-placeholder" id="yt-ph-' + idx + '"></div></div>'
-          : '<div class="shorts-no-video"></div>')) +
+          : '<div class="shorts-no-video"><span style="font-size:40px;opacity:.3">🎬</span></div>')) +
     '<div class="shorts-overlay">' +
-      // 모바일: 기존 하단 오버레이
+      // ── 모바일: 하단 오버레이 ──
       '<div class="shorts-info-row">' +
         '<div class="shorts-info-body">' +
           (cat ? '<span class="shorts-cat">' + cat + '</span>' : '') +
+          googleInfoMobile +
           '<div class="shorts-name">' + name + '</div>' +
-          (addr ? '<div class="shorts-addr"><i class="fas fa-map-pin"></i>' + addr + '</div>' : '') +
+          (addr ? '<div class="shorts-addr"><i class="fas fa-map-pin"></i>' + addr.substring(0,22) + (addr.length>22?'…':'') + '</div>' : '') +
         '</div>' +
         '<button class="shorts-book-btn" onclick="event.stopPropagation();shortsOpenBook(' + JSON.stringify(shop).replace(/"/g,'&quot;') + ')">' +
           '<i class="fas fa-calendar-check"></i>' +
           '<span>예약하기</span>' +
         '</button>' +
       '</div>' +
-      // PC 전용: 세련된 정보 패널
+      // ── PC: 우측 정보 패널 ──
       '<div class="shorts-panel-pc">' +
-        // 상단 장식 영역 (빈 공간 채우기 — flex:1 로 밀어냄)
         '<div class="shorts-panel-deco"></div>' +
-        // 카테고리 뱃지
         (cat ? '<span class="shorts-cat"><i class="fas fa-tag" style="font-size:9px;opacity:.7"></i>' + cat + '</span>' : '') +
-        // 업체명
         '<div class="shorts-name shorts-panel-name">' + name + '</div>' +
-        // 주소
-        (addr ? '<div class="shorts-addr shorts-panel-addr"><i class="fas fa-location-dot" style="color:var(--pink);font-size:11px"></i><span>' + addr + '</span></div>' : '') +
-        // 구분선
+        (addr ? '<div class="shorts-addr shorts-panel-addr"><i class="fas fa-location-dot"></i><span>' + addr + '</span></div>' : '') +
+        (googleInfoPc ? '<div class="shorts-panel-divider" style="margin:14px 0"></div>' + googleInfoPc : '') +
         '<div class="shorts-panel-divider"></div>' +
-        // 예약 버튼
         (shop.smart_place_url
           ? '<button class="shorts-book-btn shorts-panel-btn" onclick="event.stopPropagation();shortsOpenBook(' + JSON.stringify(shop).replace(/"/g,'&quot;') + ')">' +
               '<i class="fas fa-calendar-check"></i>' +
               '<span>네이버 예약하기</span>' +
             '</button>'
-          : '<button class="shorts-panel-btn" style="width:100%;padding:15px;font-size:14px;font-weight:800;border-radius:16px;background:rgba(255,255,255,.06);color:rgba(255,255,255,.35);border:1.5px solid rgba(255,255,255,.08);cursor:default;display:flex;align-items:center;justify-content:center;gap:8px" disabled>' +
+          : '<button class="shorts-panel-btn" style="background:rgba(255,255,255,.05);color:rgba(255,255,255,.3);border:1.5px solid rgba(255,255,255,.07);cursor:default" disabled>' +
               '<i class="fas fa-calendar-xmark"></i>' +
               '<span>예약 정보 없음</span>' +
             '</button>'
         ) +
       '</div>' +
-      // 하단 힌트 — shorts-overlay 직계 자식 (맨 아래 고정)
+      // ── 하단 힌트 ──
       '<div class="shorts-panel-hint">' +
         '<span style="opacity:.4;font-size:16px;line-height:1">&#8597;</span>' +
         '<span>스크롤로 다음 영상</span>' +
@@ -7052,6 +7462,28 @@ body{font-family:'Pretendard',sans-serif;background:var(--bg);color:var(--t1);mi
     <div class="field"><label>경도 <small style="color:var(--t4)">(자동)</small></label><input id="f-lng" type="number" step="0.000001" placeholder="자동입력"/></div>
   </div>
   <div class="field"><label>📅 네이버 예약 URL</label><input id="f-url" type="text" placeholder="https://naver.me/xxxxx"/></div>
+
+  <!-- ── Google Place 연동 ── -->
+  <div class="field" id="googlePlaceField">
+    <label>🔍 Google 업체 연동 <small style="color:rgba(255,255,255,.3);font-weight:500">(평점·영업시간·전화번호 자동)</small></label>
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <input id="f-gplace-id" type="text" placeholder="Place ID (자동입력됨)" readonly
+        style="flex:1;background:rgba(255,255,255,.04);border:1.5px solid rgba(255,255,255,.08);border-radius:10px;padding:10px 12px;font-size:13px;color:rgba(255,255,255,.5);font-family:inherit"/>
+      <button onclick="googlePlaceSearch()" type="button"
+        style="flex-shrink:0;background:#4285F4;color:#fff;border:none;border-radius:10px;padding:0 16px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">
+        검색
+      </button>
+    </div>
+    <div id="googlePlaceResults" style="display:none;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto;margin-top:4px"></div>
+    <div id="googlePlaceInfo" style="display:none;background:rgba(66,133,244,.08);border:1px solid rgba(66,133,244,.2);border-radius:10px;padding:10px 12px;font-size:12px;margin-top:4px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+        <span style="color:#4285F4;font-weight:700">✓ 연동됨</span>
+        <span id="gpi-name" style="color:rgba(255,255,255,.7)"></span>
+      </div>
+      <div id="gpi-rating" style="color:#FBBF24"></div>
+      <div id="gpi-hours" style="color:rgba(255,255,255,.4);margin-top:3px;font-size:11px"></div>
+    </div>
+  </div>
   <div class="field"><label>태그 (쉼표로 구분)</label><input id="f-tags" type="text" placeholder="리프팅, 보습, 트러블케어"/></div>
   <div class="field"><label>업체 소개</label><textarea id="f-desc" placeholder="업체 간단 소개"></textarea></div>
   <div class="row2">
@@ -9554,6 +9986,32 @@ function openModal(id) {
     setMode(s.displayMode||'both');
     thumbDataUrl='';
     previewYt(s.youtubeId||'');
+    // Google Place 필드 로드
+    const gplaceEl = document.getElementById('f-gplace-id') as HTMLInputElement;
+    if(gplaceEl) gplaceEl.value = s.googlePlaceId||'';
+    const gInfoBox = document.getElementById('googlePlaceInfo') as HTMLElement;
+    const gResBox  = document.getElementById('googlePlaceResults') as HTMLElement;
+    if(gResBox) gResBox.style.display='none';
+    if(gInfoBox){
+      if(s.googlePlaceId){
+        gInfoBox.style.display='block';
+        const gpiName = document.getElementById('gpi-name');
+        const gpiRating = document.getElementById('gpi-rating');
+        const gpiHours = document.getElementById('gpi-hours');
+        if(gpiName) gpiName.textContent = s.name||'';
+        if(gpiRating) gpiRating.textContent = s.googleRating
+          ? '★ '+s.googleRating+'점 ('+(s.googleReviewCount||0).toLocaleString()+'건 리뷰)'
+          : '평점 정보 없음';
+        if(gpiHours){
+          const hoursArr2 = s.googleHours ? s.googleHours.split('\n') : [];
+          const day2 = new Date().getDay();
+          gpiHours.textContent = hoursArr2[day2===0?6:day2-1]||'';
+        }
+      } else {
+        gInfoBox.style.display='none';
+      }
+    }
+    (window as any)._pendingGooglePlace = null;
   } else {
     ['f-name','f-price','f-thumb','f-yt','f-addr','f-dist','f-phone','f-tags','f-desc'].forEach(id=>{document.getElementById(id).value='';});
     document.getElementById('f-lat').value=''; document.getElementById('f-lng').value='';
@@ -9563,6 +10021,14 @@ function openModal(id) {
     document.getElementById('thumbPreview').src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 60 60%22%3E%3Crect width=%2260%22 height=%2260%22 fill=%22%23222%22/%3E%3Ctext x=%2230%22 y=%2238%22 font-size=%2224%22 text-anchor=%22middle%22%3E%F0%9F%93%B7%3C/text%3E%3C/svg%3E';
     setMode('both'); thumbDataUrl='';
     document.getElementById('ytPreview').style.display='none';
+    // Google 필드 초기화
+    const gplaceElN = document.getElementById('f-gplace-id') as HTMLInputElement;
+    if(gplaceElN) gplaceElN.value='';
+    const gInfoBoxN = document.getElementById('googlePlaceInfo') as HTMLElement;
+    const gResBoxN  = document.getElementById('googlePlaceResults') as HTMLElement;
+    if(gInfoBoxN) gInfoBoxN.style.display='none';
+    if(gResBoxN)  gResBoxN.style.display='none';
+    (window as any)._pendingGooglePlace = null;
   }
   document.getElementById('modalBg').classList.remove('hidden');
 }
@@ -9624,6 +10090,81 @@ function previewYt(v){
 
 
 
+async function googlePlaceSearch() {
+  const name = (document.getElementById('f-name') as HTMLInputElement).value.trim();
+  const addr = (document.getElementById('f-addr') as HTMLInputElement).value.trim();
+  if (!name) { alert('업체명을 먼저 입력해주세요'); return; }
+  const q = name + (addr ? ' ' + addr : '');
+  const resBox = document.getElementById('googlePlaceResults') as HTMLElement;
+  const infoBox = document.getElementById('googlePlaceInfo') as HTMLElement;
+  resBox.innerHTML = '<div style="color:rgba(255,255,255,.4);font-size:12px;padding:6px 0">검색 중...</div>';
+  resBox.style.display = 'flex';
+  infoBox.style.display = 'none';
+  try {
+    const r = await fetch('/api/places-search?q=' + encodeURIComponent(q));
+    const d: any = await r.json();
+    if (d.error) {
+      resBox.innerHTML = '<div style="color:#FF4D7D;font-size:12px;padding:6px 0">오류: ' + d.error + '</div>';
+      return;
+    }
+    if (!d.results || d.results.length === 0) {
+      resBox.innerHTML = '<div style="color:rgba(255,255,255,.4);font-size:12px;padding:6px 0">검색 결과 없음</div>';
+      return;
+    }
+    resBox.innerHTML = d.results.map((p: any) => {
+      const ratingHtml = p.rating
+        ? '<div style="font-size:11px;color:#FBBF24;margin-top:3px">\u2605 '+p.rating+' ('+(p.user_ratings_total||0).toLocaleString()+'\uac74)</div>'
+        : '';
+      return '<div onclick="googlePlaceSelect(\''+p.place_id+'\')"'
+        +' style="cursor:pointer;padding:10px 12px;border-radius:8px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);margin-bottom:6px;"'
+        +' onmouseover="this.style.background=\'rgba(66,133,244,.12)\'"'
+        +' onmouseout="this.style.background=\'rgba(255,255,255,.05)\'">'
+        +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:2px">'+p.name+'</div>'
+        +'<div style="font-size:11px;color:rgba(255,255,255,.4)">'+p.address+'</div>'
+        +ratingHtml
+        +'</div>';
+    }).join('');
+  } catch(e: any) {
+    resBox.innerHTML = '<div style="color:#FF4D7D;font-size:12px;padding:6px 0">네트워크 오류</div>';
+  }
+}
+
+async function googlePlaceSelect(placeId: string) {
+  const resBox = document.getElementById('googlePlaceResults') as HTMLElement;
+  const infoBox = document.getElementById('googlePlaceInfo') as HTMLElement;
+  resBox.innerHTML = '<div style="color:rgba(255,255,255,.4);font-size:12px;padding:6px 0">상세 정보 로딩 중...</div>';
+  try {
+    const r = await fetch('/api/places-detail?place_id=' + placeId);
+    const d: any = await r.json();
+    if (d.error) { alert('오류: ' + d.error); return; }
+    (document.getElementById('f-gplace-id') as HTMLInputElement).value = placeId;
+    const phoneEl = document.getElementById('f-phone') as HTMLInputElement;
+    if (d.phone && !phoneEl.value) phoneEl.value = d.phone;
+    resBox.style.display = 'none';
+    infoBox.style.display = 'block';
+    document.getElementById('gpi-name')!.textContent = d.name;
+    document.getElementById('gpi-rating')!.textContent = d.rating
+      ? '★ ' + d.rating + '점  (' + (d.review_count||0).toLocaleString() + '건 리뷰)'
+      : '평점 정보 없음';
+    const day = new Date().getDay();
+    const hoursArr = d.hours ? d.hours.split('\n') : [];
+    const todayLine = hoursArr[day === 0 ? 6 : day - 1] || '';
+    document.getElementById('gpi-hours')!.textContent =
+      todayLine || (d.hours_open_now != null ? (d.hours_open_now ? '현재 영업 중' : '현재 영업 종료') : '영업시간 정보 없음');
+    (window as any)._pendingGooglePlace = {
+      place_id: placeId,
+      rating: d.rating,
+      review_count: d.review_count,
+      hours: d.hours || '',
+      phone: d.phone || '',
+      photo_url: d.photo_url || '',
+    };
+    showToast('✓ Google 업체 연동 완료');
+  } catch(e: any) {
+    alert('오류: ' + e.message);
+  }
+}
+
 async function geocodeAddr(){
   const addr=document.getElementById('f-addr').value.trim();
   if(!addr)return;
@@ -9683,6 +10224,17 @@ async function saveShop(){
       method:'PUT',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({isRecommended:body.isRecommended})
     });
+    // Google Place 연동 저장
+    const pg=(window as any)._pendingGooglePlace;
+    if(pg && pg.place_id){
+      try{
+        await fetch('/api/shops/'+savedId+'/google-place',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify(pg)
+        });
+      }catch{}
+      (window as any)._pendingGooglePlace=null;
+    }
     closeModal();await loadAll();toast(editId?'업체가 수정됐어요':'업체가 추가됐어요');
   } else alert('저장 실패: '+r.status);
 }
